@@ -1,4 +1,5 @@
 import './global.css';
+import { AuthProvider } from '../components/auth-context';
 
 export const metadata = {
   title: 'HelpDesk AI',
@@ -13,7 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
