@@ -1,15 +1,47 @@
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
+import { JwtModule, JwtService } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ObservabilityModule } from '@helpdesk-ai/observability';
+import { CLOCK, SystemClock, type Clock } from '../application/ports/clock';
+import {
+  PASSWORD_HASHER,
+  type PasswordHasher,
+} from '../application/ports/password-hasher';
+import {
+  REFRESH_TOKEN_REPOSITORY,
+  type RefreshTokenRepository,
+} from '../application/ports/refresh-token.repository';
+import {
+  TOKEN_ISSUER,
+  type TokenIssuer,
+} from '../application/ports/token-issuer';
+import {
+  USER_REPOSITORY,
+  type UserRepository,
+} from '../application/ports/user.repository';
+import { SessionService } from '../application/session.service';
+import { LoginUseCase } from '../application/use-cases/login';
+import { LogoutUseCase } from '../application/use-cases/logout';
+import { RefreshSessionUseCase } from '../application/use-cases/refresh-session';
+import { RegisterUserUseCase } from '../application/use-cases/register-user';
 import { APP_ENV, SERVICE_NAME, type AuthServiceEnv } from '../config/env';
+import { PrismaRefreshTokenRepository } from '../infrastructure/prisma/prisma-refresh-token.repository';
+import { PrismaUserRepository } from '../infrastructure/prisma/prisma-user.repository';
+import { PrismaService } from '../infrastructure/prisma/prisma.service';
+import { Argon2PasswordHasher } from '../infrastructure/security/argon2-password-hasher';
+import { JwtTokenIssuer } from '../infrastructure/security/jwt-token-issuer';
+import { AuthController } from './auth/auth.controller';
+import { JwtAccessGuard } from './guards/jwt-access.guard';
 import { HealthController } from './health/health.controller';
 
 /**
- * Root module built from an already-validated environment.
+ * Root module built from an already-validated environment (see main.ts).
  *
- * The environment is validated once in main.ts (fail fast, typed) and enters
- * the module graph through the APP_ENV token; see web-bff's AppModule for the
- * rationale versus @nestjs/config.
+ * Use cases and adapters are plain classes assembled here with factory
+ * providers: the application and domain layers stay free of framework
+ * decorators, and this module is the single place where ports meet their
+ * infrastructure implementations.
  */
 @Module({})
 export class AppModule {
@@ -22,9 +54,102 @@ export class AppModule {
           environment: env.NODE_ENV,
           logLevel: env.LOG_LEVEL,
         }),
+        JwtModule.register({
+          secret: env.JWT_ACCESS_SECRET,
+          signOptions: {
+            expiresIn: `${env.JWT_ACCESS_TTL_SECONDS}s`,
+            issuer: 'helpdesk-ai/auth-service',
+          },
+        }),
+        // Generous service-wide ceiling; credential endpoints declare much
+        // tighter limits on the controller.
+        ThrottlerModule.forRoot({
+          throttlers: [{ ttl: 60_000, limit: 60 }],
+        }),
       ],
-      controllers: [HealthController],
-      providers: [{ provide: APP_ENV, useValue: env }],
+      controllers: [HealthController, AuthController],
+      providers: [
+        { provide: APP_ENV, useValue: env },
+        { provide: CLOCK, useClass: SystemClock },
+        { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
+        {
+          provide: PrismaService,
+          useFactory: () => new PrismaService(env.DATABASE_URL),
+        },
+        {
+          provide: USER_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaUserRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: REFRESH_TOKEN_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaRefreshTokenRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: TOKEN_ISSUER,
+          useFactory: (jwt: JwtService) =>
+            new JwtTokenIssuer(jwt, env.JWT_ACCESS_TTL_SECONDS),
+          inject: [JwtService],
+        },
+        {
+          provide: SessionService,
+          useFactory: (
+            refreshTokens: RefreshTokenRepository,
+            tokenIssuer: TokenIssuer,
+            clock: Clock,
+          ) =>
+            new SessionService(
+              refreshTokens,
+              tokenIssuer,
+              clock,
+              env.JWT_REFRESH_TTL_SECONDS,
+            ),
+          inject: [REFRESH_TOKEN_REPOSITORY, TOKEN_ISSUER, CLOCK],
+        },
+        {
+          provide: RegisterUserUseCase,
+          useFactory: (
+            users: UserRepository,
+            hasher: PasswordHasher,
+            clock: Clock,
+          ) => new RegisterUserUseCase(users, hasher, clock),
+          inject: [USER_REPOSITORY, PASSWORD_HASHER, CLOCK],
+        },
+        {
+          provide: LoginUseCase,
+          useFactory: (
+            users: UserRepository,
+            hasher: PasswordHasher,
+            sessions: SessionService,
+          ) => new LoginUseCase(users, hasher, sessions),
+          inject: [USER_REPOSITORY, PASSWORD_HASHER, SessionService],
+        },
+        {
+          provide: RefreshSessionUseCase,
+          useFactory: (
+            users: UserRepository,
+            refreshTokens: RefreshTokenRepository,
+            sessions: SessionService,
+            clock: Clock,
+          ) => new RefreshSessionUseCase(users, refreshTokens, sessions, clock),
+          inject: [
+            USER_REPOSITORY,
+            REFRESH_TOKEN_REPOSITORY,
+            SessionService,
+            CLOCK,
+          ],
+        },
+        {
+          provide: LogoutUseCase,
+          useFactory: (refreshTokens: RefreshTokenRepository, clock: Clock) =>
+            new LogoutUseCase(refreshTokens, clock),
+          inject: [REFRESH_TOKEN_REPOSITORY, CLOCK],
+        },
+        JwtAccessGuard,
+      ],
     };
   }
 }

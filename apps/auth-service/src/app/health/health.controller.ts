@@ -1,5 +1,11 @@
-import { Controller, Get, Inject } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Inject,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { APP_ENV, SERVICE_NAME, type AuthServiceEnv } from '../../config/env';
+import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
 interface LivenessReport {
   status: 'ok';
@@ -9,19 +15,22 @@ interface LivenessReport {
   timestamp: string;
 }
 
+interface DependencyCheck {
+  name: string;
+  status: 'up' | 'down';
+}
+
 interface ReadinessReport extends LivenessReport {
-  /**
-   * External dependencies actually probed for readiness. Empty on purpose:
-   * the service does not talk to its database yet (persistence tooling is
-   * pending ADR-0004), and reporting a dependency that is never probed
-   * would make readiness lie.
-   */
-  checks: string[];
+  /** Dependencies actually probed on every readiness call. */
+  checks: DependencyCheck[];
 }
 
 @Controller('health')
 export class HealthController {
-  constructor(@Inject(APP_ENV) private readonly env: AuthServiceEnv) {}
+  constructor(
+    @Inject(APP_ENV) private readonly env: AuthServiceEnv,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /** Liveness: the process is up and able to answer HTTP requests. */
   @Get()
@@ -35,9 +44,25 @@ export class HealthController {
     };
   }
 
-  /** Readiness: liveness plus the state of probed dependencies (none yet). */
+  /**
+   * Readiness: probes the owned database with a real query. A service that
+   * cannot reach its database must not receive traffic, so failure is 503.
+   */
   @Get('ready')
-  readiness(): ReadinessReport {
-    return { ...this.liveness(), checks: [] };
+  async readiness(): Promise<ReadinessReport> {
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+    } catch {
+      throw new ServiceUnavailableException({
+        ...this.liveness(),
+        status: 'error',
+        checks: [{ name: 'database', status: 'down' }],
+      });
+    }
+
+    return {
+      ...this.liveness(),
+      checks: [{ name: 'database', status: 'up' }],
+    };
   }
 }

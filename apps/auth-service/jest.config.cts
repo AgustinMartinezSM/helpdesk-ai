@@ -1,4 +1,3 @@
-/* eslint-disable */
 const { readFileSync } = require('fs');
 
 // Reading the SWC compilation config for the spec files
@@ -18,4 +17,7 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: 'test-output/jest/coverage',
+  // *.int.spec.ts files need the real database and run through the
+  // test-integration target instead (jest.integration.config.cts).
+  testPathIgnorePatterns: ['/node_modules/', '\\.int\\.spec\\.[jt]s$'],
 };

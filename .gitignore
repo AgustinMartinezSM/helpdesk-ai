@@ -8,6 +8,9 @@ out/
 build/
 *.tsbuildinfo
 
+# Generated Prisma clients (regenerated via prisma generate)
+**/src/generated/
+
 # Nx
 .nx/cache
 .nx/workspace-data

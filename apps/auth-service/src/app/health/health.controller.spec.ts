@@ -9,15 +9,20 @@ import {
 import { AppModule } from '../app.module';
 import { authServiceEnvSchema } from '../../config/env';
 
-describe('Health endpoints (integration)', () => {
+// Points at a closed port on purpose: these fast tests must not depend on
+// Docker, and readiness has to report the database as down deterministically.
+const TEST_ENV = {
+  NODE_ENV: 'test',
+  LOG_LEVEL: 'fatal',
+  DATABASE_URL: 'postgresql://nobody:nothing@127.0.0.1:59999/unreachable',
+  JWT_ACCESS_SECRET: 'test-secret-0123456789abcdef0123456789abcdef',
+};
+
+describe('Health endpoints (no database)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    // LOG_LEVEL fatal keeps request logging out of the test output.
-    const env = validateEnv(authServiceEnvSchema, {
-      NODE_ENV: 'test',
-      LOG_LEVEL: 'fatal',
-    });
+    const env = validateEnv(authServiceEnvSchema, TEST_ENV);
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
@@ -32,7 +37,7 @@ describe('Health endpoints (integration)', () => {
     await app.close();
   });
 
-  it('GET /health reports the service as alive', async () => {
+  it('GET /health reports liveness regardless of the database', async () => {
     const response = await request(app.getHttpServer())
       .get('/health')
       .expect(200);
@@ -44,14 +49,15 @@ describe('Health endpoints (integration)', () => {
     });
   });
 
-  it('GET /health/ready responds with an honest empty check list', async () => {
+  it('GET /health/ready answers 503 with the database marked down', async () => {
     const response = await request(app.getHttpServer())
       .get('/health/ready')
-      .expect(200);
+      .expect(503);
 
-    expect(response.body.status).toBe('ok');
-    expect(response.body.checks).toEqual([]);
-  });
+    expect(response.body.checks).toEqual([
+      { name: 'database', status: 'down' },
+    ]);
+  }, 15000);
 
   it('issues a request id when the client sends none', async () => {
     const response = await request(app.getHttpServer())

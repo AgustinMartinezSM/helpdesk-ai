@@ -6,6 +6,10 @@
     "targets": {
       "build": {
         "executor": "nx:run-commands",
+        "dependsOn": [
+          "prisma-generate",
+          "^build"
+        ],
         "options": {
           "command": "webpack-cli build",
           "env": {
@@ -76,8 +80,48 @@
         }
       },
       "test": {
+        "dependsOn": [
+          "prisma-generate"
+        ],
         "options": {
           "passWithNoTests": true
+        }
+      },
+      "typecheck": {
+        "dependsOn": [
+          "prisma-generate"
+        ]
+      },
+      "prisma-generate": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "inputs": [
+          "{projectRoot}/prisma/schema.prisma",
+          "{projectRoot}/prisma.config.ts"
+        ],
+        "outputs": [
+          "{projectRoot}/src/generated"
+        ],
+        "options": {
+          "command": "prisma generate",
+          "cwd": "apps/auth-service"
+        }
+      },
+      "test-integration": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "prisma-generate"
+        ],
+        "options": {
+          "commands": [
+            "prisma migrate deploy",
+            "jest --config jest.integration.config.cts --runInBand"
+          ],
+          "parallel": false,
+          "cwd": "apps/auth-service",
+          "env": {
+            "DATABASE_URL": "postgresql://auth_service:helpdesk_local_only_auth@localhost:5433/helpdesk_auth_test"
+          }
         }
       }
     }
@@ -87,13 +131,22 @@
     "@helpdesk-ai/observability": "workspace:*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/swagger": "^11.4.6",
+    "@nestjs/throttler": "^6.5.0",
+    "@prisma/adapter-pg": "7.9.1",
+    "@prisma/client": "7.9.1",
+    "argon2": "^0.45.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "helmet": "^8.3.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@nestjs/testing": "^11.0.0"
+    "@nestjs/testing": "^11.0.0",
+    "prisma": "7.9.1"
   }
 }

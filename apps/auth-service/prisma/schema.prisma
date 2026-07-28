@@ -1,0 +1,45 @@
+// Persistence model for auth-service. This schema maps to PERSISTENCE
+// shapes only; domain entities live in src/domain and are mapped inside
+// the repository adapters (ADR 0004).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  // The service is bundled to CommonJS by webpack.
+  moduleFormat = "cjs"
+}
+
+// Connection URL lives in prisma.config.ts (Migrate) and is passed to the
+// client through the pg driver adapter (Prisma 7 architecture).
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  roles        String[]
+  createdAt    DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @map("updated_at") @db.Timestamptz(3)
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id           String    @id @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  // sha256 of the secret half; raw refresh secrets are never stored.
+  tokenHash    String    @map("token_hash")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdAt    DateTime  @map("created_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}

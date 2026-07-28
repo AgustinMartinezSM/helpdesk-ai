@@ -1,5 +1,7 @@
 import helmet from 'helmet';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import {
   correlationMiddleware,
@@ -23,9 +25,30 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new LoggerErrorInterceptor());
   app.use(correlationMiddleware);
   app.use(helmet());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   // CORS is intentionally NOT enabled: only the api-gateway calls this
   // service, server to server. Browsers never reach it directly.
   app.enableShutdownHooks();
+
+  if (env.NODE_ENV !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('auth-service')
+      .setDescription('Authentication and authorization API')
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
+    SwaggerModule.setup(
+      'docs',
+      app,
+      SwaggerModule.createDocument(app, swaggerConfig),
+    );
+  }
 
   await app.listen(env.PORT);
   app
