@@ -1,6 +1,6 @@
 # Data Ownership
 
-Status: model adopted in Sprint 1; `helpdesk_auth` implemented in Sprint 2, `helpdesk_tickets` in Sprint 4, `helpdesk_users` in Sprint 6. Audit and analytics remain Planned.
+Status: model adopted in Sprint 1; `helpdesk_auth` implemented in Sprint 2, `helpdesk_tickets` in Sprint 4, `helpdesk_users` in Sprint 6, `helpdesk_audit`, `helpdesk_notifications` and `helpdesk_analytics` in Sprint 7. `helpdesk_notifications` was added to the original plan when notification-service needed to own in-app notifications and its ticket-refs projection.
 
 ## Model
 
@@ -31,13 +31,14 @@ Local infrastructure runs one `postgres:18-alpine` container (see `compose.yaml`
 
 Inside that single instance, one logical database per service:
 
-| Database             | Owning service    | Status                                                  |
-| -------------------- | ----------------- | ------------------------------------------------------- |
-| `helpdesk_auth`      | auth-service      | Implemented (plus `helpdesk_auth_test` for integration) |
-| `helpdesk_users`     | users-service     | Implemented (plus `helpdesk_users_test`) — Sprint 6     |
-| `helpdesk_tickets`   | tickets-service   | Implemented (plus `helpdesk_tickets_test`) — Sprint 4   |
-| `helpdesk_audit`     | audit-service     | Planned                                                 |
-| `helpdesk_analytics` | analytics-service | Planned                                                 |
+| Database                 | Owning service       | Status                                                      |
+| ------------------------ | -------------------- | ----------------------------------------------------------- |
+| `helpdesk_auth`          | auth-service         | Implemented (plus `helpdesk_auth_test` for integration)     |
+| `helpdesk_users`         | users-service        | Implemented (plus `helpdesk_users_test`) — Sprint 6         |
+| `helpdesk_tickets`       | tickets-service      | Implemented (plus `helpdesk_tickets_test`) — Sprint 4       |
+| `helpdesk_audit`         | audit-service        | Implemented (plus `helpdesk_audit_test`) — Sprint 7         |
+| `helpdesk_notifications` | notification-service | Implemented (plus `helpdesk_notifications_test`) — Sprint 7 |
+| `helpdesk_analytics`     | analytics-service    | Implemented (plus `helpdesk_analytics_test`) — Sprint 7     |
 
 Each logical database gets its own credentials and its own migration history, so the isolation rules above are enforceable even though everything shares one container. `infrastructure/postgres/init` provisions roles and databases on first initialization of an empty volume; today it creates the `auth_service` role (owner of `helpdesk_auth` and `helpdesk_auth_test`). Migrations for `helpdesk_auth` live in `apps/auth-service/prisma/migrations` and run only under the `auth_service` role (Prisma, per ADR 0004). The `CREATEDB` grant on service roles is local-only — `prisma migrate dev` needs it for its shadow database; production roles must not have it.
 
@@ -46,6 +47,25 @@ Each logical database gets its own credentials and its own migration history, so
 The development machine is RAM-constrained; running five-plus PostgreSQL containers locally buys nothing over five logical databases with separate credentials, and costs memory we do not have. Ownership is a discipline enforced by credentials and code review, not by process boundaries.
 
 In production the same model maps to **separate database instances** (or managed clusters) per service. Because no code path ever crosses a database boundary, moving a logical database to its own instance is a connection-string change, not a refactor.
+
+## Projections and their rebuild paths
+
+Every local projection must name how it gets rebuilt if lost — RabbitMQ is
+not a log (consumed events are gone; best-effort publishing means some
+never existed), so "rebuild from events" is never the answer:
+
+| Projection                            | Owner                | Rebuild path                                                                                                   |
+| ------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `user_profiles`                       | users-service        | GAP: auth-service exposes no user listing yet; an admin listing endpoint is the documented prerequisite        |
+| `ticket_refs`                         | notification-service | tickets-service `GET /tickets` with a staff token (id + requesterId suffice)                                   |
+| `ticket_snapshots` / `user_snapshots` | analytics-service    | tickets-service `GET /tickets` (status/priority/createdAt); user count needs the same auth listing as above    |
+| `notifications`                       | notification-service | NON-REBUILDABLE BY DESIGN: derived state plus per-user readAt; accepted as ephemeral UX, not records           |
+| `audit_events`                        | audit-service        | Not a projection — the trail itself. Append-only; NOT readable by other services for THEIR rebuilds (ADR 0006) |
+
+Retention note: `helpdesk_audit` keeps event payloads (including
+registration emails) indefinitely and the application exposes no deletion.
+Any legal erasure request is an administrative database procedure outside
+the application, executed by the platform operator.
 
 ## What this rules out
 

@@ -1,7 +1,8 @@
 # Messaging
 
-Status: implemented in Sprint 6 (ADR 0005). Broker: RabbitMQ 4.3 from
-`compose.yaml` (management UI on http://localhost:15672).
+Status: implemented in Sprint 6 (ADR 0005), consumers completed in Sprint 7
+(ADR 0006). Broker: RabbitMQ 4.3 from `compose.yaml` (management UI on
+http://localhost:15672).
 
 ## Topology
 
@@ -23,10 +24,14 @@ Status: implemented in Sprint 6 (ADR 0005). Broker: RabbitMQ 4.3 from
 - One shared topic exchange, `helpdesk.events`; the routing key of a
   message is exactly its event type, so consumers can bind precise types
   (`user.registered.v1`) or families (`ticket.*.v1`).
-- Each consuming service owns its durable queue and its `.dlq`. Queues from
-  Sprint 6: `users-service.user-registered`.
+- Each consuming service owns its durable queue and its `.dlq`:
+  `users-service.user-registered`, `audit-service.event-log` (binding `#`),
+  `notification-service.ticket-events`, `analytics-service.metrics`.
 - Delivery is at-least-once and there is no automatic retry: handlers must
   be idempotent, and rejected messages dead-letter immediately.
+- notification-service and analytics-service consume with `prefetch: 1`:
+  serialized handling guarantees a ticket's `created` event is projected
+  before follow-up events of the same ticket are dispatched.
 
 ## Contracts (`@helpdesk-ai/messaging`)
 
@@ -35,16 +40,29 @@ Contracts are zod schemas versioned in the event name; the envelope is
 validate before publishing (a malformed event is a bug in the producer);
 consumers validate envelope and payload before the handler runs.
 
-| Event                      | Producer        | Consumers (S6)             |
-| -------------------------- | --------------- | -------------------------- |
-| `user.registered.v1`       | auth-service    | users-service (projection) |
-| `ticket.created.v1`        | tickets-service | — (audit/analytics in S7)  |
-| `ticket.status-changed.v1` | tickets-service | — (audit/notification, S7) |
-| `ticket.assigned.v1`       | tickets-service | — (audit/notification, S7) |
-| `ticket.comment-added.v1`  | tickets-service | — (audit/notification, S7) |
+| Event                      | Producer        | Consumers (S7)                       |
+| -------------------------- | --------------- | ------------------------------------ |
+| `user.registered.v1`       | auth-service    | users-service, analytics, audit      |
+| `ticket.created.v1`        | tickets-service | notification (ref), analytics, audit |
+| `ticket.status-changed.v1` | tickets-service | notification, analytics, audit       |
+| `ticket.assigned.v1`       | tickets-service | notification, audit                  |
+| `ticket.comment-added.v1`  | tickets-service | notification, audit                  |
+
+(audit-service does not bind individual types: its `#` firehose captures
+every event on the exchange, present and future.)
 
 Changing a payload shape = new `v2` contract published alongside `v1` until
 every consumer migrates. `v1` is never mutated.
+
+**Content rule**: event payloads carry identifiers and metadata — NEVER
+credentials, tokens, secrets or user-authored free text (comment bodies,
+internal notes). Everything published lands verbatim in the audit trail
+and stays there; this rule is part of reviewing any new contract.
+
+**Firehose rule**: `subscribeFirehose` (envelope-only validation, opaque
+payloads) exists exclusively for schema-on-read consumers — today only
+audit-service. Every domain consumer uses `subscribe()` with explicit
+contracts, keeping payload validation and drift detection intact.
 
 ## Client behavior
 
