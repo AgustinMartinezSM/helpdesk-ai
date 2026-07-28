@@ -17,7 +17,8 @@ The repository is at the platform-foundation stage (Sprint 1). What exists today
 | Health endpoints (`/health`, `/health/ready`) on both Nest apps                               | Implemented            |
 | Local infrastructure: PostgreSQL 18, Redis 8, RabbitMQ 4.3 (compose)                          | Implemented            |
 | CI workflow (committed; never executed — repo has no remote)                                  | Implemented            |
-| Authentication, users, tickets, notifications, audit, analytics services                      | Planned                |
+| `apps/auth-service` — NestJS auth boundary (port 3003, foundation only)                       | Implemented            |
+| Authentication logic, users, tickets, notifications, audit, analytics services                | Planned                |
 | AI features (summarization, classification, priority, suggested replies, duplicate detection) | Planned                |
 | RabbitMQ versioned events between services                                                    | Planned                |
 | Distributed tracing, rate limiting, Swagger, e2e tests                                        | Intentionally deferred |

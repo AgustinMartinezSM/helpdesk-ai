@@ -30,9 +30,11 @@ NestJS 11 backend-for-frontend. Composes and shapes data for the web frontend: a
 
 NestJS 11 single entry point to the internal service mesh. Its job is routing, cross-cutting security (authn enforcement, rate limiting — both planned), and request fan-out policy. It owns no domain rules and stores no domain data. CORS is intentionally not enabled: browsers never call it; it is server-to-server only (`web-bff` is its client). Current scope matches web-bff: bootstrap, logging/correlation, health endpoints. It routes to nothing because no downstream service exists yet. Port 3002.
 
-### auth-service — Planned
+### auth-service — Implemented (foundation only)
 
 Owns authentication and authorization: credentials, sessions/tokens, roles and permissions. Sole writer of the future `helpdesk_auth` database. No other service validates credentials or mints tokens.
+
+Current scope (Sprint 2 start): bootstrap, structured logging, health endpoints on port 3003. No authentication logic and no database yet — persistence tooling is pending ADR 0004.
 
 ### users-service — Planned
 
@@ -68,7 +70,7 @@ Owns reporting and metrics aggregates (`helpdesk_analytics` database). Consumes 
 
 ## Incremental introduction
 
-Services are generated only when a sprint actually needs them. Sprint 1 delivered the three edge applications because they are prerequisites for everything else; `auth-service` and the domain services will be scaffolded in the sprints that implement their features. Nothing is pre-generated as an empty shell.
+Services are generated only when a sprint actually needs them. Sprint 1 delivered the three edge applications because they are prerequisites for everything else; `auth-service` was scaffolded at the start of Sprint 2 as the first domain-service boundary. The remaining services will be scaffolded in the sprints that implement their features. Nothing is pre-generated as an empty shell.
 
 ## Shared library policy
 
