@@ -3,10 +3,12 @@ import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
+import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
 import { PASSWORD_HASHER } from '../../application/ports/password-hasher';
 import { REFRESH_TOKEN_REPOSITORY } from '../../application/ports/refresh-token.repository';
 import { USER_REPOSITORY } from '../../application/ports/user.repository';
 import {
+  FakeEventPublisher,
   FakePasswordHasher,
   InMemoryRefreshTokenRepository,
   InMemoryUserRepository,
@@ -21,6 +23,7 @@ const TEST_ENV = {
   NODE_ENV: 'test',
   LOG_LEVEL: 'fatal',
   DATABASE_URL: 'postgresql://nobody:nothing@127.0.0.1:59999/unreachable',
+  RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
   JWT_ACCESS_SECRET: 'test-secret-0123456789abcdef0123456789abcdef',
 };
 
@@ -41,7 +44,11 @@ async function buildApp(options: { disableThrottling: boolean }): Promise<{
     .overrideProvider(REFRESH_TOKEN_REPOSITORY)
     .useValue(new InMemoryRefreshTokenRepository())
     .overrideProvider(PASSWORD_HASHER)
-    .useValue(new FakePasswordHasher());
+    .useValue(new FakePasswordHasher())
+    // Replacing the adapter keeps the suite broker-free: the real one owns
+    // a live AMQP connection.
+    .overrideProvider(EVENT_PUBLISHER)
+    .useValue(new FakeEventPublisher());
 
   if (options.disableThrottling) {
     builder = builder

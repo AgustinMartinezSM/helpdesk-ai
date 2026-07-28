@@ -3,6 +3,8 @@ import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
+import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
+import { FakeEventPublisher } from '../../application/testing/fakes';
 import { authServiceEnvSchema } from '../../config/env';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AppModule } from '../app.module';
@@ -28,6 +30,7 @@ describe('Auth flow (real database)', () => {
       NODE_ENV: 'test',
       LOG_LEVEL: 'fatal',
       DATABASE_URL: databaseUrl,
+      RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
       JWT_ACCESS_SECRET: 'integration-secret-0123456789abcdef012345',
     });
 
@@ -36,6 +39,11 @@ describe('Auth flow (real database)', () => {
     })
       .overrideGuard(ThrottlerGuard)
       .useValue({ canActivate: () => true })
+      // This suite's focus is the auth flow against real Postgres; the
+      // event path against a real broker is covered by libs/messaging and
+      // users-service integration suites.
+      .overrideProvider(EVENT_PUBLISHER)
+      .useValue(new FakeEventPublisher())
       .compile();
 
     app = moduleRef.createNestApplication({ logger: false });

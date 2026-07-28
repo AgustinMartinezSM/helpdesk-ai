@@ -1,6 +1,10 @@
 import type { RefreshToken } from '../../domain/refresh-token';
 import type { User } from '../../domain/user';
 import type { Clock } from '../ports/clock';
+import type {
+  EventPublisher,
+  UserRegisteredEvent,
+} from '../ports/event-publisher';
 import type { PasswordHasher } from '../ports/password-hasher';
 import type { RefreshTokenRepository } from '../ports/refresh-token.repository';
 import type {
@@ -88,6 +92,14 @@ export class FakePasswordHasher implements PasswordHasher {
 
   async verify(hash: string, plain: string): Promise<boolean> {
     return hash === `hashed:${plain}`;
+  }
+}
+
+export class FakeEventPublisher implements EventPublisher {
+  readonly published: UserRegisteredEvent[] = [];
+
+  async publishUserRegistered(event: UserRegisteredEvent): Promise<void> {
+    this.published.push(event);
   }
 }
 

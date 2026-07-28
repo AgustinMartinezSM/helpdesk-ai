@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { EmailAlreadyRegisteredError } from '../../domain/errors';
 import { normalizeEmail, type User } from '../../domain/user';
 import type { Clock } from '../ports/clock';
+import type { EventPublisher } from '../ports/event-publisher';
 import type { PasswordHasher } from '../ports/password-hasher';
 import type { UserRepository } from '../ports/user.repository';
 
@@ -21,6 +22,7 @@ export class RegisterUserUseCase {
     private readonly users: UserRepository,
     private readonly passwordHasher: PasswordHasher,
     private readonly clock: Clock,
+    private readonly events: EventPublisher,
   ) {}
 
   async execute(input: RegisterUserInput): Promise<RegisterUserOutput> {
@@ -43,6 +45,13 @@ export class RegisterUserUseCase {
     };
 
     await this.users.create(user);
+
+    await this.events.publishUserRegistered({
+      userId: user.id,
+      email: user.email,
+      roles: [...user.roles],
+      registeredAt: now,
+    });
 
     return { id: user.id, email: user.email, roles: [...user.roles] };
   }

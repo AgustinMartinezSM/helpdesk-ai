@@ -235,6 +235,9 @@ importers:
       '@helpdesk-ai/configuration':
         specifier: workspace:*
         version: link:../../libs/configuration
+      '@helpdesk-ai/messaging':
+        specifier: workspace:*
+        version: link:../../libs/messaging
       '@helpdesk-ai/observability':
         specifier: workspace:*
         version: link:../../libs/observability

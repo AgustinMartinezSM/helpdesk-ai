@@ -6,6 +6,8 @@ import {
   correlationMiddleware,
   REQUEST_ID_HEADER,
 } from '@helpdesk-ai/observability';
+import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
+import { FakeEventPublisher } from '../../application/testing/fakes';
 import { AppModule } from '../app.module';
 import { authServiceEnvSchema } from '../../config/env';
 
@@ -15,6 +17,7 @@ const TEST_ENV = {
   NODE_ENV: 'test',
   LOG_LEVEL: 'fatal',
   DATABASE_URL: 'postgresql://nobody:nothing@127.0.0.1:59999/unreachable',
+  RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
   JWT_ACCESS_SECRET: 'test-secret-0123456789abcdef0123456789abcdef',
 };
 
@@ -26,7 +29,10 @@ describe('Health endpoints (no database)', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
-    }).compile();
+    })
+      .overrideProvider(EVENT_PUBLISHER)
+      .useValue(new FakeEventPublisher())
+      .compile();
 
     app = moduleRef.createNestApplication({ logger: false });
     app.use(correlationMiddleware);

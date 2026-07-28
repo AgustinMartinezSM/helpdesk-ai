@@ -2,8 +2,13 @@ import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { ObservabilityModule } from '@helpdesk-ai/observability';
+import { MessagingClient } from '@helpdesk-ai/messaging';
+import { Logger, ObservabilityModule } from '@helpdesk-ai/observability';
 import { CLOCK, SystemClock, type Clock } from '../application/ports/clock';
+import {
+  EVENT_PUBLISHER,
+  type EventPublisher,
+} from '../application/ports/event-publisher';
 import {
   PASSWORD_HASHER,
   type PasswordHasher,
@@ -26,6 +31,7 @@ import { LogoutUseCase } from '../application/use-cases/logout';
 import { RefreshSessionUseCase } from '../application/use-cases/refresh-session';
 import { RegisterUserUseCase } from '../application/use-cases/register-user';
 import { APP_ENV, SERVICE_NAME, type AuthServiceEnv } from '../config/env';
+import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-event-publisher';
 import { PrismaRefreshTokenRepository } from '../infrastructure/prisma/prisma-refresh-token.repository';
 import { PrismaUserRepository } from '../infrastructure/prisma/prisma-user.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
@@ -110,13 +116,29 @@ export class AppModule {
           inject: [REFRESH_TOKEN_REPOSITORY, TOKEN_ISSUER, CLOCK],
         },
         {
+          // The adapter owns its broker connection; overriding this token in
+          // tests keeps them broker-free.
+          provide: EVENT_PUBLISHER,
+          useFactory: (logger: Logger) =>
+            new RabbitMqEventPublisher(
+              new MessagingClient({
+                url: env.RABBITMQ_URL,
+                serviceName: SERVICE_NAME,
+                logger,
+              }),
+              logger,
+            ),
+          inject: [Logger],
+        },
+        {
           provide: RegisterUserUseCase,
           useFactory: (
             users: UserRepository,
             hasher: PasswordHasher,
             clock: Clock,
-          ) => new RegisterUserUseCase(users, hasher, clock),
-          inject: [USER_REPOSITORY, PASSWORD_HASHER, CLOCK],
+            events: EventPublisher,
+          ) => new RegisterUserUseCase(users, hasher, clock, events),
+          inject: [USER_REPOSITORY, PASSWORD_HASHER, CLOCK, EVENT_PUBLISHER],
         },
         {
           provide: LoginUseCase,

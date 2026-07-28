@@ -7,6 +7,7 @@ import {
 import { parseRefreshToken } from '../refresh-token.codec';
 import { SessionService } from '../session.service';
 import {
+  FakeEventPublisher,
   FakePasswordHasher,
   FakeTokenIssuer,
   FixedClock,
@@ -25,6 +26,7 @@ function buildContext() {
   const refreshTokens = new InMemoryRefreshTokenRepository();
   const hasher = new FakePasswordHasher();
   const clock = new FixedClock(new Date('2026-07-28T12:00:00.000Z'));
+  const events = new FakeEventPublisher();
   const sessions = new SessionService(
     refreshTokens,
     new FakeTokenIssuer(),
@@ -37,7 +39,8 @@ function buildContext() {
     refreshTokens,
     hasher,
     clock,
-    register: new RegisterUserUseCase(users, hasher, clock),
+    events,
+    register: new RegisterUserUseCase(users, hasher, clock, events),
     login: new LoginUseCase(users, hasher, sessions),
     refresh: new RefreshSessionUseCase(users, refreshTokens, sessions, clock),
     logout: new LogoutUseCase(refreshTokens, clock),
@@ -60,6 +63,24 @@ describe('RegisterUserUseCase', () => {
     expect(stored?.passwordHash).toBe('hashed:correct horse battery');
   });
 
+  it('publishes user.registered with the created user identity', async () => {
+    const ctx = buildContext();
+
+    const output = await ctx.register.execute({
+      email: 'ada@example.com',
+      password: 'correct horse battery',
+    });
+
+    expect(ctx.events.published).toEqual([
+      {
+        userId: output.id,
+        email: 'ada@example.com',
+        roles: ['user'],
+        registeredAt: ctx.clock.now(),
+      },
+    ]);
+  });
+
   it('rejects an email that is already registered, regardless of casing', async () => {
     const ctx = buildContext();
     await ctx.register.execute({ email: 'a@b.com', password: 'x'.repeat(12) });
@@ -67,6 +88,9 @@ describe('RegisterUserUseCase', () => {
     await expect(
       ctx.register.execute({ email: 'A@B.com', password: 'y'.repeat(12) }),
     ).rejects.toBeInstanceOf(EmailAlreadyRegisteredError);
+
+    // The failed duplicate must not leak an event.
+    expect(ctx.events.published).toHaveLength(1);
   });
 });
 
