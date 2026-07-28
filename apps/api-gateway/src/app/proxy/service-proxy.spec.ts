@@ -13,7 +13,7 @@ import { apiGatewayEnvSchema } from '../../config/env';
 import { createServiceProxy } from './service-proxy';
 
 interface RecordedRequest {
-  service: 'auth' | 'tickets';
+  service: 'auth' | 'tickets' | 'users';
   method: string;
   url: string;
   headers: Record<string, string | string[] | undefined>;
@@ -21,7 +21,7 @@ interface RecordedRequest {
 }
 
 function buildStub(
-  service: 'auth' | 'tickets',
+  service: 'auth' | 'tickets' | 'users',
   received: RecordedRequest[],
 ): Server {
   return createServer((req, res) => {
@@ -46,25 +46,30 @@ describe('Service proxies (stub downstream services)', () => {
   let app: INestApplication;
   let authStub: Server;
   let ticketsStub: Server;
+  let usersStub: Server;
   const received: RecordedRequest[] = [];
 
   beforeAll(async () => {
     authStub = buildStub('auth', received);
     ticketsStub = buildStub('tickets', received);
+    usersStub = buildStub('users', received);
     await Promise.all([
       new Promise<void>((resolve) => authStub.listen(0, '127.0.0.1', resolve)),
       new Promise<void>((resolve) =>
         ticketsStub.listen(0, '127.0.0.1', resolve),
       ),
+      new Promise<void>((resolve) => usersStub.listen(0, '127.0.0.1', resolve)),
     ]);
     const authPort = (authStub.address() as AddressInfo).port;
     const ticketsPort = (ticketsStub.address() as AddressInfo).port;
+    const usersPort = (usersStub.address() as AddressInfo).port;
 
     const env = validateEnv(apiGatewayEnvSchema, {
       NODE_ENV: 'test',
       LOG_LEVEL: 'fatal',
       AUTH_SERVICE_URL: `http://127.0.0.1:${authPort}`,
       TICKETS_SERVICE_URL: `http://127.0.0.1:${ticketsPort}`,
+      USERS_SERVICE_URL: `http://127.0.0.1:${usersPort}`,
     });
 
     const moduleRef = await Test.createTestingModule({
@@ -88,6 +93,13 @@ describe('Service proxies (stub downstream services)', () => {
         target: env.TICKETS_SERVICE_URL,
       }),
     );
+    app.use(
+      createServiceProxy({
+        pathFilter: '/api/users',
+        rewriteTo: '/users',
+        target: env.USERS_SERVICE_URL,
+      }),
+    );
     await app.init();
   });
 
@@ -104,6 +116,9 @@ describe('Service proxies (stub downstream services)', () => {
       new Promise<void>((resolve, reject) =>
         ticketsStub.close((e) => (e ? reject(e) : resolve())),
       ),
+      new Promise<void>((resolve, reject) =>
+        usersStub.close((e) => (e ? reject(e) : resolve())),
+      ),
     ]);
   });
 
@@ -117,6 +132,10 @@ describe('Service proxies (stub downstream services)', () => {
       .set('authorization', 'Bearer token')
       .send({ title: 'Via gateway', description: 'Routed' })
       .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/users/me')
+      .set('authorization', 'Bearer token')
+      .expect(200);
 
     expect(received[0]).toMatchObject({ service: 'auth', url: '/auth/login' });
     expect(received[1]).toMatchObject({ service: 'tickets', url: '/tickets' });
@@ -125,6 +144,8 @@ describe('Service proxies (stub downstream services)', () => {
       description: 'Routed',
     });
     expect(received[1].headers.authorization).toBe('Bearer token');
+    expect(received[2]).toMatchObject({ service: 'users', url: '/users/me' });
+    expect(received[2].headers.authorization).toBe('Bearer token');
   });
 
   it('forwards nested ticket routes and correlation identifiers', async () => {
