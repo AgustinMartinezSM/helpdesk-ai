@@ -8,9 +8,9 @@
  */
 import { connect as amqplibConnect } from 'amqplib';
 import type { Channel, ChannelModel } from 'amqplib';
-import { ticketCreatedV1 } from './contracts.js';
+import { ticketCreatedV1, userRegisteredV1 } from './contracts.js';
 import { MessagingClient } from './messaging-client.js';
-import type { ContractEnvelope } from './contracts.js';
+import type { ContractEnvelope, EventEnvelope } from './contracts.js';
 import { EVENTS_EXCHANGE, deadLetterQueueOf } from './topology.js';
 
 const rabbitmqUrl = process.env.RABBITMQ_URL;
@@ -22,6 +22,8 @@ if (!rabbitmqUrl) {
 
 const QUEUE = 'messaging-lib.int-test';
 const DLQ = deadLetterQueueOf(QUEUE);
+const FIREHOSE_QUEUE = 'messaging-lib.int-test-firehose';
+const FIREHOSE_DLQ = deadLetterQueueOf(FIREHOSE_QUEUE);
 
 const ticketPayload = {
   ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
@@ -50,6 +52,7 @@ describe('MessagingClient against a real broker', () => {
   let rawConnection: ChannelModel;
   let rawChannel: Channel;
   const received: ContractEnvelope<typeof ticketCreatedV1>[] = [];
+  const firehoseReceived: EventEnvelope[] = [];
 
   beforeAll(async () => {
     client = new MessagingClient({
@@ -63,17 +66,28 @@ describe('MessagingClient against a real broker', () => {
         received.push(event);
       },
     });
+    await client.subscribeFirehose({
+      queue: FIREHOSE_QUEUE,
+      patterns: ['#'],
+      handler: async (event) => {
+        firehoseReceived.push(event);
+      },
+    });
 
     // Raw side channel to inject malformed messages and inspect the DLQ.
     rawConnection = await amqplibConnect(rabbitmqUrl);
     rawChannel = await rawConnection.createChannel();
     await rawChannel.purgeQueue(QUEUE);
     await rawChannel.purgeQueue(DLQ);
+    await rawChannel.purgeQueue(FIREHOSE_QUEUE);
+    await rawChannel.purgeQueue(FIREHOSE_DLQ);
   });
 
   afterAll(async () => {
     await rawChannel.deleteQueue(QUEUE);
     await rawChannel.deleteQueue(DLQ);
+    await rawChannel.deleteQueue(FIREHOSE_QUEUE);
+    await rawChannel.deleteQueue(FIREHOSE_DLQ);
     await rawConnection.close();
     await client.close();
   });
@@ -85,6 +99,26 @@ describe('MessagingClient against a real broker', () => {
 
     await waitFor(() => received.length === 1);
     expect(received[0]).toEqual(envelope);
+  });
+
+  it('delivers every event type to a firehose subscriber, contract or not', async () => {
+    const before = firehoseReceived.length;
+    const userEnvelope = await client.publish(userRegisteredV1, {
+      userId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+      email: 'ada@example.com',
+      roles: ['user'],
+      registeredAt: '2026-07-28T12:00:00.000Z',
+    });
+
+    await waitFor(() =>
+      firehoseReceived.some((event) => event.id === userEnvelope.id),
+    );
+    // The firehose queue has no user.registered.v1 contract bound — the
+    // envelope-only decode is what lets it through.
+    const seen = firehoseReceived.find((e) => e.id === userEnvelope.id);
+    expect(seen?.type).toBe('user.registered.v1');
+    expect(seen?.payload).toEqual(userEnvelope.payload);
+    expect(firehoseReceived.length).toBeGreaterThan(before);
   });
 
   it('dead-letters messages that cannot be decoded, without invoking the handler', async () => {

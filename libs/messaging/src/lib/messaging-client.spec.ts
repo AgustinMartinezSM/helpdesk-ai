@@ -1,5 +1,9 @@
 import { ticketCreatedV1, userRegisteredV1 } from './contracts.js';
-import { buildEnvelope, decodeDelivery } from './messaging-client.js';
+import {
+  buildEnvelope,
+  decodeDelivery,
+  decodeRawDelivery,
+} from './messaging-client.js';
 
 const ticketPayload = {
   ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
@@ -94,5 +98,29 @@ describe('decodeDelivery (consumer-side guarantees)', () => {
       ok: false,
       reason: 'payload failed validation for "ticket.created.v1"',
     });
+  });
+});
+
+describe('decodeRawDelivery (firehose consumers)', () => {
+  it('accepts a well-formed envelope whose type has no local contract', () => {
+    const envelope = {
+      id: '7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f',
+      type: 'some.future.event.v9',
+      occurredAt: '2026-07-28T12:00:00.000Z',
+      payload: { anything: 'goes', nested: { deeply: true } },
+    };
+
+    const decoded = decodeRawDelivery(Buffer.from(JSON.stringify(envelope)));
+    expect(decoded).toEqual({ ok: true, event: envelope });
+  });
+
+  it('still rejects non-JSON bodies and malformed envelopes', () => {
+    expect(decodeRawDelivery(Buffer.from('{"broken":'))).toEqual({
+      ok: false,
+      reason: 'body is not valid JSON',
+    });
+    expect(
+      decodeRawDelivery(Buffer.from(JSON.stringify({ hello: 'world' }))),
+    ).toEqual({ ok: false, reason: 'envelope failed validation' });
   });
 });

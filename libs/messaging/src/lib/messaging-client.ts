@@ -57,6 +57,22 @@ export interface EventSubscription<
   handler: (event: ContractEnvelope<TContract>) => Promise<void>;
 }
 
+export interface FirehoseSubscription {
+  /** Durable queue owned by the consuming service: `<service>.<purpose>`. */
+  queue: string;
+  /** Topic binding patterns, e.g. ['#'] to capture every event. */
+  patterns: readonly string[];
+  /** Unacked message ceiling per consumer (default 10). */
+  prefetch?: number;
+  /**
+   * Invoked once per delivered event with the payload left OPAQUE: only the
+   * envelope is validated, so unknown event types are delivered instead of
+   * dead-lettered. Throwing rejects the message to the dead letter queue —
+   * delivery is at-least-once, so handlers MUST be idempotent.
+   */
+  handler: (event: EventEnvelope) => Promise<void>;
+}
+
 /**
  * Validates and wraps an event the way `MessagingClient.publish` does.
  * Exported separately so producer-side guarantees are testable without a
@@ -82,13 +98,11 @@ export type DecodedDelivery =
   { ok: true; event: EventEnvelope } | { ok: false; reason: string };
 
 /**
- * Turns a raw delivery into a validated event, or a rejection reason.
- * Pure so the consumer-side guarantees are testable without a broker.
+ * Validates only the envelope and leaves the payload opaque. This is the
+ * decode step for capture-all consumers (audit-style) that must accept
+ * event types they have no contract for. Pure for broker-free testing.
  */
-export function decodeDelivery(
-  content: Buffer,
-  contractsByType: ReadonlyMap<string, EventContract>,
-): DecodedDelivery {
+export function decodeRawDelivery(content: Buffer): DecodedDelivery {
   let raw: unknown;
   try {
     raw = JSON.parse(content.toString('utf-8'));
@@ -101,23 +115,39 @@ export function decodeDelivery(
     return { ok: false, reason: 'envelope failed validation' };
   }
 
-  const contract = contractsByType.get(envelope.data.type);
+  return { ok: true, event: envelope.data };
+}
+
+/**
+ * Turns a raw delivery into a validated event, or a rejection reason.
+ * Pure so the consumer-side guarantees are testable without a broker.
+ */
+export function decodeDelivery(
+  content: Buffer,
+  contractsByType: ReadonlyMap<string, EventContract>,
+): DecodedDelivery {
+  const decoded = decodeRawDelivery(content);
+  if (!decoded.ok) {
+    return decoded;
+  }
+
+  const contract = contractsByType.get(decoded.event.type);
   if (!contract) {
     return {
       ok: false,
-      reason: `no contract bound for type "${envelope.data.type}"`,
+      reason: `no contract bound for type "${decoded.event.type}"`,
     };
   }
 
-  const payload = contract.payloadSchema.safeParse(envelope.data.payload);
+  const payload = contract.payloadSchema.safeParse(decoded.event.payload);
   if (!payload.success) {
     return {
       ok: false,
-      reason: `payload failed validation for "${envelope.data.type}"`,
+      reason: `payload failed validation for "${decoded.event.type}"`,
     };
   }
 
-  return { ok: true, event: { ...envelope.data, payload: payload.data } };
+  return { ok: true, event: { ...decoded.event, payload: payload.data } };
 }
 
 /**
@@ -190,10 +220,69 @@ export class MessagingClient {
   async subscribe<TContract extends EventContract<string, unknown>>(
     subscription: EventSubscription<TContract>,
   ): Promise<void> {
-    const { queue, contracts, prefetch = 10 } = subscription;
     const contractsByType: ReadonlyMap<string, EventContract> = new Map(
-      contracts.map((contract) => [contract.type, contract]),
+      subscription.contracts.map((contract) => [contract.type, contract]),
     );
+    await this.startConsumer(
+      subscription.queue,
+      subscription.contracts.map((contract) => contract.type),
+      subscription.prefetch,
+      (channel, message) =>
+        this.deliver(
+          channel,
+          subscription.queue,
+          message,
+          decodeDelivery(message.content, contractsByType),
+          subscription.handler as (event: EventEnvelope) => Promise<void>,
+        ),
+    );
+  }
+
+  /**
+   * Capture-all variant of subscribe, EXCLUSIVELY for schema-on-read
+   * consumers (audit-style firehose). It binds arbitrary topic patterns and
+   * validates only the envelope, so events with no local contract are
+   * delivered (payload opaque) instead of dead-lettered. Every domain
+   * consumer must keep using subscribe() with explicit contracts — this
+   * method deliberately gives up the payload-validation and drift-detection
+   * guarantees that make versioned contracts work.
+   * Same durable queue + DLQ topology as subscribe().
+   */
+  async subscribeFirehose(subscription: FirehoseSubscription): Promise<void> {
+    await this.startConsumer(
+      subscription.queue,
+      subscription.patterns,
+      subscription.prefetch,
+      (channel, message) =>
+        this.deliver(
+          channel,
+          subscription.queue,
+          message,
+          decodeRawDelivery(message.content),
+          subscription.handler,
+        ),
+    );
+  }
+
+  async close(): Promise<void> {
+    await this.connection.close();
+  }
+
+  /** Nest lifecycle hook (duck-typed): closes the connection on shutdown. */
+  async onApplicationShutdown(): Promise<void> {
+    await this.close();
+  }
+
+  /** Declares the shared consumer topology and starts consuming. */
+  private async startConsumer(
+    queue: string,
+    bindingKeys: readonly string[],
+    prefetch: number | undefined,
+    onMessage: (
+      channel: ChannelWrapper,
+      message: ConsumeMessage,
+    ) => Promise<void>,
+  ): Promise<void> {
     const deadLetterQueue = deadLetterQueueOf(queue);
 
     const channel = this.connection.createChannel({
@@ -213,53 +302,44 @@ export class MessagingClient {
           deadLetterExchange: EVENTS_DEAD_LETTER_EXCHANGE,
           deadLetterRoutingKey: queue,
         });
-        for (const contract of contracts) {
-          await raw.bindQueue(queue, EVENTS_EXCHANGE, contract.type);
+        for (const key of bindingKeys) {
+          await raw.bindQueue(queue, EVENTS_EXCHANGE, key);
         }
-        await raw.prefetch(prefetch);
+        await raw.prefetch(prefetch ?? 10);
       },
     });
 
     await channel.consume(
       queue,
       (message) => {
-        void this.dispatch(channel, contractsByType, subscription, message);
+        void onMessage(channel, message);
       },
       { noAck: false },
     );
     await channel.waitForConnect();
   }
 
-  async close(): Promise<void> {
-    await this.connection.close();
-  }
-
-  /** Nest lifecycle hook (duck-typed): closes the connection on shutdown. */
-  async onApplicationShutdown(): Promise<void> {
-    await this.close();
-  }
-
-  private async dispatch<TContract extends EventContract<string, unknown>>(
+  private async deliver(
     channel: ChannelWrapper,
-    contractsByType: ReadonlyMap<string, EventContract>,
-    subscription: EventSubscription<TContract>,
+    queue: string,
     message: ConsumeMessage,
+    decoded: DecodedDelivery,
+    handler: (event: EventEnvelope) => Promise<void>,
   ): Promise<void> {
-    const decoded = decodeDelivery(message.content, contractsByType);
     if (!decoded.ok) {
       this.options.logger?.warn(
-        `messaging: rejecting message on "${subscription.queue}" to dead letter queue (${decoded.reason})`,
+        `messaging: rejecting message on "${queue}" to dead letter queue (${decoded.reason})`,
       );
       channel.nack(message, false, false);
       return;
     }
 
     try {
-      await subscription.handler(decoded.event as ContractEnvelope<TContract>);
+      await handler(decoded.event);
       channel.ack(message);
     } catch (error) {
       this.options.logger?.warn(
-        `messaging: handler failed for "${decoded.event.type}" on "${subscription.queue}"; dead-lettering (${
+        `messaging: handler failed for "${decoded.event.type}" on "${queue}"; dead-lettering (${
           error instanceof Error ? error.message : String(error)
         })`,
       );
