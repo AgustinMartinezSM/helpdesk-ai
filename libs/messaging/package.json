@@ -1,0 +1,38 @@
+{
+  "name": "@helpdesk-ai/messaging",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@helpdesk-ai/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@helpdesk-ai/configuration": "workspace:*",
+    "amqp-connection-manager": "^5.0.0",
+    "amqplib": "^2.0.1",
+    "tslib": "^2.3.0"
+  },
+  "nx": {
+    "targets": {
+      "test-integration": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "jest --config jest.integration.config.cts --runInBand",
+          "cwd": "libs/messaging",
+          "env": {
+            "RABBITMQ_URL": "amqp://helpdesk:helpdesk_local_only_rabbit@localhost:5672"
+          }
+        }
+      }
+    }
+  }
+}

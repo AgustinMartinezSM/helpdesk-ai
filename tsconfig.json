@@ -23,6 +23,9 @@
     },
     {
       "path": "./apps/tickets-service"
+    },
+    {
+      "path": "./libs/messaging"
     }
   ],
   "compilerOptions": {}
