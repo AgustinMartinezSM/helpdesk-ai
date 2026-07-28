@@ -12,18 +12,57 @@ import { AppModule } from '../app.module';
 import { apiGatewayEnvSchema } from '../../config/env';
 import { createServiceProxy } from './service-proxy';
 
+/** One entry per downstream the gateway fronts. */
+const SERVICES = [
+  {
+    key: 'auth',
+    envVar: 'AUTH_SERVICE_URL',
+    prefix: '/api/auth',
+    rewriteTo: '/auth',
+  },
+  {
+    key: 'tickets',
+    envVar: 'TICKETS_SERVICE_URL',
+    prefix: '/api/tickets',
+    rewriteTo: '/tickets',
+  },
+  {
+    key: 'users',
+    envVar: 'USERS_SERVICE_URL',
+    prefix: '/api/users',
+    rewriteTo: '/users',
+  },
+  {
+    key: 'audit',
+    envVar: 'AUDIT_SERVICE_URL',
+    prefix: '/api/audit',
+    rewriteTo: '/audit',
+  },
+  {
+    key: 'notifications',
+    envVar: 'NOTIFICATION_SERVICE_URL',
+    prefix: '/api/notifications',
+    rewriteTo: '/notifications',
+  },
+  {
+    key: 'analytics',
+    envVar: 'ANALYTICS_SERVICE_URL',
+    prefix: '/api/analytics',
+    rewriteTo: '/analytics',
+  },
+] as const;
+
+type ServiceKey = (typeof SERVICES)[number]['key'];
+
 interface RecordedRequest {
-  service: 'auth' | 'tickets' | 'users';
+  service: ServiceKey;
   method: string;
   url: string;
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
 }
 
-function buildStub(
-  service: 'auth' | 'tickets' | 'users',
-  received: RecordedRequest[],
-): Server {
+function buildStub(service: ServiceKey, received: RecordedRequest[]): Server {
   return createServer((req, res) => {
     let raw = '';
     req.on('data', (chunk) => (raw += chunk));
@@ -44,33 +83,25 @@ function buildStub(
 
 describe('Service proxies (stub downstream services)', () => {
   let app: INestApplication;
-  let authStub: Server;
-  let ticketsStub: Server;
-  let usersStub: Server;
+  const stubs = new Map<ServiceKey, Server>();
   const received: RecordedRequest[] = [];
 
   beforeAll(async () => {
-    authStub = buildStub('auth', received);
-    ticketsStub = buildStub('tickets', received);
-    usersStub = buildStub('users', received);
-    await Promise.all([
-      new Promise<void>((resolve) => authStub.listen(0, '127.0.0.1', resolve)),
-      new Promise<void>((resolve) =>
-        ticketsStub.listen(0, '127.0.0.1', resolve),
-      ),
-      new Promise<void>((resolve) => usersStub.listen(0, '127.0.0.1', resolve)),
-    ]);
-    const authPort = (authStub.address() as AddressInfo).port;
-    const ticketsPort = (ticketsStub.address() as AddressInfo).port;
-    const usersPort = (usersStub.address() as AddressInfo).port;
-
-    const env = validateEnv(apiGatewayEnvSchema, {
+    const envSource: Record<string, string> = {
       NODE_ENV: 'test',
       LOG_LEVEL: 'fatal',
-      AUTH_SERVICE_URL: `http://127.0.0.1:${authPort}`,
-      TICKETS_SERVICE_URL: `http://127.0.0.1:${ticketsPort}`,
-      USERS_SERVICE_URL: `http://127.0.0.1:${usersPort}`,
-    });
+    };
+    for (const service of SERVICES) {
+      const stub = buildStub(service.key, received);
+      stubs.set(service.key, stub);
+      await new Promise<void>((resolve) =>
+        stub.listen(0, '127.0.0.1', resolve),
+      );
+      const port = (stub.address() as AddressInfo).port;
+      envSource[service.envVar] = `http://127.0.0.1:${port}`;
+    }
+
+    const env = validateEnv(apiGatewayEnvSchema, envSource);
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
@@ -79,27 +110,15 @@ describe('Service proxies (stub downstream services)', () => {
     app = moduleRef.createNestApplication({ logger: false });
     // Mirror main.ts ordering: correlation first, then the proxy mounts.
     app.use(correlationMiddleware);
-    app.use(
-      createServiceProxy({
-        pathFilter: '/api/auth',
-        rewriteTo: '/auth',
-        target: env.AUTH_SERVICE_URL,
-      }),
-    );
-    app.use(
-      createServiceProxy({
-        pathFilter: '/api/tickets',
-        rewriteTo: '/tickets',
-        target: env.TICKETS_SERVICE_URL,
-      }),
-    );
-    app.use(
-      createServiceProxy({
-        pathFilter: '/api/users',
-        rewriteTo: '/users',
-        target: env.USERS_SERVICE_URL,
-      }),
-    );
+    for (const service of SERVICES) {
+      app.use(
+        createServiceProxy({
+          pathFilter: service.prefix,
+          rewriteTo: service.rewriteTo,
+          target: env[service.envVar],
+        }),
+      );
+    }
     await app.init();
   });
 
@@ -109,17 +128,14 @@ describe('Service proxies (stub downstream services)', () => {
 
   afterAll(async () => {
     await app.close();
-    await Promise.all([
-      new Promise<void>((resolve, reject) =>
-        authStub.close((e) => (e ? reject(e) : resolve())),
+    await Promise.all(
+      [...stubs.values()].map(
+        (stub) =>
+          new Promise<void>((resolve, reject) =>
+            stub.close((e) => (e ? reject(e) : resolve())),
+          ),
       ),
-      new Promise<void>((resolve, reject) =>
-        ticketsStub.close((e) => (e ? reject(e) : resolve())),
-      ),
-      new Promise<void>((resolve, reject) =>
-        usersStub.close((e) => (e ? reject(e) : resolve())),
-      ),
-    ]);
+    );
   });
 
   it('routes each prefix to its own downstream service with rewritten paths', async () => {
@@ -136,16 +152,34 @@ describe('Service proxies (stub downstream services)', () => {
       .get('/api/users/me')
       .set('authorization', 'Bearer token')
       .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/audit?type=ticket.created.v1')
+      .set('authorization', 'Bearer token')
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch('/api/notifications/abc/read')
+      .set('authorization', 'Bearer token')
+      .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/analytics/summary')
+      .set('authorization', 'Bearer token')
+      .expect(200);
 
-    expect(received[0]).toMatchObject({ service: 'auth', url: '/auth/login' });
-    expect(received[1]).toMatchObject({ service: 'tickets', url: '/tickets' });
+    expect(received.map((r) => [r.service, r.url])).toEqual([
+      ['auth', '/auth/login'],
+      ['tickets', '/tickets'],
+      ['users', '/users/me'],
+      ['audit', '/audit?type=ticket.created.v1'],
+      ['notifications', '/notifications/abc/read'],
+      ['analytics', '/analytics/summary'],
+    ]);
     expect(received[1].body).toEqual({
       title: 'Via gateway',
       description: 'Routed',
     });
-    expect(received[1].headers.authorization).toBe('Bearer token');
-    expect(received[2]).toMatchObject({ service: 'users', url: '/users/me' });
-    expect(received[2].headers.authorization).toBe('Bearer token');
+    for (const recorded of received.slice(1)) {
+      expect(recorded.headers.authorization).toBe('Bearer token');
+    }
   });
 
   it('forwards nested ticket routes and correlation identifiers', async () => {

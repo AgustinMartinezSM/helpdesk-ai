@@ -25,6 +25,24 @@ export const apiGatewayEnvSchema = baseEnvSchema.extend({
     .url()
     .default('http://localhost:3005')
     .transform((value) => value.replace(/\/+$/, '')),
+  // Downstream service the gateway routes /api/audit/* to.
+  AUDIT_SERVICE_URL: z
+    .string()
+    .url()
+    .default('http://localhost:3006')
+    .transform((value) => value.replace(/\/+$/, '')),
+  // Downstream service the gateway routes /api/notifications/* to.
+  NOTIFICATION_SERVICE_URL: z
+    .string()
+    .url()
+    .default('http://localhost:3007')
+    .transform((value) => value.replace(/\/+$/, '')),
+  // Downstream service the gateway routes /api/analytics/* to.
+  ANALYTICS_SERVICE_URL: z
+    .string()
+    .url()
+    .default('http://localhost:3008')
+    .transform((value) => value.replace(/\/+$/, '')),
 });
 
 export type ApiGatewayEnv = z.infer<typeof apiGatewayEnvSchema>;
