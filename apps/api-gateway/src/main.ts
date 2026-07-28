@@ -7,7 +7,7 @@ import {
   LoggerErrorInterceptor,
 } from '@helpdesk-ai/observability';
 import { AppModule } from './app/app.module';
-import { createAuthProxy } from './app/proxy/auth-proxy';
+import { createServiceProxy } from './app/proxy/service-proxy';
 import { apiGatewayEnvSchema, SERVICE_NAME } from './config/env';
 
 async function bootstrap(): Promise<void> {
@@ -24,9 +24,22 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new LoggerErrorInterceptor());
   app.use(correlationMiddleware);
   app.use(helmet());
-  // Correlation runs before the proxy, so downstream services receive the
+  // Correlation runs before the proxies, so downstream services receive the
   // same x-request-id / x-trace-id the gateway logged.
-  app.use(createAuthProxy(env.AUTH_SERVICE_URL));
+  app.use(
+    createServiceProxy({
+      pathFilter: '/api/auth',
+      rewriteTo: '/auth',
+      target: env.AUTH_SERVICE_URL,
+    }),
+  );
+  app.use(
+    createServiceProxy({
+      pathFilter: '/api/tickets',
+      rewriteTo: '/tickets',
+      target: env.TICKETS_SERVICE_URL,
+    }),
+  );
   // CORS is intentionally NOT enabled: browsers never call the gateway
   // directly — only the web BFF and other services do, server to server.
   app.enableShutdownHooks();
