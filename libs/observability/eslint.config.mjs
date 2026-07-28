@@ -9,6 +9,10 @@ export default [
         'error',
         {
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
+          // pino and pino-http are not imported directly: they satisfy
+          // nestjs-pino's peer dependency ranges and are pinned here on
+          // purpose so their versions never drift out of range.
+          ignoredDependencies: ['pino', 'pino-http'],
         },
       ],
     },

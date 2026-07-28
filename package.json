@@ -20,9 +20,12 @@
     "dev:gateway": "nx serve @helpdesk-ai/api-gateway",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "infra:status": "docker compose ps"
+    "infra:status": "docker compose ps",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^9.8.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
@@ -56,11 +59,13 @@
     "eslint-plugin-jsx-a11y": "6.10.1",
     "eslint-plugin-react": "^7.35.0",
     "eslint-plugin-react-hooks": "5.0.0",
+    "husky": "^9.1.7",
     "jest": "~30.3.0",
     "jest-environment-jsdom": "~30.3.0",
     "jest-environment-node": "~30.3.0",
     "jest-util": "~30.3.0",
     "jsonc-eslint-parser": "^2.1.0",
+    "lint-staged": "^17.2.0",
     "nx": "23.1.0",
     "prettier": "^3.8.1",
     "supertest": "^7.2.2",

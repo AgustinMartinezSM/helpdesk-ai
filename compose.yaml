@@ -31,11 +31,7 @@ services:
       # (docker-library/postgres#1259).
       - postgres-data:/var/lib/postgresql
     healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}',
-        ]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -45,7 +41,12 @@ services:
   redis:
     image: redis:8-alpine
     container_name: helpdesk-ai-redis
-    command: ['redis-server', '--requirepass', '${HELPDESK_REDIS_PASSWORD:-helpdesk_local_only_redis}']
+    command:
+      [
+        'redis-server',
+        '--requirepass',
+        '${HELPDESK_REDIS_PASSWORD:-helpdesk_local_only_redis}',
+      ]
     ports:
       - '6379:6379'
     volumes:
