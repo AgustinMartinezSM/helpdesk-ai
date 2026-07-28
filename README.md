@@ -9,9 +9,9 @@ The repository is at an early stage (Sprint 2). What exists today: an Nx monorep
 | Area                                                                                          | Status                 |
 | --------------------------------------------------------------------------------------------- | ---------------------- |
 | Nx 23 monorepo with pnpm workspaces, TypeScript strict + project references                   | Implemented            |
-| `apps/web` — Next.js 16 frontend (minimal landing page)                                       | Implemented            |
-| `apps/web-bff` — NestJS backend-for-frontend (port 3001)                                      | Implemented            |
-| `apps/api-gateway` — NestJS entry point (port 3002, routes nothing yet)                       | Implemented            |
+| `apps/web` — Next.js 16 frontend with login and account pages                                 | Implemented            |
+| `apps/web-bff` — browser sessions (`/session/*`, httpOnly refresh cookie)                     | Implemented            |
+| `apps/api-gateway` — routes `/api/auth/*` to auth-service                                     | Implemented            |
 | `libs/configuration` — zod-based fail-fast env validation                                     | Implemented            |
 | `libs/observability` — structured JSON logs, request correlation                              | Implemented            |
 | Health endpoints (`/health`, `/health/ready`) on both Nest apps                               | Implemented            |
@@ -24,7 +24,7 @@ The repository is at an early stage (Sprint 2). What exists today: an Nx monorep
 | RabbitMQ versioned events between services                                                    | Planned                |
 | Distributed tracing, rate limiting, Swagger, e2e tests                                        | Intentionally deferred |
 
-Target architecture (planned): `web -> web-bff -> api-gateway -> {auth, users, tickets, ai, notification, audit, analytics}` — synchronous HTTP for request/response, RabbitMQ events for facts. `web`, `web-bff`, `api-gateway` and `auth-service` exist; the gateway does not route to auth-service yet (next increment).
+Target architecture: `web -> web-bff -> api-gateway -> {auth, users, tickets, ai, notification, audit, analytics}` — synchronous HTTP for request/response, RabbitMQ events for facts (planned). The login path is live end to end: the web app signs in through the BFF, which calls auth-service through the gateway.
 
 ## Prerequisites
 
