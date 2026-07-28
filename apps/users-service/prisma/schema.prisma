@@ -1,0 +1,29 @@
+// Persistence model for users-service. Maps to PERSISTENCE shapes only;
+// domain entities live in src/domain and are mapped inside the repository
+// adapter (ADR 0004).
+//
+// userId is the identifier auth-service issued in user.registered.v1 —
+// never a cross-service foreign key (ADR 0003). This table is a projection
+// rebuilt from events, not the source of truth for identity.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model UserProfile {
+  userId       String   @id @map("user_id") @db.Uuid
+  email        String   @unique
+  displayName  String   @map("display_name")
+  roles        String[]
+  registeredAt DateTime @map("registered_at") @db.Timestamptz(3)
+  createdAt    DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@map("user_profiles")
+}
