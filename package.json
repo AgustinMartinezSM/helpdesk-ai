@@ -14,7 +14,13 @@
     "lint": "nx run-many -t lint",
     "test": "nx run-many -t test",
     "build": "nx run-many -t build",
-    "typecheck": "nx run-many -t typecheck"
+    "typecheck": "nx run-many -t typecheck",
+    "dev:web": "nx dev @helpdesk-ai/web",
+    "dev:bff": "nx serve @helpdesk-ai/web-bff",
+    "dev:gateway": "nx serve @helpdesk-ai/api-gateway",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:status": "docker compose ps"
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",

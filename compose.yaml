@@ -1,0 +1,94 @@
+# Local development infrastructure for HelpDesk AI.
+#
+# Design notes:
+# - PostgreSQL publishes on host port 5433 because this machine runs a native
+#   PostgreSQL 16 on 5432 that must not be touched. Inside the network the
+#   container still listens on 5432.
+# - One PostgreSQL instance will host one logical database per service
+#   (helpdesk_auth, helpdesk_users, helpdesk_tickets, helpdesk_audit,
+#   helpdesk_analytics), each with its own credentials, created when the
+#   owning service is introduced. See docs/architecture/data-ownership.md.
+# - Credentials below are non-default examples for LOCAL DEVELOPMENT ONLY and
+#   can be overridden through a git-ignored .env file (see .env.example).
+# - Containers carry the helpdesk-ai- prefix and an explicit project network
+#   to avoid collisions with unrelated projects on the same machine.
+
+name: helpdesk-ai
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: helpdesk-ai-postgres
+    environment:
+      POSTGRES_USER: ${HELPDESK_POSTGRES_USER:-helpdesk_admin}
+      POSTGRES_PASSWORD: ${HELPDESK_POSTGRES_PASSWORD:-helpdesk_local_only_pg}
+      POSTGRES_DB: ${HELPDESK_POSTGRES_DB:-helpdesk_platform}
+    ports:
+      - '5433:5432'
+    volumes:
+      # postgres:18+ images require mounting the parent directory; data lives
+      # in a major-version subdirectory to support pg_upgrade --link
+      # (docker-library/postgres#1259).
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - helpdesk
+
+  redis:
+    image: redis:8-alpine
+    container_name: helpdesk-ai-redis
+    command: ['redis-server', '--requirepass', '${HELPDESK_REDIS_PASSWORD:-helpdesk_local_only_redis}']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'redis-cli -a ${HELPDESK_REDIS_PASSWORD:-helpdesk_local_only_redis} ping | grep PONG',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - helpdesk
+
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    container_name: helpdesk-ai-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${HELPDESK_RABBITMQ_USER:-helpdesk}
+      RABBITMQ_DEFAULT_PASS: ${HELPDESK_RABBITMQ_PASSWORD:-helpdesk_local_only_rabbit}
+    ports:
+      - '5672:5672'
+      # Management UI: http://localhost:15672
+      - '15672:15672'
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      # RabbitMQ takes a while to boot; do not count early failures.
+      start_period: 30s
+    networks:
+      - helpdesk
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+
+networks:
+  helpdesk:
+    name: helpdesk-ai
