@@ -31,8 +31,8 @@ import { PrismaUserRepository } from '../infrastructure/prisma/prisma-user.repos
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { Argon2PasswordHasher } from '../infrastructure/security/argon2-password-hasher';
 import { JwtTokenIssuer } from '../infrastructure/security/jwt-token-issuer';
+import { JwtAccessGuard } from '@helpdesk-ai/security';
 import { AuthController } from './auth/auth.controller';
-import { JwtAccessGuard } from './guards/jwt-access.guard';
 import { HealthController } from './health/health.controller';
 
 /**

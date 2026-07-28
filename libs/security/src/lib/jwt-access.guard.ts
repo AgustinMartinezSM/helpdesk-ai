@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
+/** Claims carried by every access token minted by auth-service. */
 export interface AccessTokenPayload {
   sub: string;
   email: string;
@@ -20,10 +21,10 @@ interface AuthenticatedRequest {
 const BEARER_PREFIX = 'Bearer ';
 
 /**
- * Verifies access tokens signed by auth-service (shared HS256 secret) and
- * attaches the claims to req.user. Duplicated from auth-service on purpose:
- * a shared security library is worth extracting when a third consumer
- * appears, not before.
+ * Verifies access tokens signed by auth-service and attaches the claims to
+ * req.user. The consuming service supplies the verification context by
+ * registering JwtModule with the shared HS256 secret; this guard never
+ * mints tokens.
  */
 @Injectable()
 export class JwtAccessGuard implements CanActivate {

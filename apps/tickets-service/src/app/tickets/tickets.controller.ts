@@ -23,10 +23,7 @@ import {
   AssignTicketUseCase,
   ChangeTicketStatusUseCase,
 } from '../../application/use-cases/ticket-lifecycle';
-import {
-  JwtAccessGuard,
-  type AccessTokenPayload,
-} from '../guards/jwt-access.guard';
+import { JwtAccessGuard, type AccessTokenPayload } from '@helpdesk-ai/security';
 import {
   AddCommentDto,
   AssignTicketDto,

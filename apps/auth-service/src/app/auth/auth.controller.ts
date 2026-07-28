@@ -23,10 +23,7 @@ import {
   RegisterUserUseCase,
   type RegisterUserOutput,
 } from '../../application/use-cases/register-user';
-import {
-  JwtAccessGuard,
-  type AccessTokenPayload,
-} from '../guards/jwt-access.guard';
+import { JwtAccessGuard, type AccessTokenPayload } from '@helpdesk-ai/security';
 import { AuthDomainErrorFilter } from './auth-domain-error.filter';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';

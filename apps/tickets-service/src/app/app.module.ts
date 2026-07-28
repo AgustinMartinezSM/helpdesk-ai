@@ -20,9 +20,9 @@ import {
   ChangeTicketStatusUseCase,
 } from '../application/use-cases/ticket-lifecycle';
 import { APP_ENV, SERVICE_NAME, type TicketsServiceEnv } from '../config/env';
+import { JwtAccessGuard } from '@helpdesk-ai/security';
 import { PrismaTicketRepository } from '../infrastructure/prisma/prisma-ticket.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
-import { JwtAccessGuard } from './guards/jwt-access.guard';
 import { HealthController } from './health/health.controller';
 import { TicketsController } from './tickets/tickets.controller';
 

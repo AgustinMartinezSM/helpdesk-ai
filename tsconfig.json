@@ -26,6 +26,9 @@
     },
     {
       "path": "./libs/messaging"
+    },
+    {
+      "path": "./libs/security"
     }
   ],
   "compilerOptions": {}
