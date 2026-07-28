@@ -26,5 +26,26 @@ module.exports = {
       generatePackageJson: false,
       sourceMap: true,
     }),
+    // NxAppWebpackPlugin overwrites root-level `externals`, so shared
+    // runtime packages are appended AFTER it by this inline plugin.
+    // class-transformer/class-validator MUST stay external: Nest's
+    // ValidationPipe loads them dynamically at runtime (loadPackage), which
+    // webpack cannot rewrite — bundling them gives the DTO decorators a
+    // second, private copy whose metadata storage the pipe never sees, and
+    // @Type() conversions silently stop working in production bundles.
+    {
+      apply(compiler) {
+        const existing = compiler.options.externals;
+        const runtimeShared = {
+          'class-transformer': 'commonjs class-transformer',
+          'class-validator': 'commonjs class-validator',
+        };
+        compiler.options.externals = Array.isArray(existing)
+          ? [...existing, runtimeShared]
+          : existing
+            ? [existing, runtimeShared]
+            : [runtimeShared];
+      },
+    },
   ],
 };

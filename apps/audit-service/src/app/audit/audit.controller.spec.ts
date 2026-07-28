@@ -107,6 +107,11 @@ describe('Audit HTTP API (fakes, real JWT verification)', () => {
   });
 
   it('validates query params: oversized limits and malformed types are 400', async () => {
+    // A valid in-range limit must convert and pass (regression: @Type).
+    await request(app.getHttpServer())
+      .get('/audit?limit=20')
+      .set('authorization', `Bearer ${adminToken}`)
+      .expect(200);
     await request(app.getHttpServer())
       .get('/audit?limit=100000')
       .set('authorization', `Bearer ${adminToken}`)
