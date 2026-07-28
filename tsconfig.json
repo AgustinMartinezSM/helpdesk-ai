@@ -20,6 +20,9 @@
     },
     {
       "path": "./apps/auth-service"
+    },
+    {
+      "path": "./apps/tickets-service"
     }
   ],
   "compilerOptions": {}

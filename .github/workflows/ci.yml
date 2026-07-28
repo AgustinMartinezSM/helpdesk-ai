@@ -56,12 +56,16 @@ jobs:
 
       # Service containers cannot mount infrastructure/postgres/init, so the
       # auth role and test database are provisioned explicitly.
-      - name: Provision auth test database
+      - name: Provision service test databases
         run: |
           psql "postgresql://helpdesk_admin:helpdesk_ci_only_pg@localhost:5433/helpdesk_platform" \
             -v ON_ERROR_STOP=1 \
             -c "CREATE ROLE auth_service LOGIN PASSWORD 'helpdesk_local_only_auth' CREATEDB;" \
-            -c "CREATE DATABASE helpdesk_auth_test OWNER auth_service;"
+            -c "CREATE DATABASE helpdesk_auth_test OWNER auth_service;" \
+            -c "CREATE ROLE tickets_service LOGIN PASSWORD 'helpdesk_local_only_tickets' CREATEDB;" \
+            -c "CREATE DATABASE helpdesk_tickets_test OWNER tickets_service;"
 
       - name: Integration tests (real PostgreSQL)
-        run: pnpm nx run @helpdesk-ai/auth-service:test-integration
+        run: |
+          pnpm nx run @helpdesk-ai/auth-service:test-integration
+          pnpm nx run @helpdesk-ai/tickets-service:test-integration
