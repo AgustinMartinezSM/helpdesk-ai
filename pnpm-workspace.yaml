@@ -3,7 +3,13 @@ packages:
   - 'libs/*'
 
 # pnpm 11 blocks dependency build scripts by default (supply-chain hardening).
-# Only the toolchain packages that genuinely need native postinstall steps are allowed.
+# Only toolchain packages that genuinely need native postinstall steps are allowed.
+# 'less' is a transitive dependency of @nx/next; we do not use Less, so its
+# build script stays blocked.
 allowBuilds:
+  '@parcel/watcher': true
   '@swc/core': true
+  less: false
   nx: true
+  sharp: true
+  unrs-resolver: true

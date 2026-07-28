@@ -39,3 +39,9 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Next.js
+.next
+out
+
+test-output
