@@ -32,6 +32,9 @@
     },
     {
       "path": "./apps/users-service"
+    },
+    {
+      "path": "./apps/audit-service"
     }
   ],
   "compilerOptions": {}

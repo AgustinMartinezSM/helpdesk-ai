@@ -1,0 +1,31 @@
+// Persistence model for audit-service. The audit trail is append-only by
+// design: the repository exposes no update or delete, and the primary key
+// IS the event envelope id, which makes recording naturally idempotent
+// under at-least-once delivery (INSERT ... ON CONFLICT DO NOTHING).
+//
+// payload is stored as opaque jsonb: this service is schema-on-read and
+// must capture event types it has no contract for (ADR 0005 / sprint 7).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model AuditEvent {
+  /// Envelope id straight from the bus — the idempotency key.
+  id            String   @id @db.Uuid
+  type          String
+  occurredAt    DateTime @map("occurred_at") @db.Timestamptz(3)
+  correlationId String?  @map("correlation_id")
+  payload       Json
+  recordedAt    DateTime @map("recorded_at") @db.Timestamptz(3)
+
+  @@index([type, occurredAt])
+  @@index([occurredAt])
+  @@map("audit_events")
+}
