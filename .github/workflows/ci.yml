@@ -77,7 +77,13 @@ jobs:
             -c "CREATE ROLE tickets_service LOGIN PASSWORD 'helpdesk_local_only_tickets' CREATEDB;" \
             -c "CREATE DATABASE helpdesk_tickets_test OWNER tickets_service;" \
             -c "CREATE ROLE users_service LOGIN PASSWORD 'helpdesk_local_only_users' CREATEDB;" \
-            -c "CREATE DATABASE helpdesk_users_test OWNER users_service;"
+            -c "CREATE DATABASE helpdesk_users_test OWNER users_service;" \
+            -c "CREATE ROLE audit_service LOGIN PASSWORD 'helpdesk_local_only_audit' CREATEDB;" \
+            -c "CREATE DATABASE helpdesk_audit_test OWNER audit_service;" \
+            -c "CREATE ROLE notification_service LOGIN PASSWORD 'helpdesk_local_only_notifications' CREATEDB;" \
+            -c "CREATE DATABASE helpdesk_notifications_test OWNER notification_service;" \
+            -c "CREATE ROLE analytics_service LOGIN PASSWORD 'helpdesk_local_only_analytics' CREATEDB;" \
+            -c "CREATE DATABASE helpdesk_analytics_test OWNER analytics_service;"
 
       - name: Integration tests (real PostgreSQL and RabbitMQ)
         run: |
@@ -85,3 +91,6 @@ jobs:
           pnpm nx run @helpdesk-ai/auth-service:test-integration
           pnpm nx run @helpdesk-ai/tickets-service:test-integration
           pnpm nx run @helpdesk-ai/users-service:test-integration
+          pnpm nx run @helpdesk-ai/audit-service:test-integration
+          pnpm nx run @helpdesk-ai/notification-service:test-integration
+          pnpm nx run @helpdesk-ai/analytics-service:test-integration
