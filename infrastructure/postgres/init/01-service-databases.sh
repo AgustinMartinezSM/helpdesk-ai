@@ -11,6 +11,7 @@ set -e
 
 AUTH_PASSWORD="${HELPDESK_AUTH_DB_PASSWORD:-helpdesk_local_only_auth}"
 TICKETS_PASSWORD="${HELPDESK_TICKETS_DB_PASSWORD:-helpdesk_local_only_tickets}"
+USERS_PASSWORD="${HELPDESK_USERS_DB_PASSWORD:-helpdesk_local_only_users}"
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
   CREATE ROLE auth_service LOGIN PASSWORD '${AUTH_PASSWORD}' CREATEDB;
@@ -20,4 +21,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   CREATE ROLE tickets_service LOGIN PASSWORD '${TICKETS_PASSWORD}' CREATEDB;
   CREATE DATABASE helpdesk_tickets OWNER tickets_service;
   CREATE DATABASE helpdesk_tickets_test OWNER tickets_service;
+
+  CREATE ROLE users_service LOGIN PASSWORD '${USERS_PASSWORD}' CREATEDB;
+  CREATE DATABASE helpdesk_users OWNER users_service;
+  CREATE DATABASE helpdesk_users_test OWNER users_service;
 EOSQL

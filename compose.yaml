@@ -25,6 +25,8 @@ services:
       POSTGRES_DB: ${HELPDESK_POSTGRES_DB:-helpdesk_platform}
       # Consumed by the init script that provisions per-service databases.
       HELPDESK_AUTH_DB_PASSWORD: ${HELPDESK_AUTH_DB_PASSWORD:-helpdesk_local_only_auth}
+      HELPDESK_TICKETS_DB_PASSWORD: ${HELPDESK_TICKETS_DB_PASSWORD:-helpdesk_local_only_tickets}
+      HELPDESK_USERS_DB_PASSWORD: ${HELPDESK_USERS_DB_PASSWORD:-helpdesk_local_only_users}
     ports:
       - '5433:5432'
     volumes:
