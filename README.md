@@ -20,6 +20,7 @@ The repository is at an early stage (Sprint 2). What exists today: an Nx monorep
 | `apps/auth-service` — registration, login, rotating refresh sessions (port 3003)              | Implemented            |
 | `helpdesk_auth` database (Prisma 7, argon2id, JWT, reuse detection)                           | Implemented            |
 | `apps/tickets-service` — ticket lifecycle, comments, history (port 3004)                      | Implemented            |
+| Tickets end to end: web UI -> BFF -> gateway -> tickets-service                               | Implemented            |
 | Users, tickets, notifications, audit, analytics services                                      | Planned                |
 | AI features (summarization, classification, priority, suggested replies, duplicate detection) | Planned                |
 | RabbitMQ versioned events between services                                                    | Planned                |
