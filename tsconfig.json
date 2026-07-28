@@ -35,6 +35,9 @@
     },
     {
       "path": "./apps/audit-service"
+    },
+    {
+      "path": "./apps/notification-service"
     }
   ],
   "compilerOptions": {}

@@ -1,0 +1,44 @@
+// Persistence model for notification-service.
+//
+// ticket_refs is a LOCAL PROJECTION (docs/architecture/data-ownership.md,
+// option 3): the minimum slice of ticket state this service needs to route
+// notifications — who requested each ticket. Rebuilt from ticket.created.v1;
+// never a cross-service foreign key.
+//
+// notifications dedupe on (user_id, source_event_id): under at-least-once
+// delivery a redelivered event collapses into the notification it already
+// produced (INSERT ... ON CONFLICT DO NOTHING).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model TicketRef {
+  ticketId    String @id @map("ticket_id") @db.Uuid
+  requesterId String @map("requester_id") @db.Uuid
+
+  @@map("ticket_refs")
+}
+
+model Notification {
+  id            String    @id @db.Uuid
+  /// Recipient — a user id issued by auth-service, never a foreign key.
+  userId        String    @map("user_id") @db.Uuid
+  type          String
+  ticketId      String    @map("ticket_id") @db.Uuid
+  message       String
+  /// Envelope id of the event that produced this notification.
+  sourceEventId String    @map("source_event_id") @db.Uuid
+  readAt        DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt     DateTime  @map("created_at") @db.Timestamptz(3)
+
+  @@unique([userId, sourceEventId])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
