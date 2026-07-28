@@ -3,6 +3,11 @@ import type { DynamicModule } from '@nestjs/common';
 import { ObservabilityModule } from '@helpdesk-ai/observability';
 import { APP_ENV, SERVICE_NAME, type WebBffEnv } from '../config/env';
 import { HealthController } from './health/health.controller';
+import {
+  GATEWAY_AUTH_CLIENT,
+  GatewayAuthClient,
+} from './session/gateway-auth.client';
+import { SessionController } from './session/session.controller';
 
 /**
  * Root module built from an already-validated environment.
@@ -26,8 +31,14 @@ export class AppModule {
           logLevel: env.LOG_LEVEL,
         }),
       ],
-      controllers: [HealthController],
-      providers: [{ provide: APP_ENV, useValue: env }],
+      controllers: [HealthController, SessionController],
+      providers: [
+        { provide: APP_ENV, useValue: env },
+        {
+          provide: GATEWAY_AUTH_CLIENT,
+          useFactory: () => new GatewayAuthClient(env.GATEWAY_URL),
+        },
+      ],
     };
   }
 }

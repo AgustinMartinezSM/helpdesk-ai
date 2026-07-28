@@ -1,4 +1,5 @@
 import helmet from 'helmet';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import {
@@ -23,7 +24,16 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new LoggerErrorInterceptor());
   app.use(correlationMiddleware);
   app.use(helmet());
-  app.enableCors({ origin: env.CORS_ALLOWED_ORIGINS });
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  // credentials:true lets the browser send the httpOnly session cookie;
+  // safe only because the origin list is explicit, never a wildcard.
+  app.enableCors({ origin: env.CORS_ALLOWED_ORIGINS, credentials: true });
   app.enableShutdownHooks();
 
   await app.listen(env.PORT);
