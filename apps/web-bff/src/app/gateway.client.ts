@@ -1,6 +1,6 @@
-import { REQUEST_ID_HEADER, TRACE_ID_HEADER } from '@helpdesk-ai/observability';
+﻿import { REQUEST_ID_HEADER, TRACE_ID_HEADER } from '@helpdesk-ai/observability';
 
-export const GATEWAY_AUTH_CLIENT = Symbol('GATEWAY_AUTH_CLIENT');
+export const GATEWAY_CLIENT = Symbol('GATEWAY_CLIENT');
 
 export interface UpstreamResponse {
   status: number;
@@ -23,11 +23,11 @@ const UPSTREAM_TIMEOUT_MS = 5_000;
  * Network failures are surfaced as status 502 so the controller treats an
  * unreachable platform like any other upstream error.
  */
-export class GatewayAuthClient {
+export class GatewayClient {
   constructor(private readonly gatewayUrl: string) {}
 
   request(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     options: {
       correlation: CorrelationHeaders;
@@ -39,7 +39,7 @@ export class GatewayAuthClient {
   }
 
   private async execute(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     options: {
       correlation: CorrelationHeaders;

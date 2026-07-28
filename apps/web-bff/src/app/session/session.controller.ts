@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   Get,
@@ -14,11 +14,11 @@ import { REQUEST_ID_HEADER, TRACE_ID_HEADER } from '@helpdesk-ai/observability';
 import { APP_ENV, type WebBffEnv } from '../../config/env';
 import { readCookie } from './cookies';
 import {
-  GATEWAY_AUTH_CLIENT,
-  GatewayAuthClient,
+  GATEWAY_CLIENT,
+  GatewayClient,
   type CorrelationHeaders,
   type UpstreamResponse,
-} from './gateway-auth.client';
+} from '../gateway.client';
 import { LoginDto } from './dto/login.dto';
 
 export const REFRESH_COOKIE = 'helpdesk_refresh';
@@ -54,7 +54,7 @@ interface UpstreamSession {
 @Controller('session')
 export class SessionController {
   constructor(
-    @Inject(GATEWAY_AUTH_CLIENT) private readonly gateway: GatewayAuthClient,
+    @Inject(GATEWAY_CLIENT) private readonly gateway: GatewayClient,
     @Inject(APP_ENV) private readonly env: WebBffEnv,
   ) {}
 
