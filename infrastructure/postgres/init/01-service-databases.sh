@@ -12,6 +12,9 @@ set -e
 AUTH_PASSWORD="${HELPDESK_AUTH_DB_PASSWORD:-helpdesk_local_only_auth}"
 TICKETS_PASSWORD="${HELPDESK_TICKETS_DB_PASSWORD:-helpdesk_local_only_tickets}"
 USERS_PASSWORD="${HELPDESK_USERS_DB_PASSWORD:-helpdesk_local_only_users}"
+AUDIT_PASSWORD="${HELPDESK_AUDIT_DB_PASSWORD:-helpdesk_local_only_audit}"
+NOTIFICATIONS_PASSWORD="${HELPDESK_NOTIFICATIONS_DB_PASSWORD:-helpdesk_local_only_notifications}"
+ANALYTICS_PASSWORD="${HELPDESK_ANALYTICS_DB_PASSWORD:-helpdesk_local_only_analytics}"
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
   CREATE ROLE auth_service LOGIN PASSWORD '${AUTH_PASSWORD}' CREATEDB;
@@ -25,4 +28,16 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   CREATE ROLE users_service LOGIN PASSWORD '${USERS_PASSWORD}' CREATEDB;
   CREATE DATABASE helpdesk_users OWNER users_service;
   CREATE DATABASE helpdesk_users_test OWNER users_service;
+
+  CREATE ROLE audit_service LOGIN PASSWORD '${AUDIT_PASSWORD}' CREATEDB;
+  CREATE DATABASE helpdesk_audit OWNER audit_service;
+  CREATE DATABASE helpdesk_audit_test OWNER audit_service;
+
+  CREATE ROLE notification_service LOGIN PASSWORD '${NOTIFICATIONS_PASSWORD}' CREATEDB;
+  CREATE DATABASE helpdesk_notifications OWNER notification_service;
+  CREATE DATABASE helpdesk_notifications_test OWNER notification_service;
+
+  CREATE ROLE analytics_service LOGIN PASSWORD '${ANALYTICS_PASSWORD}' CREATEDB;
+  CREATE DATABASE helpdesk_analytics OWNER analytics_service;
+  CREATE DATABASE helpdesk_analytics_test OWNER analytics_service;
 EOSQL
