@@ -1,0 +1,9 @@
+packages:
+  - 'apps/*'
+  - 'libs/*'
+
+# pnpm 11 blocks dependency build scripts by default (supply-chain hardening).
+# Only the toolchain packages that genuinely need native postinstall steps are allowed.
+allowBuilds:
+  '@swc/core': true
+  nx: true

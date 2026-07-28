@@ -1,0 +1,6 @@
+# Files excluded from Prettier formatting
+/dist
+/coverage
+/.nx
+.next
+pnpm-lock.yaml

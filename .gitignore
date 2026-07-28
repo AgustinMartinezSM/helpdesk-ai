@@ -11,6 +11,10 @@ build/
 # Nx
 .nx/cache
 .nx/workspace-data
+.nx/polygraph
+.nx/self-healing
+.nx/migrate-runs
+out-tsc/
 
 # Test artifacts
 coverage/
