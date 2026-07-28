@@ -1,6 +1,6 @@
 # Data Ownership
 
-Status: model adopted in Sprint 1; first owned database implemented in Sprint 2 (`helpdesk_auth`, auth-service). The remaining service databases are Planned.
+Status: model adopted in Sprint 1; `helpdesk_auth` implemented in Sprint 2, `helpdesk_tickets` in Sprint 4, `helpdesk_users` in Sprint 6. Audit and analytics remain Planned.
 
 ## Model
 
@@ -34,8 +34,8 @@ Inside that single instance, one logical database per service:
 | Database             | Owning service    | Status                                                  |
 | -------------------- | ----------------- | ------------------------------------------------------- |
 | `helpdesk_auth`      | auth-service      | Implemented (plus `helpdesk_auth_test` for integration) |
-| `helpdesk_users`     | users-service     | Planned                                                 |
-| `helpdesk_tickets`   | tickets-service   | Planned                                                 |
+| `helpdesk_users`     | users-service     | Implemented (plus `helpdesk_users_test`) — Sprint 6     |
+| `helpdesk_tickets`   | tickets-service   | Implemented (plus `helpdesk_tickets_test`) — Sprint 4   |
 | `helpdesk_audit`     | audit-service     | Planned                                                 |
 | `helpdesk_analytics` | analytics-service | Planned                                                 |
 
