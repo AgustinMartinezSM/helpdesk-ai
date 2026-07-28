@@ -1,0 +1,117 @@
+import type {
+  Ticket,
+  TicketAction,
+  TicketComment,
+  TicketHistoryEntry,
+  TicketPriority,
+  TicketStatus,
+} from '../../domain/ticket';
+import type {
+  TicketListFilter,
+  TicketPage,
+  TicketRepository,
+} from '../../application/ports/ticket.repository';
+import type { PrismaService } from './prisma.service';
+
+interface TicketRow {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  category: string | null;
+  requesterId: string;
+  assigneeId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function toDomain(row: TicketRow): Ticket {
+  return {
+    ...row,
+    status: row.status as TicketStatus,
+    priority: row.priority as TicketPriority,
+  };
+}
+
+export class PrismaTicketRepository implements TicketRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(ticket: Ticket, history: TicketHistoryEntry): Promise<void> {
+    // One transaction: a ticket without its 'created' history entry would
+    // corrupt the audit trail.
+    await this.prisma.$transaction([
+      this.prisma.ticket.create({ data: { ...ticket } }),
+      this.prisma.ticketHistoryEntry.create({ data: { ...history } }),
+    ]);
+  }
+
+  async findById(id: string): Promise<Ticket | null> {
+    const row = await this.prisma.ticket.findUnique({ where: { id } });
+    return row ? toDomain(row) : null;
+  }
+
+  async list(filter: TicketListFilter): Promise<TicketPage> {
+    const where = {
+      ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
+      ...(filter.assigneeId ? { assigneeId: filter.assigneeId } : {}),
+      ...(filter.status ? { status: filter.status } : {}),
+    };
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.ticket.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: filter.skip,
+        take: filter.take,
+      }),
+      this.prisma.ticket.count({ where }),
+    ]);
+    return { items: rows.map(toDomain), total };
+  }
+
+  async update(ticket: Ticket, history: TicketHistoryEntry): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.ticket.update({
+        where: { id: ticket.id },
+        data: {
+          status: ticket.status,
+          priority: ticket.priority,
+          assigneeId: ticket.assigneeId,
+          updatedAt: ticket.updatedAt,
+        },
+      }),
+      this.prisma.ticketHistoryEntry.create({ data: { ...history } }),
+    ]);
+  }
+
+  async addComment(
+    comment: TicketComment,
+    history: TicketHistoryEntry,
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.ticketComment.create({ data: { ...comment } }),
+      this.prisma.ticketHistoryEntry.create({ data: { ...history } }),
+    ]);
+  }
+
+  async commentsFor(
+    ticketId: string,
+    includeInternal: boolean,
+  ): Promise<TicketComment[]> {
+    return this.prisma.ticketComment.findMany({
+      where: { ticketId, ...(includeInternal ? {} : { internal: false }) },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async historyFor(ticketId: string): Promise<TicketHistoryEntry[]> {
+    const rows = await this.prisma.ticketHistoryEntry.findMany({
+      where: { ticketId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((row) => ({
+      ...row,
+      action: row.action as TicketAction,
+    }));
+  }
+}

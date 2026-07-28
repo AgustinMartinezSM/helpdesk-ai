@@ -1,0 +1,79 @@
+// Persistence model for tickets-service. Maps to PERSISTENCE shapes only;
+// domain entities live in src/domain and are mapped inside the repository
+// adapter (ADR 0004).
+//
+// requesterId / assigneeId / authorId / actorId are plain identifiers issued
+// by auth-service — never cross-service foreign keys (ADR 0003).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum TicketPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+model Ticket {
+  id          String         @id @db.Uuid
+  title       String
+  description String
+  status      TicketStatus
+  priority    TicketPriority
+  category    String?
+  requesterId String         @map("requester_id") @db.Uuid
+  assigneeId  String?        @map("assignee_id") @db.Uuid
+  createdAt   DateTime       @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @map("updated_at") @db.Timestamptz(3)
+
+  comments TicketComment[]
+  history  TicketHistoryEntry[]
+
+  @@index([requesterId])
+  @@index([assigneeId])
+  @@index([status])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id        String   @id @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  body      String
+  internal  Boolean
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_comments")
+}
+
+model TicketHistoryEntry {
+  id        String   @id @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  action    String
+  detail    String?
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_history")
+}
