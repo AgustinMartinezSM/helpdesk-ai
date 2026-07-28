@@ -11,6 +11,7 @@ export default function Index() {
       </p>
       <p>
         <Link href="/login">Sign in</Link> ·{' '}
+        <Link href="/tickets">Tickets</Link> ·{' '}
         <Link href="/account">Account</Link>
       </p>
     </main>
