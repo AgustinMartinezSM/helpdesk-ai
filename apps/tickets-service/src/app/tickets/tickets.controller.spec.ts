@@ -3,8 +3,12 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
+import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
 import { TICKET_REPOSITORY } from '../../application/ports/ticket.repository';
-import { InMemoryTicketRepository } from '../../application/testing/fakes';
+import {
+  FakeEventPublisher,
+  InMemoryTicketRepository,
+} from '../../application/testing/fakes';
 import { ticketsServiceEnvSchema } from '../../config/env';
 import { AppModule } from '../app.module';
 
@@ -12,6 +16,7 @@ const TEST_ENV = {
   NODE_ENV: 'test',
   LOG_LEVEL: 'fatal',
   DATABASE_URL: 'postgresql://nobody:nothing@127.0.0.1:59999/unreachable',
+  RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
   JWT_ACCESS_SECRET: 'test-secret-0123456789abcdef0123456789abcdef',
 };
 
@@ -29,6 +34,10 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
     })
       .overrideProvider(TICKET_REPOSITORY)
       .useValue(new InMemoryTicketRepository())
+      // Replacing the adapter keeps the suite broker-free: the real one owns
+      // a live AMQP connection.
+      .overrideProvider(EVENT_PUBLISHER)
+      .useValue(new FakeEventPublisher())
       .compile();
 
     app = moduleRef.createNestApplication({ logger: false });

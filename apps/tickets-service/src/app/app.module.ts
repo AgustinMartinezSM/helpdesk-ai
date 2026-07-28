@@ -1,7 +1,12 @@
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { ObservabilityModule } from '@helpdesk-ai/observability';
+import { MessagingClient } from '@helpdesk-ai/messaging';
+import { Logger, ObservabilityModule } from '@helpdesk-ai/observability';
+import {
+  EVENT_PUBLISHER,
+  type EventPublisher,
+} from '../application/ports/event-publisher';
 import {
   CLOCK,
   SystemClock,
@@ -21,6 +26,7 @@ import {
 } from '../application/use-cases/ticket-lifecycle';
 import { APP_ENV, SERVICE_NAME, type TicketsServiceEnv } from '../config/env';
 import { JwtAccessGuard } from '@helpdesk-ai/security';
+import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-event-publisher';
 import { PrismaTicketRepository } from '../infrastructure/prisma/prisma-ticket.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { HealthController } from './health/health.controller';
@@ -59,10 +65,28 @@ export class AppModule {
           inject: [PrismaService],
         },
         {
+          // The adapter owns its broker connection; overriding this token in
+          // tests keeps them broker-free.
+          provide: EVENT_PUBLISHER,
+          useFactory: (logger: Logger) =>
+            new RabbitMqEventPublisher(
+              new MessagingClient({
+                url: env.RABBITMQ_URL,
+                serviceName: SERVICE_NAME,
+                logger,
+              }),
+              logger,
+            ),
+          inject: [Logger],
+        },
+        {
           provide: CreateTicketUseCase,
-          useFactory: (tickets: TicketRepository, clock: Clock) =>
-            new CreateTicketUseCase(tickets, clock),
-          inject: [TICKET_REPOSITORY, CLOCK],
+          useFactory: (
+            tickets: TicketRepository,
+            clock: Clock,
+            events: EventPublisher,
+          ) => new CreateTicketUseCase(tickets, clock, events),
+          inject: [TICKET_REPOSITORY, CLOCK, EVENT_PUBLISHER],
         },
         {
           provide: GetTicketUseCase,
@@ -78,21 +102,30 @@ export class AppModule {
         },
         {
           provide: ChangeTicketStatusUseCase,
-          useFactory: (tickets: TicketRepository, clock: Clock) =>
-            new ChangeTicketStatusUseCase(tickets, clock),
-          inject: [TICKET_REPOSITORY, CLOCK],
+          useFactory: (
+            tickets: TicketRepository,
+            clock: Clock,
+            events: EventPublisher,
+          ) => new ChangeTicketStatusUseCase(tickets, clock, events),
+          inject: [TICKET_REPOSITORY, CLOCK, EVENT_PUBLISHER],
         },
         {
           provide: AssignTicketUseCase,
-          useFactory: (tickets: TicketRepository, clock: Clock) =>
-            new AssignTicketUseCase(tickets, clock),
-          inject: [TICKET_REPOSITORY, CLOCK],
+          useFactory: (
+            tickets: TicketRepository,
+            clock: Clock,
+            events: EventPublisher,
+          ) => new AssignTicketUseCase(tickets, clock, events),
+          inject: [TICKET_REPOSITORY, CLOCK, EVENT_PUBLISHER],
         },
         {
           provide: AddCommentUseCase,
-          useFactory: (tickets: TicketRepository, clock: Clock) =>
-            new AddCommentUseCase(tickets, clock),
-          inject: [TICKET_REPOSITORY, CLOCK],
+          useFactory: (
+            tickets: TicketRepository,
+            clock: Clock,
+            events: EventPublisher,
+          ) => new AddCommentUseCase(tickets, clock, events),
+          inject: [TICKET_REPOSITORY, CLOCK, EVENT_PUBLISHER],
         },
         JwtAccessGuard,
       ],

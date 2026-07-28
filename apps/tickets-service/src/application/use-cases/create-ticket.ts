@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Actor, Ticket, TicketPriority } from '../../domain/ticket';
+import type { EventPublisher } from '../ports/event-publisher';
 import type { Clock, TicketRepository } from '../ports/ticket.repository';
 
 export interface CreateTicketInput {
@@ -13,6 +14,7 @@ export class CreateTicketUseCase {
   constructor(
     private readonly tickets: TicketRepository,
     private readonly clock: Clock,
+    private readonly events: EventPublisher,
   ) {}
 
   async execute(actor: Actor, input: CreateTicketInput): Promise<Ticket> {
@@ -36,6 +38,15 @@ export class CreateTicketUseCase {
       actorId: actor.id,
       action: 'created',
       detail: null,
+      createdAt: now,
+    });
+
+    await this.events.publishTicketCreated({
+      ticketId: ticket.id,
+      requesterId: ticket.requesterId,
+      title: ticket.title,
+      priority: ticket.priority,
+      status: ticket.status,
       createdAt: now,
     });
 

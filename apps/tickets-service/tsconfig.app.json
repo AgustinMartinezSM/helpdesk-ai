@@ -30,6 +30,9 @@
     },
     {
       "path": "../../libs/security/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/messaging/tsconfig.lib.json"
     }
   ]
 }

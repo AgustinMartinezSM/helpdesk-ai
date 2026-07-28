@@ -9,6 +9,7 @@ import {
   type Actor,
   type TicketComment,
 } from '../../domain/ticket';
+import type { EventPublisher } from '../ports/event-publisher';
 import type { Clock, TicketRepository } from '../ports/ticket.repository';
 
 export interface AddCommentInput {
@@ -20,6 +21,7 @@ export class AddCommentUseCase {
   constructor(
     private readonly tickets: TicketRepository,
     private readonly clock: Clock,
+    private readonly events: EventPublisher,
   ) {}
 
   async execute(
@@ -56,6 +58,14 @@ export class AddCommentUseCase {
       action: 'comment_added',
       detail: internal ? 'internal' : 'public',
       createdAt: now,
+    });
+
+    await this.events.publishTicketCommentAdded({
+      ticketId,
+      commentId: comment.id,
+      authorId: actor.id,
+      internal,
+      addedAt: now,
     });
 
     return comment;

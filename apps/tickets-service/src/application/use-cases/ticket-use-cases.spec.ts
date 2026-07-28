@@ -4,7 +4,11 @@ import {
   TicketNotFoundError,
 } from '../../domain/errors';
 import { canTransition, type Actor } from '../../domain/ticket';
-import { FixedClock, InMemoryTicketRepository } from '../testing/fakes';
+import {
+  FakeEventPublisher,
+  FixedClock,
+  InMemoryTicketRepository,
+} from '../testing/fakes';
 import { AddCommentUseCase } from './add-comment';
 import { CreateTicketUseCase } from './create-ticket';
 import { GetTicketUseCase, ListTicketsUseCase } from './ticket-queries';
@@ -29,17 +33,78 @@ const AGENT: Actor = {
 function buildContext() {
   const tickets = new InMemoryTicketRepository();
   const clock = new FixedClock(new Date('2026-07-28T12:00:00.000Z'));
+  const events = new FakeEventPublisher();
   return {
     tickets,
     clock,
-    create: new CreateTicketUseCase(tickets, clock),
+    events,
+    create: new CreateTicketUseCase(tickets, clock, events),
     get: new GetTicketUseCase(tickets),
     listTickets: new ListTicketsUseCase(tickets),
-    changeStatus: new ChangeTicketStatusUseCase(tickets, clock),
-    assign: new AssignTicketUseCase(tickets, clock),
-    comment: new AddCommentUseCase(tickets, clock),
+    changeStatus: new ChangeTicketStatusUseCase(tickets, clock, events),
+    assign: new AssignTicketUseCase(tickets, clock, events),
+    comment: new AddCommentUseCase(tickets, clock, events),
   };
 }
+
+describe('domain event publication', () => {
+  it('publishes one event per persisted mutation, none on rejection', async () => {
+    const ctx = buildContext();
+
+    const ticket = await ctx.create.execute(REQUESTER, {
+      title: 'Printer on fire',
+      description: 'Third floor, again',
+    });
+    await ctx.changeStatus.execute(AGENT, ticket.id, 'in_progress');
+    await ctx.assign.execute(AGENT, ticket.id, AGENT.id);
+    const comment = await ctx.comment.execute(REQUESTER, ticket.id, {
+      body: 'Any update?',
+    });
+
+    expect(ctx.events.created).toEqual([
+      {
+        ticketId: ticket.id,
+        requesterId: REQUESTER.id,
+        title: 'Printer on fire',
+        priority: 'medium',
+        status: 'open',
+        createdAt: ctx.clock.now(),
+      },
+    ]);
+    expect(ctx.events.statusChanged).toEqual([
+      {
+        ticketId: ticket.id,
+        actorId: AGENT.id,
+        fromStatus: 'open',
+        toStatus: 'in_progress',
+        changedAt: ctx.clock.now(),
+      },
+    ]);
+    expect(ctx.events.assigned).toEqual([
+      {
+        ticketId: ticket.id,
+        actorId: AGENT.id,
+        assigneeId: AGENT.id,
+        assignedAt: ctx.clock.now(),
+      },
+    ]);
+    expect(ctx.events.commentsAdded).toEqual([
+      {
+        ticketId: ticket.id,
+        commentId: comment.id,
+        authorId: REQUESTER.id,
+        internal: false,
+        addedAt: ctx.clock.now(),
+      },
+    ]);
+
+    // A rejected transition must not leak an event.
+    await expect(
+      ctx.changeStatus.execute(AGENT, ticket.id, 'closed'),
+    ).rejects.toBeInstanceOf(InvalidStatusTransitionError);
+    expect(ctx.events.statusChanged).toHaveLength(1);
+  });
+});
 
 describe('status transition rules', () => {
   it('allows only the documented lifecycle moves', () => {

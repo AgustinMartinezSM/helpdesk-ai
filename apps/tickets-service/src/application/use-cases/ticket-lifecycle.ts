@@ -12,12 +12,14 @@ import {
   type Ticket,
   type TicketStatus,
 } from '../../domain/ticket';
+import type { EventPublisher } from '../ports/event-publisher';
 import type { Clock, TicketRepository } from '../ports/ticket.repository';
 
 export class ChangeTicketStatusUseCase {
   constructor(
     private readonly tickets: TicketRepository,
     private readonly clock: Clock,
+    private readonly events: EventPublisher,
   ) {}
 
   async execute(
@@ -55,6 +57,14 @@ export class ChangeTicketStatusUseCase {
       createdAt: now,
     });
 
+    await this.events.publishTicketStatusChanged({
+      ticketId: ticket.id,
+      actorId: actor.id,
+      fromStatus: ticket.status,
+      toStatus: to,
+      changedAt: now,
+    });
+
     return updated;
   }
 }
@@ -63,6 +73,7 @@ export class AssignTicketUseCase {
   constructor(
     private readonly tickets: TicketRepository,
     private readonly clock: Clock,
+    private readonly events: EventPublisher,
   ) {}
 
   async execute(
@@ -88,6 +99,13 @@ export class AssignTicketUseCase {
       action: 'assigned',
       detail: assigneeId ?? 'unassigned',
       createdAt: now,
+    });
+
+    await this.events.publishTicketAssigned({
+      ticketId: ticket.id,
+      actorId: actor.id,
+      assigneeId,
+      assignedAt: now,
     });
 
     return updated;

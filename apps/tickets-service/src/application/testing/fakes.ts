@@ -4,6 +4,13 @@ import type {
   TicketHistoryEntry,
 } from '../../domain/ticket';
 import type {
+  EventPublisher,
+  TicketAssignedEvent,
+  TicketCommentAddedEvent,
+  TicketCreatedEvent,
+  TicketStatusChangedEvent,
+} from '../ports/event-publisher';
+import type {
   Clock,
   TicketListFilter,
   TicketPage,
@@ -64,6 +71,33 @@ export class InMemoryTicketRepository implements TicketRepository {
 
   async historyFor(ticketId: string): Promise<TicketHistoryEntry[]> {
     return this.history.filter((h) => h.ticketId === ticketId);
+  }
+}
+
+export class FakeEventPublisher implements EventPublisher {
+  readonly created: TicketCreatedEvent[] = [];
+  readonly statusChanged: TicketStatusChangedEvent[] = [];
+  readonly assigned: TicketAssignedEvent[] = [];
+  readonly commentsAdded: TicketCommentAddedEvent[] = [];
+
+  async publishTicketCreated(event: TicketCreatedEvent): Promise<void> {
+    this.created.push(event);
+  }
+
+  async publishTicketStatusChanged(
+    event: TicketStatusChangedEvent,
+  ): Promise<void> {
+    this.statusChanged.push(event);
+  }
+
+  async publishTicketAssigned(event: TicketAssignedEvent): Promise<void> {
+    this.assigned.push(event);
+  }
+
+  async publishTicketCommentAdded(
+    event: TicketCommentAddedEvent,
+  ): Promise<void> {
+    this.commentsAdded.push(event);
   }
 }
 
