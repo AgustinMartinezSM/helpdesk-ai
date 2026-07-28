@@ -35,6 +35,18 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4.3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: helpdesk
+          RABBITMQ_DEFAULT_PASS: helpdesk_local_only_rabbit
+        ports:
+          - '5672:5672'
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v5
@@ -55,7 +67,7 @@ jobs:
       - run: pnpm build
 
       # Service containers cannot mount infrastructure/postgres/init, so the
-      # auth role and test database are provisioned explicitly.
+      # service roles and test databases are provisioned explicitly.
       - name: Provision service test databases
         run: |
           psql "postgresql://helpdesk_admin:helpdesk_ci_only_pg@localhost:5433/helpdesk_platform" \
@@ -63,9 +75,13 @@ jobs:
             -c "CREATE ROLE auth_service LOGIN PASSWORD 'helpdesk_local_only_auth' CREATEDB;" \
             -c "CREATE DATABASE helpdesk_auth_test OWNER auth_service;" \
             -c "CREATE ROLE tickets_service LOGIN PASSWORD 'helpdesk_local_only_tickets' CREATEDB;" \
-            -c "CREATE DATABASE helpdesk_tickets_test OWNER tickets_service;"
+            -c "CREATE DATABASE helpdesk_tickets_test OWNER tickets_service;" \
+            -c "CREATE ROLE users_service LOGIN PASSWORD 'helpdesk_local_only_users' CREATEDB;" \
+            -c "CREATE DATABASE helpdesk_users_test OWNER users_service;"
 
-      - name: Integration tests (real PostgreSQL)
+      - name: Integration tests (real PostgreSQL and RabbitMQ)
         run: |
+          pnpm nx run @helpdesk-ai/messaging:test-integration
           pnpm nx run @helpdesk-ai/auth-service:test-integration
           pnpm nx run @helpdesk-ai/tickets-service:test-integration
+          pnpm nx run @helpdesk-ai/users-service:test-integration
