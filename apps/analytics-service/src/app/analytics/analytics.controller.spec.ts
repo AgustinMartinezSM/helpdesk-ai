@@ -1,0 +1,109 @@
+import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import { validateEnv } from '@helpdesk-ai/configuration';
+import { MessagingClient } from '@helpdesk-ai/messaging';
+import {
+  TICKET_SNAPSHOT_REPOSITORY,
+  USER_SNAPSHOT_REPOSITORY,
+} from '../../application/ports/analytics.repository';
+import {
+  InMemoryTicketSnapshotRepository,
+  InMemoryUserSnapshotRepository,
+} from '../../application/testing/fakes';
+import { analyticsServiceEnvSchema } from '../../config/env';
+import { AppModule } from '../app.module';
+
+const TEST_ENV = {
+  NODE_ENV: 'test',
+  LOG_LEVEL: 'fatal',
+  DATABASE_URL: 'postgresql://nobody:nothing@127.0.0.1:59999/unreachable',
+  RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
+  JWT_ACCESS_SECRET: 'test-secret-0123456789abcdef0123456789abcdef',
+};
+
+describe('Analytics HTTP API (fakes, real JWT verification)', () => {
+  let app: INestApplication;
+  let agentToken: string;
+  let userToken: string;
+
+  beforeAll(async () => {
+    const env = validateEnv(analyticsServiceEnvSchema, TEST_ENV);
+    const tickets = new InMemoryTicketSnapshotRepository();
+    const users = new InMemoryUserSnapshotRepository();
+
+    await tickets.applyCreated({
+      ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
+      status: 'open',
+      priority: 'medium',
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
+      occurredAt: new Date('2026-07-28T12:00:00.100Z'),
+    });
+    await users.applyRegistered({
+      userId: '11111111-1111-4111-8111-111111111111',
+      registeredAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule.forRoot(env)],
+    })
+      .overrideProvider(TICKET_SNAPSHOT_REPOSITORY)
+      .useValue(tickets)
+      .overrideProvider(USER_SNAPSHOT_REPOSITORY)
+      .useValue(users)
+      // Replacing the client keeps the suite broker-free: the real one owns
+      // a live AMQP connection.
+      .overrideProvider(MessagingClient)
+      .useValue({
+        subscribe: async () => undefined,
+        close: async () => undefined,
+      })
+      .compile();
+
+    app = moduleRef.createNestApplication({ logger: false });
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    await app.init();
+
+    const jwt = app.get(JwtService);
+    agentToken = await jwt.signAsync(
+      { email: 'agent@example.com', roles: ['agent'] },
+      { subject: '33333333-3333-4333-8333-333333333333' },
+    );
+    userToken = await jwt.signAsync(
+      { email: 'ada@example.com', roles: ['user'] },
+      { subject: '11111111-1111-4111-8111-111111111111' },
+    );
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('rejects unauthenticated access and plain users', async () => {
+    await request(app.getHttpServer()).get('/analytics/summary').expect(401);
+    await request(app.getHttpServer())
+      .get('/analytics/summary')
+      .set('authorization', `Bearer ${userToken}`)
+      .expect(403);
+  });
+
+  it('serves the dashboard summary to staff', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/analytics/summary')
+      .set('authorization', `Bearer ${agentToken}`)
+      .expect(200);
+
+    expect(response.body.totalTickets).toBe(1);
+    expect(response.body.byStatus).toEqual({ open: 1 });
+    expect(response.body.byPriority).toEqual({ medium: 1 });
+    expect(response.body.totalUsers).toBe(1);
+    expect(response.body.createdLast7Days).toHaveLength(7);
+  });
+});

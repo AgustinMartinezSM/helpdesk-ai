@@ -1,0 +1,41 @@
+// Persistence model for analytics-service: dashboard projections rebuilt
+// from domain events (docs/architecture/data-ownership.md, option 3).
+//
+// ticket_snapshots keeps ONE row per ticket instead of incremental
+// counters: under at-least-once delivery counters double-count, while a
+// keyed snapshot with a last-writer-wins guard (last_event_at, enforced
+// atomically in SQL by the repository) is naturally idempotent and
+// tolerates out-of-order delivery. priority/created_at are nullable
+// because a status-changed event may arrive before its ticket's created
+// event; created later backfills them without clobbering newer status.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model TicketSnapshot {
+  ticketId    String    @id @map("ticket_id") @db.Uuid
+  status      String
+  priority    String?
+  createdAt   DateTime? @map("created_at") @db.Timestamptz(3)
+  /// Set while the ticket sits in 'resolved'; cleared on any other status.
+  resolvedAt  DateTime? @map("resolved_at") @db.Timestamptz(3)
+  /// Envelope occurredAt of the newest applied event — the LWW guard.
+  lastEventAt DateTime  @map("last_event_at") @db.Timestamptz(3)
+
+  @@index([status])
+  @@map("ticket_snapshots")
+}
+
+model UserSnapshot {
+  userId       String   @id @map("user_id") @db.Uuid
+  registeredAt DateTime @map("registered_at") @db.Timestamptz(3)
+
+  @@map("user_snapshots")
+}
