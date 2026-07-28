@@ -2,8 +2,11 @@
 
 ## Status
 
-Proposed — awaiting product owner decision. Nothing is implemented; this ADR
-exists to make the choice explicit before the first line of persistence code.
+Accepted (2026-07-28). The product owner approved the Prisma recommendation
+when authorizing the full Sprint 2, and auth-service now implements it:
+Prisma 7 with the pg driver adapter, schema and migrations under
+`apps/auth-service/prisma/`, generated client git-ignored and rebuilt by a
+cached `prisma-generate` target, all behind repository adapters.
 
 ## Context
 

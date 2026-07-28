@@ -1,6 +1,6 @@
 # Data Ownership
 
-Status: model adopted in Sprint 1; per-service databases are **Planned** (no service schemas exist yet).
+Status: model adopted in Sprint 1; first owned database implemented in Sprint 2 (`helpdesk_auth`, auth-service). The remaining service databases are Planned.
 
 ## Model
 
@@ -25,21 +25,21 @@ analytics-service <──consumes──────┘
           (never reads helpdesk_tickets directly)
 ```
 
-## Local development layout (Planned)
+## Local development layout
 
 Local infrastructure runs one `postgres:18-alpine` container (see `compose.yaml`), published on host port **5433** because the development machine runs an untouchable native PostgreSQL 16 on 5432.
 
-Inside that single instance, the plan is one logical database per future service:
+Inside that single instance, one logical database per service:
 
-| Database             | Owning service (Planned) |
-| -------------------- | ------------------------ |
-| `helpdesk_auth`      | auth-service             |
-| `helpdesk_users`     | users-service            |
-| `helpdesk_tickets`   | tickets-service          |
-| `helpdesk_audit`     | audit-service            |
-| `helpdesk_analytics` | analytics-service        |
+| Database             | Owning service    | Status                                                  |
+| -------------------- | ----------------- | ------------------------------------------------------- |
+| `helpdesk_auth`      | auth-service      | Implemented (plus `helpdesk_auth_test` for integration) |
+| `helpdesk_users`     | users-service     | Planned                                                 |
+| `helpdesk_tickets`   | tickets-service   | Planned                                                 |
+| `helpdesk_audit`     | audit-service     | Planned                                                 |
+| `helpdesk_analytics` | analytics-service | Planned                                                 |
 
-Each logical database gets its own credentials and its own migration history, so the isolation rules above are enforceable even though everything shares one container. **None of these databases exist yet** — today the container holds only the base `helpdesk_platform` admin database created at first boot.
+Each logical database gets its own credentials and its own migration history, so the isolation rules above are enforceable even though everything shares one container. `infrastructure/postgres/init` provisions roles and databases on first initialization of an empty volume; today it creates the `auth_service` role (owner of `helpdesk_auth` and `helpdesk_auth_test`). Migrations for `helpdesk_auth` live in `apps/auth-service/prisma/migrations` and run only under the `auth_service` role (Prisma, per ADR 0004). The `CREATEDB` grant on service roles is local-only — `prisma migrate dev` needs it for its shadow database; production roles must not have it.
 
 ### Why logical databases instead of one container per service
 

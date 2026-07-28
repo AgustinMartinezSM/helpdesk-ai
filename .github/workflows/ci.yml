@@ -12,9 +12,30 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Ephemeral CI database URL; also consumed by prisma generate/config.
+  # These credentials exist only inside the throwaway service container.
+  DATABASE_URL: postgresql://auth_service:helpdesk_local_only_auth@localhost:5433/helpdesk_auth_test
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: helpdesk_admin
+          POSTGRES_PASSWORD: helpdesk_ci_only_pg
+          POSTGRES_DB: helpdesk_platform
+        ports:
+          - '5433:5432'
+        options: >-
+          --health-cmd "pg_isready -U helpdesk_admin -d helpdesk_platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v5
 
@@ -32,3 +53,15 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+
+      # Service containers cannot mount infrastructure/postgres/init, so the
+      # auth role and test database are provisioned explicitly.
+      - name: Provision auth test database
+        run: |
+          psql "postgresql://helpdesk_admin:helpdesk_ci_only_pg@localhost:5433/helpdesk_platform" \
+            -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE auth_service LOGIN PASSWORD 'helpdesk_local_only_auth' CREATEDB;" \
+            -c "CREATE DATABASE helpdesk_auth_test OWNER auth_service;"
+
+      - name: Integration tests (real PostgreSQL)
+        run: pnpm nx run @helpdesk-ai/auth-service:test-integration

@@ -18,6 +18,7 @@
     "dev:web": "nx dev @helpdesk-ai/web",
     "dev:bff": "nx serve @helpdesk-ai/web-bff",
     "dev:gateway": "nx serve @helpdesk-ai/api-gateway",
+    "dev:auth": "nx serve @helpdesk-ai/auth-service",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:status": "docker compose ps",

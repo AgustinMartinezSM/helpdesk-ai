@@ -17,8 +17,9 @@ The repository is at the platform-foundation stage (Sprint 1). What exists today
 | Health endpoints (`/health`, `/health/ready`) on both Nest apps                               | Implemented            |
 | Local infrastructure: PostgreSQL 18, Redis 8, RabbitMQ 4.3 (compose)                          | Implemented            |
 | CI workflow (committed; never executed — repo has no remote)                                  | Implemented            |
-| `apps/auth-service` — NestJS auth boundary (port 3003, foundation only)                       | Implemented            |
-| Authentication logic, users, tickets, notifications, audit, analytics services                | Planned                |
+| `apps/auth-service` — registration, login, rotating refresh sessions (port 3003)              | Implemented            |
+| `helpdesk_auth` database (Prisma 7, argon2id, JWT, reuse detection)                           | Implemented            |
+| Users, tickets, notifications, audit, analytics services                                      | Planned                |
 | AI features (summarization, classification, priority, suggested replies, duplicate detection) | Planned                |
 | RabbitMQ versioned events between services                                                    | Planned                |
 | Distributed tracing, rate limiting, Swagger, e2e tests                                        | Intentionally deferred |
@@ -43,7 +44,10 @@ pnpm infra:status     # verify containers are healthy
 pnpm dev:web          # Next.js frontend       -> http://localhost:3000
 pnpm dev:bff          # web-bff (NestJS)       -> http://localhost:3001
 pnpm dev:gateway      # api-gateway (NestJS)   -> http://localhost:3002
+pnpm dev:auth         # auth-service (NestJS)  -> http://localhost:3003 (needs its .env — see below)
 ```
+
+auth-service requires `apps/auth-service/.env` (copy from `.env.example`; `JWT_ACCESS_SECRET` has no default on purpose) and the postgres container. Its Swagger UI is at http://localhost:3003/docs outside production. See [docs/api/auth-service.md](docs/api/auth-service.md).
 
 Health checks:
 
@@ -61,7 +65,8 @@ helpdesk-ai/
 ├── apps/
 │   ├── web/            # Next.js frontend (port 3000)
 │   ├── web-bff/        # NestJS backend-for-frontend (port 3001)
-│   └── api-gateway/    # NestJS entry point (port 3002)
+│   ├── api-gateway/    # NestJS entry point (port 3002)
+│   └── auth-service/   # NestJS authentication service (port 3003, owns helpdesk_auth)
 ├── libs/
 │   ├── configuration/  # @helpdesk-ai/configuration — zod env validation
 │   └── observability/  # @helpdesk-ai/observability — logging + correlation
@@ -79,7 +84,8 @@ helpdesk-ai/
 | `pnpm dev:web`      | Serve the Next.js frontend on port 3000 |
 | `pnpm dev:bff`      | Serve web-bff on port 3001              |
 | `pnpm dev:gateway`  | Serve api-gateway on port 3002          |
-| `pnpm test`         | Run all Jest test suites                |
+| `pnpm dev:auth`     | Serve auth-service on port 3003         |
+| `pnpm test`         | Fast Jest suites (no Docker needed)     |
 | `pnpm lint`         | Lint all projects                       |
 | `pnpm typecheck`    | Type-check all projects                 |
 | `pnpm build`        | Build all projects                      |
@@ -88,6 +94,12 @@ helpdesk-ai/
 | `pnpm infra:up`     | Start local infrastructure containers   |
 | `pnpm infra:down`   | Stop local infrastructure containers    |
 | `pnpm infra:status` | Show infrastructure container status    |
+
+Integration tests against real PostgreSQL (needs `pnpm infra:up` first):
+
+```sh
+pnpm nx run @helpdesk-ai/auth-service:test-integration
+```
 
 Commits follow Conventional Commits, enforced by commitlint (husky `commit-msg` hook). A pre-commit hook runs lint-staged (`eslint --fix` + Prettier on staged files).
 

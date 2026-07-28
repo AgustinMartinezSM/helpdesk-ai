@@ -1,6 +1,6 @@
 # Security Policy
 
-This document describes the security posture of HelpDesk AI at its current stage (Sprint 1: platform foundation only — no authentication, no business endpoints, no user data). It distinguishes what is implemented today from what is planned.
+This document describes the security posture of HelpDesk AI at its current stage (Sprint 2: authentication implemented in auth-service; no other domain features). It distinguishes what is implemented today from what is planned.
 
 ## Reporting a Vulnerability
 
@@ -18,31 +18,44 @@ Do not test vulnerabilities against anything other than a local development envi
 ## Secrets Policy
 
 - No secrets are committed to the repository. Real `.env` files are git-ignored.
-- Each service ships an `.env.example` (`apps/web-bff`, `apps/api-gateway`); the root `.env.example` holds only compose infrastructure overrides.
-- Example credentials in `compose.yaml` and `.env.example` (e.g. `helpdesk_admin` / `helpdesk_local_only_pg`) are non-default and local-only. They exist so local infrastructure does not run with image defaults; they must never be used outside a developer machine and are overridable via a git-ignored `.env`.
-- The CI workflow (`.github/workflows/ci.yml`) uses no secrets.
+- Each service ships an `.env.example`; the root `.env.example` holds only compose infrastructure overrides.
+- `JWT_ACCESS_SECRET` has **no default**: auth-service refuses to boot without a secret of at least 32 characters. The `.env.example` value is a placeholder that fails nothing silently — you must replace it.
+- Example infrastructure credentials (e.g. `helpdesk_admin` / `helpdesk_local_only_pg`, `auth_service` / `helpdesk_local_only_auth`) are non-default and local-only, overridable via a git-ignored `.env`.
+- The CI workflow uses no repository secrets; its database credentials exist only inside a throwaway service container.
 
-## Current Hardening (Implemented)
+## Authentication (Implemented — auth-service)
 
-- **helmet** is enabled on both NestJS applications (`apps/web-bff`, `apps/api-gateway`), setting standard security headers.
-- **Restrictive CORS on the BFF**: `apps/web-bff` allows only `http://localhost:3000` by default, configured via the `CORS_ALLOWED_ORIGINS` environment variable (comma-separated).
-- **CORS disabled on the gateway**: `apps/api-gateway` intentionally does not enable CORS. Browsers never call it; it is server-to-server only. Absence of CORS headers means cross-origin browser requests are rejected by default.
-- **Log hygiene** (`libs/observability`): minimal serializers keep request/response headers and bodies out of logs; a redact list (`authorization`, `cookie`, `set-cookie`) acts as a safety net. Logs are structured JSON.
-- **Fail-fast configuration validation** (`libs/configuration`): `validateEnv` runs before `NestFactory.create`. Invalid configuration exits the process with code 1 and reports all offending variables in a single error, so a service never starts in a misconfigured state.
-- **Dependency build-script allow-list**: pnpm 11 blocks dependency lifecycle scripts by default; only an explicit allow-list in `pnpm-workspace.yaml` may build (`@parcel/watcher`, `@swc/core`, `nx`, `sharp`, `unrs-resolver`).
+- **Password hashing**: argon2id with OWASP Password Storage Cheat Sheet parameters for interactive logins (19 MiB memory, t=2, p=1). Hashes are PHC strings, so parameters can be raised without invalidating existing hashes.
+- **Access tokens**: JWT signed with `JWT_ACCESS_SECRET`, 15-minute default TTL, issuer claim, roles embedded.
+- **Refresh tokens**: opaque `<id>.<secret>` credentials. Only sha256(secret) is stored — a database leak yields no usable refresh tokens. Tokens rotate on every use.
+- **Reuse detection**: presenting an already-rotated refresh token is treated as theft — every session of that user is revoked immediately.
+- **Account-enumeration resistance**: login failures return an identical 401 body for unknown email and wrong password, and unknown-email attempts burn comparable hashing time so response timing does not reveal account existence.
+- **Brute-force mitigation**: per-IP throttling on credential endpoints (5/min on register and login, 20/min on refresh) returning 429.
+- **DTO validation**: global `ValidationPipe` with `whitelist`, `forbidNonWhitelisted` and `transform` — unknown fields are rejected, not stripped.
+- **Security events**: registrations, login successes/failures and refresh-reuse detections are logged as structured events with user ids only — never emails or passwords.
+
+## Platform Hardening (Implemented)
+
+- **helmet** on all NestJS applications.
+- **Restrictive CORS on the BFF** (`http://localhost:3000` by default via `CORS_ALLOWED_ORIGINS`); **CORS disabled** on api-gateway and auth-service — browsers never call them, server-to-server only.
+- **Log hygiene** (`libs/observability`): minimal serializers keep headers and bodies out of logs; redact list (`authorization`, `cookie`, `set-cookie`) as safety net. Structured JSON only.
+- **Fail-fast configuration validation** (`libs/configuration`): invalid configuration exits the process before the framework wires anything, reporting every offending variable.
+- **Database ownership**: auth-service connects to `helpdesk_auth` with its own `auth_service` role; admin credentials are separate. No cross-service database access exists (ADR 0003).
+- **Dependency build-script allow-list**: pnpm 11 blocks lifecycle scripts by default; only an explicit allow-list may build (`@parcel/watcher`, `@prisma/client`, `@prisma/engines`, `@swc/core`, `argon2`, `nx`, `prisma`, `sharp`, `unrs-resolver`). The `@scarf/scarf` install telemetry is deliberately blocked.
 
 ## Planned Security Roadmap
 
 None of the following is implemented. Do not assume any of it exists when assessing the current codebase.
 
-- **Authentication**: JWT access tokens with refresh token rotation (auth-service, planned).
-- **Authorization**: RBAC / permission model across services.
-- **Rate limiting** on public-facing endpoints (intentionally deferred; no business endpoints exist yet).
-- **Brute-force mitigation** on authentication endpoints.
+- **Authorization enforcement**: RBAC/permission checks on domain resources (the roles claim exists; nothing consumes it yet beyond `/auth/me`).
+- **Password reset and email verification** flows.
+- **Session management** (list/revoke own sessions).
 - **Upload validation** (file type, size, content checks) when file handling is introduced.
-- **Dependency audit in CI** (e.g. `pnpm audit` or equivalent) once the workflow runs against a remote.
+- **Dependency audit in CI** (e.g. `pnpm audit`) once the workflow runs against a remote.
+- **Rate limiting** on the gateway and BFF once they expose business endpoints.
 
 ## Scope Notes
 
-- There are no authenticated endpoints and no stored user data in Sprint 1; the attack surface is limited to two local HTTP services (`/health`, `/health/ready`) and local-only infrastructure containers.
-- Infrastructure containers (PostgreSQL 18, Redis 8 with `requirepass`, RabbitMQ 4.3) bind to local ports and are intended for development only. They are not hardened for exposure beyond localhost.
+- The attack surface is limited to local HTTP services and local-only infrastructure containers. Nothing is exposed beyond localhost, and the repository has no remote.
+- Infrastructure containers (PostgreSQL 18, Redis 8 with `requirepass`, RabbitMQ 4.3) are development-only and not hardened for external exposure.
+- The CI workflow has never executed (no remote); treat its security posture as unverified until the first real run.
