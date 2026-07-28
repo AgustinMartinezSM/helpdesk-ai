@@ -2,7 +2,7 @@
 
 HelpDesk AI is a help desk platform for managing support requests. The long-term goal is to assist support teams with AI: ticket summarization, classification, priority suggestion, suggested replies, and duplicate detection. All AI features are planned; none are implemented yet.
 
-The repository is at the platform-foundation stage (Sprint 1). What exists today is an Nx monorepo with three scaffolded applications, two shared libraries (environment validation, structured logging with request correlation), local infrastructure via Docker Compose, and code quality automation. There is no authentication, no ticket domain, and no business endpoint of any kind yet.
+The repository is at an early stage (Sprint 2). What exists today: an Nx monorepo with four applications, two shared libraries (environment validation, structured logging with request correlation), local infrastructure via Docker Compose, code quality automation, and a working authentication service (registration, login, rotating refresh sessions) backed by its own PostgreSQL database. There is no ticket domain yet.
 
 ## Current status
 
@@ -24,7 +24,7 @@ The repository is at the platform-foundation stage (Sprint 1). What exists today
 | RabbitMQ versioned events between services                                                    | Planned                |
 | Distributed tracing, rate limiting, Swagger, e2e tests                                        | Intentionally deferred |
 
-Target architecture (planned): `web -> web-bff -> api-gateway -> {auth, users, tickets, ai, notification, audit, analytics}` — synchronous HTTP for request/response, RabbitMQ events for facts. Only `web`, `web-bff`, and `api-gateway` exist.
+Target architecture (planned): `web -> web-bff -> api-gateway -> {auth, users, tickets, ai, notification, audit, analytics}` — synchronous HTTP for request/response, RabbitMQ events for facts. `web`, `web-bff`, `api-gateway` and `auth-service` exist; the gateway does not route to auth-service yet (next increment).
 
 ## Prerequisites
 
@@ -53,10 +53,11 @@ Health checks:
 
 - http://localhost:3001/health and http://localhost:3001/health/ready
 - http://localhost:3002/health and http://localhost:3002/health/ready
+- http://localhost:3003/health and http://localhost:3003/health/ready
 
-`/health/ready` currently returns `checks: []` — no external dependency is probed yet, and readiness does not claim checks it does not run.
+Readiness never claims checks it does not run: bff and gateway report `checks: []` (they call no backing service yet), while auth-service probes its database for real and answers 503 when it is down.
 
-Each Nest app has its own `.env.example` (`apps/web-bff`, `apps/api-gateway`); copy to `.env` as needed. The root `.env.example` covers only compose infrastructure overrides. Real `.env` files are git-ignored.
+Each Nest app has its own `.env.example`; copy to `.env` as needed. The root `.env.example` covers only compose infrastructure overrides. Real `.env` files are git-ignored.
 
 ## Repository layout
 
