@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   type InputHTMLAttributes,
+  type SelectHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react';
@@ -123,6 +124,34 @@ export function Textarea({
         {...errorProps(id, error)}
         {...rest}
       />
+    </Field>
+  );
+}
+
+export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  id: string;
+  label: string;
+  error?: string | null;
+}
+
+export function Select({
+  id,
+  label,
+  error,
+  className,
+  children,
+  ...rest
+}: SelectProps) {
+  return (
+    <Field id={id} label={label} error={error}>
+      <select
+        id={id}
+        className={[styles.control, className].filter(Boolean).join(' ')}
+        {...errorProps(id, error)}
+        {...rest}
+      >
+        {children}
+      </select>
     </Field>
   );
 }

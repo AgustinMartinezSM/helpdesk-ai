@@ -1,0 +1,103 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--section-gap);
+}
+
+.header {
+  padding: clamp(3rem, 7vw, 5rem) 0 2rem;
+}
+
+.headerInner {
+  max-width: var(--container-public);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.eyebrow {
+  margin-bottom: 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.title {
+  font-size: var(--display-xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.lead {
+  max-width: 40rem;
+  margin-top: 1rem;
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  color: var(--text-secondary);
+}
+
+.content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  align-items: start;
+  max-width: var(--container-public);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  width: 100%;
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.asideTitle {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.linkList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.directLink {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.directLink:hover {
+  color: var(--accent-hover);
+}
+
+.asideNote {
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+@media (min-width: 880px) {
+  .content {
+    grid-template-columns: 1.5fr 0.9fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .headerInner,
+  .content {
+    padding: 0 1rem;
+  }
+}
