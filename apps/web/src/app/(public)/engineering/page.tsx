@@ -284,9 +284,11 @@ export default function EngineeringPage() {
           ))}
         </ul>
         <p className={styles.honestNote}>
-          Honest status: the repository is still local-only. The CI workflow is
-          defined and exercised locally through the same Nx targets, but its
-          first remote run is a planned milestone, not a past one.
+          Honest status: the pipeline runs on GitHub Actions and passed on its
+          first remote execution — format, lint, unit tests and build across all
+          thirteen projects, then seven integration suites against real
+          PostgreSQL and RabbitMQ service containers. What is still missing is a
+          deployment: nothing is hosted yet.
         </p>
         <div className={styles.actions}>
           {siteConfig.githubUrl ? (

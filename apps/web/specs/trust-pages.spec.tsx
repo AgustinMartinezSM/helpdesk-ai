@@ -175,9 +175,15 @@ describe('Engineering page', () => {
     ]) {
       expect(screen.getByText(app)).toBeTruthy();
     }
-    // The CI story is honest: first remote run is a milestone, not a claim.
+    // The CI story stays honest in both directions: it now really has run
+    // on a remote, and the page must not go back to claiming otherwise —
+    // nor start claiming a deployment that still does not exist.
     expect(
-      screen.getByText(/first remote run is a planned milestone/),
+      screen.getByText(/passed on its first remote execution/),
     ).toBeTruthy();
+    expect(screen.getByText(/nothing is hosted yet/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(
+      /repository is still local-only|never run on a remote/,
+    );
   });
 });

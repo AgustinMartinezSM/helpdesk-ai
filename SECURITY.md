@@ -1,19 +1,15 @@
 # Security Policy
 
-This document describes the security posture of HelpDesk AI at its current stage (Sprint 2: authentication implemented in auth-service; no other domain features). It distinguishes what is implemented today from what is planned.
+This document describes the security posture of HelpDesk AI at its current stage (sprints 1–7.6 complete: authentication, the ticket domain, and the audit, notification and analytics services). It distinguishes what is implemented today from what is planned.
 
 ## Reporting a Vulnerability
 
-The repository currently has no remote and no public issue tracker. Until one exists:
+The repository lives at https://github.com/AgustinMartinezSM/helpdesk-ai.
 
-- Report suspected vulnerabilities directly to the project maintainer through a private channel. Do not disclose details publicly.
-
-Once the repository is pushed to a remote with an issue tracker:
-
-- Open a security advisory or private issue (do not file a public issue with exploit details).
+- Open a private security advisory through GitHub (**Security → Advisories → Report a vulnerability**). Do not file a public issue with exploit details.
 - Include reproduction steps, affected component (app or library), and impact assessment.
 
-Do not test vulnerabilities against anything other than a local development environment.
+Do not test vulnerabilities against anything other than a local development environment. There is no deployment: nothing of this project is hosted.
 
 ## Secrets Policy
 
@@ -40,22 +36,22 @@ Do not test vulnerabilities against anything other than a local development envi
 - **Restrictive CORS on the BFF** (`http://localhost:3000` by default via `CORS_ALLOWED_ORIGINS`); **CORS disabled** on api-gateway and auth-service — browsers never call them, server-to-server only.
 - **Log hygiene** (`libs/observability`): minimal serializers keep headers and bodies out of logs; redact list (`authorization`, `cookie`, `set-cookie`) as safety net. Structured JSON only.
 - **Fail-fast configuration validation** (`libs/configuration`): invalid configuration exits the process before the framework wires anything, reporting every offending variable.
-- **Database ownership**: auth-service connects to `helpdesk_auth` with its own `auth_service` role; admin credentials are separate. No cross-service database access exists (ADR 0003).
+- **Authorization enforcement**: the roles claim is consumed by guards inside each service, not only by `/auth/me`. Ticket assignment is staff-only, analytics summaries are staff-only, the audit trail is admin-only, and requesters may close only their own resolved tickets. `libs/security` holds the shared actor model and role helpers.
+- **Database ownership**: every service connects to its own database with its own role (`helpdesk_auth`, `helpdesk_tickets`, `helpdesk_users`, `helpdesk_audit`, `helpdesk_notifications`, `helpdesk_analytics`); admin credentials are separate. No cross-service database access exists (ADR 0003).
 - **Dependency build-script allow-list**: pnpm 11 blocks lifecycle scripts by default; only an explicit allow-list may build (`@parcel/watcher`, `@prisma/client`, `@prisma/engines`, `@swc/core`, `argon2`, `nx`, `prisma`, `sharp`, `unrs-resolver`). The `@scarf/scarf` install telemetry is deliberately blocked.
 
 ## Planned Security Roadmap
 
 None of the following is implemented. Do not assume any of it exists when assessing the current codebase.
 
-- **Authorization enforcement**: RBAC/permission checks on domain resources (the roles claim exists; nothing consumes it yet beyond `/auth/me`).
 - **Password reset and email verification** flows.
 - **Session management** (list/revoke own sessions).
 - **Upload validation** (file type, size, content checks) when file handling is introduced.
-- **Dependency audit in CI** (e.g. `pnpm audit`) once the workflow runs against a remote.
-- **Rate limiting** on the gateway and BFF once they expose business endpoints.
+- **Dependency audit in CI** (e.g. `pnpm audit`) — now that the workflow runs on a remote, this is an open task rather than a blocked one.
+- **Rate limiting** on the gateway and BFF, which throttle nothing today; only auth-service's credential endpoints are throttled.
 
 ## Scope Notes
 
-- The attack surface is limited to local HTTP services and local-only infrastructure containers. Nothing is exposed beyond localhost, and the repository has no remote.
+- The attack surface is limited to local HTTP services and local-only infrastructure containers. Nothing is exposed beyond localhost: the source is public on GitHub, but no environment of this project is deployed.
 - Infrastructure containers (PostgreSQL 18, Redis 8 with `requirepass`, RabbitMQ 4.3) are development-only and not hardened for external exposure.
-- The CI workflow has never executed (no remote); treat its security posture as unverified until the first real run.
+- The CI workflow now runs on GitHub Actions and passed on its first remote execution, including the integration suites against real service containers.

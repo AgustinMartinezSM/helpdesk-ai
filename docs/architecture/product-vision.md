@@ -38,7 +38,7 @@ Sprint 1 delivered the platform foundation only:
 
 - Nx/pnpm monorepo with three applications: `apps/web` (Next.js), `apps/web-bff` (NestJS), `apps/api-gateway` (NestJS).
 - Shared libraries for environment validation (`libs/configuration`) and structured logging with request correlation (`libs/observability`).
-- Health endpoints, local infrastructure via compose (PostgreSQL, Redis, RabbitMQ), code quality automation, and a CI workflow (not yet executed — the repository has no remote).
+- Health endpoints, local infrastructure via compose (PostgreSQL, Redis, RabbitMQ), code quality automation, and a CI workflow running on GitHub Actions (green on its first remote execution).
 
 There is no authentication, no ticket model, and no domain feature of any kind yet. The gateway routes nothing because no downstream service exists.
 

@@ -42,7 +42,7 @@ and a complete public product experience.
 | Self-service signup, assignee picker, attachments                                                  | Planned             |
 | Transactional outbox for event publishing                                                          | Deferred (ADR 0006) |
 | Distributed tracing, gateway rate limiting                                                         | Deferred            |
-| CI workflow (committed and exercised locally; never run on a remote)                               | Not verified        |
+| CI on GitHub Actions: gate + 7 integration suites, green on first remote run                       | Implemented         |
 
 Architecture: `web → web-bff → api-gateway → {auth, tickets, users}`
 over HTTP for commands, with domain events on RabbitMQ consumed by
@@ -93,12 +93,12 @@ Readiness never claims checks it does not run.
 Optional public-site configuration (all links are hidden when unset, so
 the site never ships a dead link):
 
-| Variable                    | Effect                                              |
-| --------------------------- | --------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`      | Canonical site URL for metadata                     |
-| `NEXT_PUBLIC_GITHUB_URL`    | Shows GitHub links                                  |
-| `NEXT_PUBLIC_LINKEDIN_URL`  | Shows the LinkedIn link                             |
-| `NEXT_PUBLIC_CONTACT_EMAIL` | Shows email links and the contact `mailto:` handoff |
+| Variable                    | Effect                                                     |
+| --------------------------- | ---------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`      | Canonical site URL for metadata                            |
+| `NEXT_PUBLIC_GITHUB_URL`    | Shows GitHub links (repo: `AgustinMartinezSM/helpdesk-ai`) |
+| `NEXT_PUBLIC_LINKEDIN_URL`  | Shows the LinkedIn link                                    |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | Shows email links and the contact `mailto:` handoff        |
 
 ## Repository layout
 
