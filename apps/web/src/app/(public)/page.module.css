@@ -138,11 +138,23 @@
   font-size: 0.9375rem;
   font-weight: 500;
   color: var(--accent);
-  transition: gap var(--dur-fast) var(--ease-out);
 }
 
 .inlineLink:hover {
-  gap: 0.625rem;
+  color: var(--accent-hover);
+}
+
+/* The arrow nudge is decoration, not affordance — motion-gated. */
+@media (prefers-reduced-motion: no-preference) {
+  .inlineLink {
+    transition:
+      gap var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+  }
+
+  .inlineLink:hover {
+    gap: 0.625rem;
+  }
 }
 
 /* ---------------------------------------------------------------- workflow */

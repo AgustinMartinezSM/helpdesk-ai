@@ -206,6 +206,10 @@
   color: var(--accent);
 }
 
+.inlineLink:hover {
+  color: var(--accent-hover);
+}
+
 @media (min-width: 720px) {
   .contrastGrid {
     grid-template-columns: repeat(3, 1fr);
