@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PUBLIC_NAV_LINKS, siteConfig } from '../../lib/site-config';
+import { HelpiRestore } from './helpi';
 import styles from './public-footer.module.css';
 
 /**
@@ -64,6 +65,8 @@ export function PublicFooter() {
             <Link href="/contact" className={styles.link}>
               Contact
             </Link>
+            {/* Only renders once Helpi has been dismissed. */}
+            <HelpiRestore />
           </nav>
 
           {externalLinks.length > 0 ? (

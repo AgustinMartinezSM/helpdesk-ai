@@ -177,6 +177,47 @@ per theme so native controls follow.
 | Spinner rotation                 | `Button` loading          | Falls back to an opacity pulse under reduced motion |
 | Inline-link arrow nudge          | Landing section CTAs      | Yes                                                 |
 
+## Helpi — the product guide
+
+`components/public/helpi.tsx` is a small floating guide on the public
+pages. It is **written guidance, not a chatbot and not AI**, and that
+distinction is a hard constraint rather than a preference: the whole site
+states that AI assistance is `Planned`, so a companion that looked or
+behaved like an AI assistant would contradict the product's own honesty
+claims. Concretely, Helpi:
+
+- has **no text input and no conversation** — every hint is authored by
+  hand in `lib/helpi-hints.ts` and selected by route;
+- carries the line _"Short written hints — not a chatbot."_ in its panel;
+- must never use `SparklesIcon` (reserved for the planned AI features) or
+  a speech bubble (reads as chat). Its mark is `CompassIcon` —
+  orientation, not conversation;
+- is guarded by specs that reject "ask me", "chat with", "AI assistant"
+  and any capability `product-status.ts` marks `planned`.
+
+It is also the **one persistent place where the brand yellow is a
+surface** rather than decoration: `--brand-on` over `--brand` measures
+15.07:1, verified live in both themes.
+
+Behavioural rules worth knowing before changing it:
+
+- **A disclosure, not a dialog.** No `aria-modal`, no focus trap, no
+  blocking. `aria-expanded` + `aria-controls` on a launcher whose
+  accessible name never changes; Escape closes and restores focus.
+- **Never steals focus** when it opens itself on a first desktop visit,
+  and it does not auto-open on small screens at all.
+- **Mounted as the last child of the public shell.** Any ancestor with a
+  `backdrop-filter` — the nav has one — would become the containing block
+  for its `position: fixed` and collapse it. Being last also puts it at
+  the end of the tab order, which is right for a supplementary control.
+- **Hides while the mobile menu is open**, off `html[data-menu-open]`,
+  so it can never overlap navigation.
+- **Dismissal is remembered but reversible**: a footer control
+  (`HelpiRestore`) brings it back, because one click should not remove a
+  feature permanently. Blocked storage degrades to "the choice is not
+  remembered", never to "the guide is gone".
+- Authenticated routes return no hint — Helpi is public-only for now.
+
 ## Content voice
 
 The public pages are not all written in the same voice, and that is

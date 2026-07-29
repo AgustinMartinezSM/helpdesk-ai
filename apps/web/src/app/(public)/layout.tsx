@@ -1,3 +1,4 @@
+import { Helpi } from '../../components/public/helpi';
 import { PublicFooter } from '../../components/public/public-footer';
 import { PublicNav } from '../../components/public/public-nav';
 import styles from './layout.module.css';
@@ -23,6 +24,13 @@ export default function PublicLayout({
         {children}
       </main>
       <PublicFooter />
+      {/*
+        Last child of the shell on purpose: Helpi is position: fixed, and
+        any ancestor with a backdrop-filter (the nav has one) would become
+        its containing block. Being last also puts it at the end of the tab
+        order, which is right for a supplementary control.
+      */}
+      <Helpi />
     </div>
   );
 }

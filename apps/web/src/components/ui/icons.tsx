@@ -320,6 +320,20 @@ export function ZapIcon(props: IconProps) {
   );
 }
 
+/**
+ * Helpi's mark. A compass reads as orientation; a speech bubble would read
+ * as chat and the sparkles glyph is reserved for the planned AI features,
+ * so neither may be used here.
+ */
+export function CompassIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+    </Icon>
+  );
+}
+
 export function SearchIcon(props: IconProps) {
   return (
     <Icon {...props}>

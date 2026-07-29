@@ -71,6 +71,9 @@ export function PublicNav() {
     panelRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    // Floating siblings (Helpi) hide off this flag so nothing overlaps the
+    // navigation while it owns the screen.
+    document.documentElement.dataset.menuOpen = 'true';
     const behind = [
       document.getElementById('main-content'),
       document.querySelector('footer'),
@@ -80,6 +83,7 @@ export function PublicNav() {
     }
     return () => {
       document.body.style.overflow = previousOverflow;
+      delete document.documentElement.dataset.menuOpen;
       for (const element of behind) {
         element.inert = false;
       }
