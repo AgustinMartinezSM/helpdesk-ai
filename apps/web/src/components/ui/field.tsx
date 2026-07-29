@@ -7,6 +7,7 @@ import {
   type InputHTMLAttributes,
   type SelectHTMLAttributes,
   type ReactNode,
+  type Ref,
   type TextareaHTMLAttributes,
 } from 'react';
 import { AlertCircleIcon } from './icons';
@@ -48,12 +49,22 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   id: string;
   label: string;
   error?: string | null;
+  /** React 19 passes refs as plain props; forwarded to the input. */
+  ref?: Ref<HTMLInputElement>;
 }
 
-export function Input({ id, label, error, className, ...rest }: InputProps) {
+export function Input({
+  id,
+  label,
+  error,
+  className,
+  ref,
+  ...rest
+}: InputProps) {
   return (
     <Field id={id} label={label} error={error}>
       <input
+        ref={ref}
         id={id}
         className={[styles.control, className].filter(Boolean).join(' ')}
         {...errorProps(id, error)}

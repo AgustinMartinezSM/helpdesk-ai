@@ -9,6 +9,11 @@
   width: 100%;
 }
 
+/* Programmatic focus target — no ring when reached via the skip link. */
+.main:focus {
+  outline: none;
+}
+
 .skipLink {
   position: absolute;
   top: -100%;

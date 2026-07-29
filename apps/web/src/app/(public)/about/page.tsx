@@ -112,7 +112,7 @@ export default function AboutPage() {
         title="What this demonstrates"
         lead="Beyond the product itself, this repository is a working record of how I build software."
       >
-        <ul className={styles.learningList}>
+        <ul className={styles.learningList} role="list">
           {LEARNING.map((item) => (
             <li key={item} className={styles.learningItem}>
               {item}

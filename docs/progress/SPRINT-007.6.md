@@ -90,7 +90,7 @@ is never hidden in a degraded mode and there is no layout shift.
 
 ## Specs
 
-49 web tests across 12 suites (was 29 across 7). New suites:
+65 web tests across 13 suites (was 29 across 7). New suites:
 
 - `public-nav.spec.tsx` — links, `aria-current`, mobile menu open →
   focus moved into the panel → Escape closes and restores focus,
@@ -134,10 +134,55 @@ is never hidden in a degraded mode and there is no layout shift.
   analytics summary is staff-only; notifications expose `GET /me` and
   `PATCH /:id/read`; the gateway routes all three).
 
-The planned adversarial review workflow could not run — all five review
-agents failed on a session limit, not on findings. The equivalent checks
-were performed manually in the browser and against the code, as listed
-above. Re-running it is a candidate first task for the next sprint.
+## Adversarial review
+
+A five-dimension review workflow (accessibility, content honesty,
+responsive/CSS, Next.js architecture, spec quality) ran over the full
+sprint diff with every finding independently verified against the code:
+38 agents, **30 confirmed findings, all fixed**.
+
+The most important ones — and what they say about the value of the pass:
+
+- **The mobile navigation did not work at all.** The header's
+  `backdrop-filter` makes it the containing block for `position: fixed`
+  descendants, so the panel — a DOM child of the header — resolved its
+  insets against the 3.75rem header instead of the viewport and
+  collapsed to 52px with 557px of content inside. Measured live:
+  `clientHeight` 52 vs `scrollHeight` 557. My own browser pass had
+  missed it because I verified the DOM and focus but never the geometry.
+  The panel is now a sibling of the header.
+- **Honesty regressions the sprint was specifically meant to prevent**:
+  CTAs invited visitors to "sign in to the live demo" that does not
+  exist (there is no deployment and no demo accounts); the architecture
+  diagram credited the gateway with guards it does not have;
+  `product-status.ts` claimed role guards "from the BFF", which has
+  none; the security page said "ticket transitions are staff-only",
+  contradicting the requester's own confirm-and-close on the
+  how-it-works page; site-wide metadata described AI assistance as
+  shipped. All corrected, and the landing now states plainly that the
+  application runs locally with no hosted demo.
+- **Focus and semantics**: the contact success state dropped focus to
+  `<body>` and created its live region together with its content (so
+  nothing was announced) — now it parks focus on the success heading and
+  uses a permanently mounted region, matching the pattern the ticket
+  detail page already established; the mobile panel is a `dialog` with
+  `aria-modal` that marks the page behind it `inert`; the skip-link
+  target is focusable; the active desktop nav item no longer relies on
+  color alone; `Reveal` gained an `as` prop so `<ol>` children are real
+  `<li>` elements (which also restored the timeline connectors, silently
+  disabled because every step was `:last-child`).
+- **Responsive**: the desktop navigation switched on at 920px but needs
+  ~1040px, causing page-wide horizontal scroll in that band (now
+  1080px); the engineering decision grid overflowed below 320px; the
+  footer kept desktop padding on small screens.
+- **Specs**: the focus trap was silently inert under jsdom (it filtered
+  by `offsetParent`, which jsdom never computes) — the component now
+  uses `inert` subtrees, which is both layout-independent and testable;
+  the duplicate-submit test passed with the guard deleted; the
+  "certifications appear only in the not-claimed list" assertion did not
+  actually check containment; the hero's simulated AI output, the
+  config-driven footer links and the mailto branch had no coverage at
+  all.
 
 ## Documentation
 

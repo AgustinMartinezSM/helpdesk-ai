@@ -130,7 +130,8 @@
 
 .decisionsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  /* min() keeps the track from exceeding the content box at 320px. */
+  grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
   gap: 1rem;
 }
 

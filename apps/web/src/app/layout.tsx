@@ -19,15 +19,15 @@ export const metadata: Metadata = {
     template: '%s — HelpDesk AI',
   },
   description:
-    'Support operations platform: centralize requests, assist support teams with AI, and keep humans in control of every important decision. Designed and developed by Agustín Martínez.',
+    'Support operations platform: centralize requests, keep humans in control of every decision, and — on the roadmap — assist support teams with AI. A portfolio project by Agustín Martínez.',
   applicationName: 'HelpDesk AI',
   authors: [{ name: 'Agustín Martínez' }],
+  // No title/description here on purpose: Next would otherwise freeze this
+  // pair into every page's social preview instead of inheriting each
+  // route's own metadata.
   openGraph: {
     siteName: 'HelpDesk AI',
     type: 'website',
-    title: 'HelpDesk AI — Intelligent support operations',
-    description:
-      'Support operations platform with AI-assisted workflows and human control.',
   },
 };
 

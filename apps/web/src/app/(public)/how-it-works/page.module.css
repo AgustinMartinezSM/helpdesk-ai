@@ -68,6 +68,7 @@
   place-items: center;
   width: 2rem;
   height: 2rem;
+  flex-shrink: 0;
   border-radius: var(--radius-pill);
   background: var(--accent-soft);
   color: var(--accent);

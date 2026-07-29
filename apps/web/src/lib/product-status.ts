@@ -173,7 +173,7 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
       {
         name: 'Authorization',
         description:
-          'Role guards on every protected endpoint, from the BFF to each domain service.',
+          'Role guards on every protected endpoint of every domain service — the gateway routes, the services decide.',
         status: 'available',
       },
       {

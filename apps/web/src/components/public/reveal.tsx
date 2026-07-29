@@ -7,6 +7,11 @@ export interface RevealProps {
   className?: string;
   /** Stagger delay in ms, applied via a CSS custom property. */
   delay?: number;
+  /**
+   * Element to render. Inside an `<ol>`/`<ul>` pass `"li"` so the wrapper
+   * does not break list semantics (and `:last-child` selectors).
+   */
+  as?: 'div' | 'li';
 }
 
 /**
@@ -16,8 +21,13 @@ export interface RevealProps {
  * an IntersectionObserver. This guarantees zero layout shift and no
  * invisible content in any degraded mode.
  */
-export function Reveal({ children, className, delay = 0 }: RevealProps) {
-  const ref = useRef<HTMLDivElement>(null);
+export function Reveal({
+  children,
+  className,
+  delay = 0,
+  as: Element = 'div',
+}: RevealProps) {
+  const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const element = ref.current;
@@ -53,8 +63,8 @@ export function Reveal({ children, className, delay = 0 }: RevealProps) {
   }, []);
 
   return (
-    <div
-      ref={ref}
+    <Element
+      ref={ref as never}
       className={className}
       style={
         delay > 0
@@ -63,6 +73,6 @@ export function Reveal({ children, className, delay = 0 }: RevealProps) {
       }
     >
       {children}
-    </div>
+    </Element>
   );
 }

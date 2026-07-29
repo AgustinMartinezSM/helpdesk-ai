@@ -19,6 +19,10 @@ function fillValidForm() {
   });
 }
 
+function submit() {
+  fireEvent.click(screen.getByRole('button', { name: 'Prepare message' }));
+}
+
 describe('ContactForm', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -31,74 +35,135 @@ describe('ContactForm', () => {
   it('announces validation errors and does not submit an empty form', () => {
     render(<ContactForm />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Prepare message' }));
+    submit();
 
-    const alerts = screen.getAllByRole('alert');
-    expect(alerts.length).toBeGreaterThan(1);
     expect(screen.getByText('Please tell me your name.')).toBeTruthy();
+    expect(screen.getByText('4 fields need your attention.')).toBeTruthy();
     // The invalid field is programmatically linked to its error.
-    expect(screen.getByLabelText('Name').getAttribute('aria-invalid')).toBe(
-      'true',
-    );
-    // Still on the form — no success state.
-    expect(screen.queryByRole('status')).toBeNull();
+    const name = screen.getByLabelText('Name');
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    expect(
+      document.getElementById(name.getAttribute('aria-describedby') as string)
+        ?.textContent,
+    ).toContain('Please tell me your name.');
+    // Still on the form.
+    expect(
+      screen.getByRole('button', { name: 'Prepare message' }),
+    ).toBeTruthy();
+  });
+
+  it('rejects a malformed email specifically', () => {
+    render(<ContactForm />);
+    fillValidForm();
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'casey@' },
+    });
+
+    submit();
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    expect(
+      screen.getByText('That does not look like a valid email address.'),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('heading', { name: 'Your message is ready' }),
+    ).toBeNull();
   });
 
   it('reaches an honest success state that admits nothing was sent', () => {
     render(<ContactForm />);
     fillValidForm();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Prepare message' }));
+    submit();
     act(() => {
       jest.runAllTimers();
     });
 
-    const status = screen.getByRole('status');
-    expect(status.textContent).toContain(
-      'this demo does not send messages to a server',
+    const body = document.body.textContent ?? '';
+    expect(body).toContain('this demo does not send messages to a server');
+    // No pretend delivery language anywhere.
+    expect(body).not.toMatch(/has been sent|we'll get back|message sent/i);
+    // The live region is mounted before the message arrives, so it is
+    // actually announced rather than silently inserted with its content.
+    expect(screen.getByRole('status').textContent).toContain(
+      'does not send it to a server',
     );
-    // No pretend "email sent" language anywhere.
-    expect(status.textContent).not.toContain('has been sent');
   });
 
-  it('blocks duplicate submissions while preparing and after success', () => {
+  it('moves focus to the success heading instead of dropping it to body', () => {
     render(<ContactForm />);
     fillValidForm();
 
-    const submit = screen.getByRole('button', { name: 'Prepare message' });
-    fireEvent.click(submit);
-    // While preparing, the button reports busy and swallows further clicks.
-    expect(submit.getAttribute('aria-busy')).toBe('true');
-    fireEvent.click(submit);
-
+    submit();
     act(() => {
       jest.runAllTimers();
     });
 
-    // The form was replaced by the success state — nothing left to resubmit.
+    const heading = screen.getByRole('heading', {
+      name: 'Your message is ready',
+    });
+    expect(document.activeElement).toBe(heading);
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it('ignores a second submit while the first is being prepared', () => {
+    render(<ContactForm />);
+    fillValidForm();
+
+    const button = screen.getByRole('button', { name: 'Prepare message' });
+    submit();
+    expect(button.getAttribute('aria-busy')).toBe('true');
+
+    // A second activation must not queue another transition: if the guard
+    // were removed, this would schedule a duplicate timer.
+    fireEvent.click(button);
+    fireEvent.submit(button.closest('form') as HTMLFormElement);
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    expect(
+      screen.getAllByRole('heading', { name: 'Your message is ready' }),
+    ).toHaveLength(1);
     expect(
       screen.queryByRole('button', { name: 'Prepare message' }),
     ).toBeNull();
-    expect(
-      screen.getByRole('button', { name: 'Write another message' }),
-    ).toBeTruthy();
   });
 
-  it('lets the visitor start over after a prepared message', () => {
+  it('offers the mailto handoff only when a contact email is configured', () => {
+    // Unconfigured in the test environment: no mailto, and the copy says so.
     render(<ContactForm />);
     fillValidForm();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Prepare message' }));
+    submit();
     act(() => {
       jest.runAllTimers();
     });
+
+    expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
+    expect(
+      screen.getByText(/Direct contact links are not configured/),
+    ).toBeTruthy();
+  });
+
+  it('returns focus to the first field when writing another message', () => {
+    render(<ContactForm />);
+    fillValidForm();
+    submit();
+    act(() => {
+      jest.runAllTimers();
+    });
+
     fireEvent.click(
       screen.getByRole('button', { name: 'Write another message' }),
     );
+    act(() => {
+      jest.runAllTimers();
+    });
 
-    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('');
-    expect(
-      screen.getByRole('button', { name: 'Prepare message' }),
-    ).toBeTruthy();
+    const name = screen.getByLabelText('Name') as HTMLInputElement;
+    expect(name.value).toBe('');
+    expect(document.activeElement).toBe(name);
   });
 });

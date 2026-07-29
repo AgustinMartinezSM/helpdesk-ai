@@ -50,7 +50,7 @@ const ROLE_VALUE = [
     icon: <BarChartIcon size={18} />,
     role: 'Team managers',
     value:
-      'See volumes and resolution flow projected live from the event stream, not from end-of-week spreadsheets.',
+      'Volumes and resolution flow are projected live from the event stream — today through the staff-only API, with dashboards on the roadmap.',
   },
   {
     icon: <ShieldCheckIcon size={18} />,
@@ -101,7 +101,7 @@ const WORKFLOW_PREVIEW = [
 const SECURITY_PRINCIPLES = [
   'argon2id password hashing with refresh token rotation',
   'Access tokens live in memory, sessions in httpOnly cookies',
-  'Role guards on every protected endpoint',
+  'Role guards on every protected endpoint of every service',
   'Explicit DTO validation before anything reaches a domain',
   'One database per service — no shared state',
   'Immutable, event-sourced audit trail',
@@ -127,17 +127,18 @@ export default function LandingPage() {
               decision.
             </p>
             <div className={styles.heroActions}>
-              <ButtonLink href="/login">
-                Explore the platform
+              <ButtonLink href="/how-it-works">
+                See how it works
                 <ArrowRightIcon size={16} />
               </ButtonLink>
-              <ButtonLink href="/how-it-works" variant="secondary">
-                See how it works
+              <ButtonLink href="/engineering" variant="secondary">
+                Explore the architecture
               </ButtonLink>
             </div>
             <p className={styles.heroNote}>
               Portfolio project — real platform, honest roadmap, no invented
-              claims.
+              claims. The application runs locally from the repository; there is
+              no hosted demo yet.
             </p>
           </div>
           <HeroVisual />
@@ -191,16 +192,17 @@ export default function LandingPage() {
         title="From request to resolution, with people in charge"
         lead="A ticket flows through validation, events and — soon — AI analysis. The final action is always a human decision."
       >
-        <ol className={styles.workflowGrid}>
+        <ol className={styles.workflowGrid} role="list">
           {WORKFLOW_PREVIEW.map((entry, index) => (
-            <Reveal key={entry.step} delay={index * 70}>
-              <li className={styles.workflowStep}>
-                <span className={styles.workflowIndex} aria-hidden="true">
-                  {entry.step}
-                </span>
-                <h3 className={styles.workflowTitle}>{entry.title}</h3>
-                <p className={styles.workflowText}>{entry.text}</p>
-              </li>
+            <Reveal
+              as="li"
+              key={entry.step}
+              className={styles.workflowStep}
+              delay={index * 70}
+            >
+              <span className={styles.workflowIndex}>{entry.step}</span>
+              <h3 className={styles.workflowTitle}>{entry.title}</h3>
+              <p className={styles.workflowText}>{entry.text}</p>
             </Reveal>
           ))}
         </ol>
@@ -218,7 +220,7 @@ export default function LandingPage() {
         title="Built like it holds real data"
         lead="No certifications are claimed and none are invented — these are engineering decisions you can read in the code."
       >
-        <ul className={styles.securityGrid}>
+        <ul className={styles.securityGrid} role="list">
           {SECURITY_PRINCIPLES.map((principle) => (
             <li key={principle} className={styles.securityItem}>
               <ShieldCheckIcon size={16} className={styles.securityIcon} />
@@ -260,7 +262,7 @@ export default function LandingPage() {
           {PROJECT_STATUS.map((group) => (
             <div key={group.title} className={styles.statusColumn}>
               <h3 className={styles.statusTitle}>{group.title}</h3>
-              <ul className={styles.statusList}>
+              <ul className={styles.statusList} role="list">
                 {group.items.map((item) => (
                   <li key={item} className={styles.statusItem}>
                     {item}
@@ -274,13 +276,13 @@ export default function LandingPage() {
 
       <section className={styles.finalCta}>
         <div className={styles.finalCtaInner}>
-          <h2 className={styles.finalCtaTitle}>See it for yourself</h2>
+          <h2 className={styles.finalCtaTitle}>Take a closer look</h2>
           <p className={styles.finalCtaLead}>
-            Sign in to the live demo, follow the workflow, or read how the
-            platform is put together.
+            Follow the workflow end to end, read how the platform is put
+            together, or ask about any decision behind it.
           </p>
           <div className={styles.finalCtaActions}>
-            <ButtonLink href="/login">Sign in</ButtonLink>
+            <ButtonLink href="/how-it-works">Follow the workflow</ButtonLink>
             <ButtonLink href="/engineering" variant="secondary">
               Read the engineering
             </ButtonLink>
@@ -288,6 +290,10 @@ export default function LandingPage() {
               Contact the developer
             </ButtonLink>
           </div>
+          <p className={styles.finalCtaNote}>
+            Running the product UI needs the local stack from the repository —
+            there is no hosted demo environment yet.
+          </p>
         </div>
       </section>
     </div>

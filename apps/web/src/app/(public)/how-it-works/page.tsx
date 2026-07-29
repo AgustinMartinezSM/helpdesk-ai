@@ -122,22 +122,28 @@ export default function HowItWorksPage() {
         eyebrow="The journey of a ticket"
         title="Eleven steps, one principle: people decide"
       >
-        <ol className={styles.timeline}>
+        {/* role="list" keeps the semantics that list-style: none removes
+            in Safari/VoiceOver; the step number stays visible to everyone
+            and the list position carries the order for assistive tech. */}
+        <ol className={styles.timeline} role="list">
           {STEPS.map((step, index) => (
-            <Reveal key={step.title} delay={(index % 3) * 60}>
-              <li className={styles.step}>
-                <div className={styles.stepMarker} aria-hidden="true">
-                  <span className={styles.stepIndex}>{index + 1}</span>
-                  <span className={styles.stepLine} />
+            <Reveal
+              as="li"
+              key={step.title}
+              className={styles.step}
+              delay={(index % 3) * 60}
+            >
+              <div className={styles.stepMarker}>
+                <span className={styles.stepIndex}>{index + 1}</span>
+                <span className={styles.stepLine} aria-hidden="true" />
+              </div>
+              <div className={styles.stepBody}>
+                <div className={styles.stepHeading}>
+                  <h3 className={styles.stepTitle}>{step.title}</h3>
+                  <StatusPill status={step.status} />
                 </div>
-                <div className={styles.stepBody}>
-                  <div className={styles.stepHeading}>
-                    <h3 className={styles.stepTitle}>{step.title}</h3>
-                    <StatusPill status={step.status} />
-                  </div>
-                  <p className={styles.stepText}>{step.description}</p>
-                </div>
-              </li>
+                <p className={styles.stepText}>{step.description}</p>
+              </div>
             </Reveal>
           ))}
         </ol>
@@ -175,7 +181,7 @@ export default function HowItWorksPage() {
         title="Everything downstream reacts to these"
         lead="Versioned contracts on a RabbitMQ topic exchange — audit, notifications and analytics never call the domain directly."
       >
-        <ul className={styles.eventsRow}>
+        <ul className={styles.eventsRow} role="list">
           {EVENTS.map((event) => (
             <li key={event} className={styles.eventChip}>
               {event}

@@ -50,13 +50,12 @@ export default function FeaturesPage() {
 
       <div className={styles.ctaBand}>
         <p className={styles.ctaText}>
-          Want to see the available capabilities working against the real
-          backend?
+          Curious how the available capabilities fit together in practice?
         </p>
         <div className={styles.ctaActions}>
-          <ButtonLink href="/login">Sign in to the demo</ButtonLink>
-          <ButtonLink href="/how-it-works" variant="secondary">
-            Follow the workflow
+          <ButtonLink href="/how-it-works">Follow the workflow</ButtonLink>
+          <ButtonLink href="/engineering" variant="secondary">
+            See the architecture
           </ButtonLink>
         </div>
       </div>

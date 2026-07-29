@@ -18,7 +18,8 @@ export default function PublicLayout({
         Skip to content
       </a>
       <PublicNav />
-      <main id="main-content" className={styles.main}>
+      {/* tabIndex -1 so the skip link actually moves focus, not just scroll. */}
+      <main id="main-content" tabIndex={-1} className={styles.main}>
         {children}
       </main>
       <PublicFooter />

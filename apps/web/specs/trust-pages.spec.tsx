@@ -14,16 +14,38 @@ describe('Security page', () => {
         name: 'Security as a product requirement',
       }),
     ).toBeTruthy();
-    // Compliance certifications appear only inside the not-claimed list.
-    expect(screen.getByText('SOC 2 or ISO 27001 certification')).toBeTruthy();
-    expect(
-      screen.getByRole('heading', {
+
+    // Certifications are named ONLY inside the not-claimed list — assert
+    // the containment, not merely that the words appear somewhere.
+    const notClaimed = screen
+      .getByRole('heading', {
         level: 2,
         name: 'What this project does not claim',
-      }),
-    ).toBeTruthy();
+      })
+      .closest('section');
+    expect(notClaimed).not.toBeNull();
+    for (const claim of [
+      'SOC 2 or ISO 27001 certification',
+      'GDPR or HIPAA compliance programs',
+      'Independent penetration testing',
+    ]) {
+      const node = screen.getByText(claim);
+      expect(notClaimed?.contains(node)).toBe(true);
+      // And exactly one occurrence, so it cannot also be claimed elsewhere.
+      expect(screen.getAllByText(claim)).toHaveLength(1);
+    }
     // The security roadmap is explicitly labeled Planned.
     expect(screen.getByText('Planned')).toBeTruthy();
+  });
+
+  it('describes authorization without contradicting the ticket lifecycle', () => {
+    render(<SecurityPage />);
+
+    const body = document.body.textContent ?? '';
+    // Requesters really can close their own resolved tickets, so the page
+    // must not claim every transition is staff-only.
+    expect(body).not.toContain('ticket transitions are staff-only');
+    expect(body).toContain('requesters may close only their own resolved');
   });
 });
 

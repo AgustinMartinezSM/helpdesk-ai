@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { siteConfig } from '../../lib/site-config';
 import { Button, ButtonLink } from '../ui/button';
 import { Card } from '../ui/card';
@@ -89,6 +89,21 @@ export function ContactForm() {
     'idle',
   );
   const submittedValues = useRef<FormValues>(EMPTY);
+  const successRef = useRef<HTMLHeadingElement>(null);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+  const [announcement, setAnnouncement] = useState('');
+
+  // Both transitions unmount the element that holds focus, so focus has to
+  // be parked deliberately; the live region is mounted permanently below so
+  // screen readers are already watching it when the text arrives.
+  useEffect(() => {
+    if (state === 'submitted') {
+      successRef.current?.focus();
+      setAnnouncement(
+        'Your message is ready. This demo does not send it to a server.',
+      );
+    }
+  }, [state]);
 
   function update<K extends keyof FormValues>(key: K, value: string) {
     setValues((previous) => ({ ...previous, [key]: value }));
@@ -115,132 +130,157 @@ export function ContactForm() {
     setValues(EMPTY);
     setErrors({});
     setState('idle');
+    setAnnouncement('');
+    // The clicked button unmounts with this transition.
+    window.requestAnimationFrame(() => firstFieldRef.current?.focus());
   }
 
   if (state === 'submitted') {
     const mailto = buildMailto(submittedValues.current);
     return (
-      <Card className={styles.successCard}>
-        <div role="status" className={styles.success}>
-          <span className={styles.successIcon}>
-            <CheckIcon size={18} />
-          </span>
-          <h2 className={styles.successTitle}>Your message is ready</h2>
-          <p className={styles.successBody}>
-            Honest note: this demo does not send messages to a server — there is
-            no delivery backend behind this form, by design.
-            {mailto
-              ? ' Use the button below to open the exact message in your email app and send it for real.'
-              : ' Direct contact links are not configured in this environment.'}
-          </p>
-          <div className={styles.successActions}>
-            {mailto ? (
-              <ButtonLink href={mailto}>
-                <MailIcon size={15} />
-                Open in your email app
-              </ButtonLink>
-            ) : null}
-            <Button variant="secondary" onClick={reset}>
-              Write another message
-            </Button>
+      <>
+        <LiveRegion message={announcement} />
+        <Card className={styles.successCard}>
+          <div className={styles.success}>
+            <span className={styles.successIcon}>
+              <CheckIcon size={18} />
+            </span>
+            <h2 ref={successRef} tabIndex={-1} className={styles.successTitle}>
+              Your message is ready
+            </h2>
+            <p className={styles.successBody}>
+              Honest note: this demo does not send messages to a server — there
+              is no delivery backend behind this form, by design.
+              {mailto
+                ? ' Use the button below to open the exact message in your email app and send it for real.'
+                : ' Direct contact links are not configured in this environment.'}
+            </p>
+            <div className={styles.successActions}>
+              {mailto ? (
+                <ButtonLink href={mailto}>
+                  <MailIcon size={15} />
+                  Open in your email app
+                </ButtonLink>
+              ) : null}
+              <Button variant="secondary" onClick={reset}>
+                Write another message
+              </Button>
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      </>
     );
   }
 
   const errorCount = Object.keys(errors).length;
 
   return (
-    <Card className={styles.formCard}>
-      <form
-        onSubmit={handleSubmit}
-        aria-label="contact form"
-        noValidate
-        className={styles.form}
-      >
-        <div className={styles.row}>
+    <>
+      <LiveRegion message={announcement} />
+      <Card className={styles.formCard}>
+        <form
+          onSubmit={handleSubmit}
+          aria-label="contact form"
+          noValidate
+          className={styles.form}
+        >
+          <div className={styles.row}>
+            <Input
+              ref={firstFieldRef}
+              id="contact-name"
+              label="Name"
+              autoComplete="name"
+              required
+              value={values.name}
+              error={errors.name}
+              onChange={(event) => update('name', event.target.value)}
+            />
+            <Input
+              id="contact-email"
+              label="Email"
+              type="email"
+              autoComplete="email"
+              required
+              value={values.email}
+              error={errors.email}
+              onChange={(event) => update('email', event.target.value)}
+            />
+          </div>
+
+          <div className={styles.row}>
+            <Input
+              id="contact-organization"
+              label="Organization (optional)"
+              autoComplete="organization"
+              value={values.organization}
+              onChange={(event) => update('organization', event.target.value)}
+            />
+            <Select
+              id="contact-reason"
+              label="Reason for contact"
+              value={values.reason}
+              onChange={(event) => update('reason', event.target.value)}
+            >
+              {REASONS.map((reason) => (
+                <option key={reason} value={reason}>
+                  {reason}
+                </option>
+              ))}
+            </Select>
+          </div>
+
           <Input
-            id="contact-name"
-            label="Name"
-            autoComplete="name"
+            id="contact-subject"
+            label="Subject"
             required
-            value={values.name}
-            error={errors.name}
-            onChange={(event) => update('name', event.target.value)}
+            maxLength={120}
+            value={values.subject}
+            error={errors.subject}
+            onChange={(event) => update('subject', event.target.value)}
           />
-          <Input
-            id="contact-email"
-            label="Email"
-            type="email"
-            autoComplete="email"
+
+          <Textarea
+            id="contact-message"
+            label="Message"
             required
-            value={values.email}
-            error={errors.email}
-            onChange={(event) => update('email', event.target.value)}
+            maxLength={4000}
+            placeholder="What would you like to talk about?"
+            value={values.message}
+            error={errors.message}
+            onChange={(event) => update('message', event.target.value)}
           />
-        </div>
 
-        <div className={styles.row}>
-          <Input
-            id="contact-organization"
-            label="Organization (optional)"
-            autoComplete="organization"
-            value={values.organization}
-            onChange={(event) => update('organization', event.target.value)}
-          />
-          <Select
-            id="contact-reason"
-            label="Reason for contact"
-            value={values.reason}
-            onChange={(event) => update('reason', event.target.value)}
-          >
-            {REASONS.map((reason) => (
-              <option key={reason} value={reason}>
-                {reason}
-              </option>
-            ))}
-          </Select>
-        </div>
+          {errorCount > 0 ? (
+            <FormError>
+              {errorCount === 1
+                ? 'One field needs your attention.'
+                : `${errorCount} fields need your attention.`}
+            </FormError>
+          ) : null}
 
-        <Input
-          id="contact-subject"
-          label="Subject"
-          required
-          maxLength={120}
-          value={values.subject}
-          error={errors.subject}
-          onChange={(event) => update('subject', event.target.value)}
-        />
+          <div className={styles.submitRow}>
+            <Button type="submit" loading={state === 'submitting'}>
+              Prepare message
+            </Button>
+            <p className={styles.demoNote}>
+              Demo form — nothing is sent to a server.
+            </p>
+          </div>
+        </form>
+      </Card>
+    </>
+  );
+}
 
-        <Textarea
-          id="contact-message"
-          label="Message"
-          required
-          maxLength={4000}
-          placeholder="What would you like to talk about?"
-          value={values.message}
-          error={errors.message}
-          onChange={(event) => update('message', event.target.value)}
-        />
-
-        {errorCount > 0 ? (
-          <FormError>
-            {errorCount === 1
-              ? 'One field needs your attention.'
-              : `${errorCount} fields need your attention.`}
-          </FormError>
-        ) : null}
-
-        <div className={styles.submitRow}>
-          <Button type="submit" loading={state === 'submitting'}>
-            Prepare message
-          </Button>
-          <p className={styles.demoNote}>
-            Demo form — nothing is sent to a server.
-          </p>
-        </div>
-      </form>
-    </Card>
+/**
+ * Permanently mounted live region: a `role="status"` element created in the
+ * same commit as its text is usually not announced, so it must already be
+ * in the accessibility tree before the message arrives.
+ */
+function LiveRegion({ message }: { message: string }) {
+  return (
+    <p className="sr-only" role="status">
+      {message}
+    </p>
   );
 }

@@ -56,7 +56,7 @@ const PLATFORM: Principle[] = [
   {
     title: 'Roles and permissions',
     detail:
-      'Roles travel in the token and are enforced by guards in every service: ticket transitions are staff-only, analytics summaries are staff-only, the audit trail is admin-only.',
+      'Roles travel in the token and are enforced by guards inside each service: assignment is staff-only, analytics summaries are staff-only, the audit trail is admin-only, and requesters may close only their own resolved tickets.',
   },
   {
     title: 'Input validation',
@@ -196,7 +196,7 @@ export default function SecurityPage() {
         title="What this project does not claim"
         lead="A security page that inflates its posture is itself a vulnerability. For clarity:"
       >
-        <ul className={styles.notClaimedList}>
+        <ul className={styles.notClaimedList} role="list">
           {NOT_CLAIMED.map((item) => (
             <li key={item} className={styles.notClaimedItem}>
               {item}

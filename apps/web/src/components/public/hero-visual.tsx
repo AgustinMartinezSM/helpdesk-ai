@@ -50,7 +50,7 @@ export function HeroVisual() {
         <div className={styles.ticketFooter}>
           <span className={styles.assignment}>
             <UserIcon size={13} />
-            Assigned to M. Duarte
+            Unassigned
           </span>
           <span className={styles.audit}>audit · ticket.created.v1</span>
         </div>

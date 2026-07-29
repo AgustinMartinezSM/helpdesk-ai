@@ -8,7 +8,7 @@ interface Tier {
 const PIPELINE: Tier[] = [
   { name: 'Web', detail: 'Next.js' },
   { name: 'Web BFF', detail: 'session + cookies' },
-  { name: 'API Gateway', detail: 'routing + guards' },
+  { name: 'API Gateway', detail: 'routing' },
   { name: 'Domain services', detail: 'auth · tickets · users' },
   { name: 'RabbitMQ', detail: 'domain events' },
   { name: 'Platform services', detail: 'audit · notify · analytics' },

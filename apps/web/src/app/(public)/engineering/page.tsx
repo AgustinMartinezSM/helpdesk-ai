@@ -174,7 +174,7 @@ export default function EngineeringPage() {
         <div className={styles.appsGrid}>
           {APPLICATIONS.map((app) => (
             <article key={app.name} className={styles.appCard}>
-              <p className={styles.appName}>{app.name}</p>
+              <h3 className={styles.appName}>{app.name}</h3>
               <p className={styles.appKind}>{app.kind}</p>
               <p className={styles.appRole}>{app.role}</p>
             </article>
@@ -183,7 +183,7 @@ export default function EngineeringPage() {
         <div className={styles.libsRow}>
           {LIBRARIES.map((lib) => (
             <article key={lib.name} className={styles.libCard}>
-              <p className={styles.libName}>{lib.name}</p>
+              <h3 className={styles.libName}>{lib.name}</h3>
               <p className={styles.libRole}>{lib.role}</p>
             </article>
           ))}
@@ -195,7 +195,7 @@ export default function EngineeringPage() {
         eyebrow="Stack"
         title="Boring where it should be, current where it counts"
       >
-        <ul className={styles.stackRow}>
+        <ul className={styles.stackRow} role="list">
           {STACK.map((item) => (
             <li key={item} className={styles.stackChip}>
               {item}
@@ -228,7 +228,7 @@ export default function EngineeringPage() {
         eyebrow="Delivery"
         title="How the work actually ships"
       >
-        <ul className={styles.deliveryList}>
+        <ul className={styles.deliveryList} role="list">
           {DELIVERY.map((item) => (
             <li key={item} className={styles.deliveryItem}>
               {item}

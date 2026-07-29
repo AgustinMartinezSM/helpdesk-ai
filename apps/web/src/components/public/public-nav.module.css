@@ -51,12 +51,24 @@
   color: var(--text);
 }
 
-.navLinkActive {
+/* Active state is never color alone: it also carries a weight change and
+   an underline marker (plus aria-current for assistive tech). */
+.navLinkActive,
+.navLinkActive:hover {
+  position: relative;
   color: var(--accent);
+  font-weight: 600;
 }
 
-.navLinkActive:hover {
-  color: var(--accent);
+.navLinkActive::after {
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.0625rem;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
 }
 
 .actions {
@@ -152,7 +164,10 @@
 
 /* ----------------------------------------------------------------- desktop */
 
-@media (min-width: 920px) {
+/* The full row (wordmark + seven links + toggle + two CTAs) needs ~1040px
+   of min-content width; switching earlier forces page-wide horizontal
+   scroll, so the mobile menu stays in charge until it genuinely fits. */
+@media (min-width: 1080px) {
   .desktopNav {
     display: flex;
   }

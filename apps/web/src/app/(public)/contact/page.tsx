@@ -42,7 +42,7 @@ export default function ContactPage() {
         <aside className={styles.aside}>
           <h2 className={styles.asideTitle}>Prefer something direct?</h2>
           {directLinks.length > 0 ? (
-            <ul className={styles.linkList}>
+            <ul className={styles.linkList} role="list">
               {directLinks.map((link) => (
                 <li key={link.href}>
                   <a
