@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  type FormEvent,
   type InputHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
@@ -68,8 +67,11 @@ export function Textarea({
   onInput,
   ...rest
 }: TextareaProps) {
-  const handleInput = useCallback(
-    (event: FormEvent<HTMLTextAreaElement>) => {
+  // Typed off the attribute so it tracks React's own onInput event type.
+  const handleInput = useCallback<
+    NonNullable<TextareaHTMLAttributes<HTMLTextAreaElement>['onInput']>
+  >(
+    (event) => {
       const element = event.currentTarget;
       element.style.height = 'auto';
       element.style.height = `${element.scrollHeight}px`;
