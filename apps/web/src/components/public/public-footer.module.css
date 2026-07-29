@@ -1,0 +1,91 @@
+.footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.inner {
+  max-width: var(--container-public);
+  margin: 0 auto;
+  padding: 3rem 1.5rem 2rem;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+}
+
+.brandColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  max-width: 22rem;
+}
+
+.wordmark {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.wordmark span {
+  color: var(--accent);
+}
+
+.tagline {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.status {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.columnTitle {
+  margin-bottom: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.link {
+  align-self: flex-start;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.link:hover {
+  color: var(--text);
+}
+
+.bottomBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  justify-content: space-between;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.bottomNote {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 640px) {
+  .columns {
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  }
+}
