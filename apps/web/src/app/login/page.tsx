@@ -18,6 +18,11 @@ export default function LoginPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    // The submit button is aria-disabled while loading (still focusable),
+    // so implicit form submission must be guarded against re-entry.
+    if (submitting) {
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {

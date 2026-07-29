@@ -2,6 +2,7 @@
 
 import { useAuth } from '../components/auth-context';
 import { ButtonLink } from '../components/ui/button';
+import { Skeleton } from '../components/ui/skeleton';
 import styles from './page.module.css';
 
 export default function Index() {
@@ -17,7 +18,11 @@ export default function Index() {
         Calm, fast support — with AI-assisted workflows behind every ticket.
       </p>
       <div className={styles.cta}>
-        {status === 'authenticated' ? (
+        {status === 'loading' ? (
+          // Placeholder while the silent refresh resolves — flashing
+          // "Sign in" at an authenticated user reads as a lost session.
+          <Skeleton width="9rem" height="2.5rem" />
+        ) : status === 'authenticated' ? (
           <ButtonLink href="/tickets">Go to tickets</ButtonLink>
         ) : (
           <ButtonLink href="/login">Sign in</ButtonLink>

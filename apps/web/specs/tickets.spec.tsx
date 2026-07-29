@@ -102,8 +102,12 @@ describe('TicketsPage', () => {
       </AuthProvider>,
     );
 
+    // Wait for the authenticated header first: the auth-restore phase
+    // shows an identical skeleton, and asserting before the heading
+    // appears would match that one and pass vacuously.
+    await screen.findByRole('heading', { name: 'Tickets' });
     expect(
-      await screen.findByRole('status', { name: 'Loading tickets' }),
+      screen.getByRole('status', { name: 'Loading tickets' }),
     ).toBeTruthy();
   });
 
@@ -126,6 +130,26 @@ describe('TicketsPage', () => {
         calls.some((c) => c.url.endsWith('/tickets?status=in_progress')),
       ).toBe(true),
     );
+    // Filtered queries get the "adjust the filter" empty state, not the CTA.
+    expect(await screen.findByText('No matching tickets')).toBeTruthy();
+  });
+
+  it('offers the create CTA when the unfiltered list is empty', async () => {
+    mockFetch([
+      [/\/session\/refresh$/, { status: 200, body: SESSION }],
+      [/\/tickets$/, { status: 200, body: { total: 0, items: [] } }],
+    ]);
+
+    render(
+      <AuthProvider>
+        <TicketsPage />
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByText('No tickets yet')).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Create your first ticket' }),
+    ).toBeTruthy();
   });
 
   it('prompts anonymous visitors to sign in without calling the tickets API', async () => {
@@ -164,6 +188,8 @@ describe('NewTicketPage', () => {
     fireEvent.change(screen.getByLabelText('Description'), {
       target: { value: 'Disconnects every five minutes on the office wifi.' },
     });
+    // Segmented radio-pills: the label text selects the priority.
+    fireEvent.click(screen.getByLabelText('High'));
     fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/tickets/t9'));
@@ -172,8 +198,13 @@ describe('NewTicketPage', () => {
       (c) => c.url.endsWith('/tickets') && c.init?.method === 'POST',
     );
     expect(createCall).toBeDefined();
-    expect(
-      (createCall?.init?.headers as Record<string, string>).authorization,
-    ).toBe('Bearer jwt');
+    const headers = createCall?.init?.headers as Record<string, string>;
+    expect(headers.authorization).toBe('Bearer jwt');
+    expect(headers['content-type']).toBe('application/json');
+    expect(JSON.parse(String(createCall?.init?.body))).toEqual({
+      title: 'VPN drops constantly',
+      description: 'Disconnects every five minutes on the office wifi.',
+      priority: 'high',
+    });
   });
 });

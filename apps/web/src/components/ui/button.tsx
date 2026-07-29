@@ -28,12 +28,19 @@ export function Button({
   disabled,
   className,
   children,
+  onClick,
   ...rest
 }: ButtonProps) {
   return (
     <button
       className={buttonClasses(variant, size, className)}
-      disabled={disabled || loading}
+      // aria-disabled (not disabled) while loading: the button stays
+      // focusable, so keyboard focus is not dropped mid-submit. Forms
+      // must guard their submit handlers against re-entry.
+      disabled={disabled}
+      aria-disabled={loading || undefined}
+      aria-busy={loading || undefined}
+      onClick={loading ? (event) => event.preventDefault() : onClick}
       {...rest}
     >
       {loading ? <span className={styles.spinner} aria-hidden="true" /> : null}

@@ -2,7 +2,13 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import { useAuth } from '../../../components/auth-context';
 import { Button, ButtonLink } from '../../../components/ui/button';
 import { Card } from '../../../components/ui/card';
@@ -15,7 +21,11 @@ import {
   SendIcon,
 } from '../../../components/ui/icons';
 import { Skeleton } from '../../../components/ui/skeleton';
-import { PriorityDot, StatusBadge } from '../../../components/ui/status';
+import {
+  PriorityDot,
+  StatusBadge,
+  STATUS_LABELS,
+} from '../../../components/ui/status';
 import { formatDateTime, relativeTime } from '../../../lib/format';
 import {
   addComment,
@@ -64,6 +74,8 @@ export default function TicketDetailPage() {
   const [details, setDetails] = useState<TicketDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [comment, setComment] = useState('');
+  const [statusNote, setStatusNote] = useState('');
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
   const isStaff = Boolean(
     session &&
@@ -127,6 +139,10 @@ export default function TicketDetailPage() {
     try {
       await changeStatus(session.accessToken, params.id, next);
       await load();
+      // The activated button unmounts with the transition — announce the
+      // result and park keyboard focus on the ticket title.
+      setStatusNote(`Status changed to ${STATUS_LABELS[next]}`);
+      titleRef.current?.focus();
     } catch (statusError) {
       setError(
         statusError instanceof Error ? statusError.message : 'Update failed',
@@ -153,11 +169,16 @@ export default function TicketDetailPage() {
 
       {error ? <FormError>{error}</FormError> : null}
       {!details && !error ? <DetailSkeleton /> : null}
+      <p className="sr-only" role="status">
+        {statusNote}
+      </p>
 
       {details && ticket ? (
         <>
           <header className={styles.header}>
-            <h1 className={styles.title}>{ticket.title}</h1>
+            <h1 ref={titleRef} tabIndex={-1} className={styles.title}>
+              {ticket.title}
+            </h1>
             <div className={styles.badges}>
               <StatusBadge status={ticket.status} />
               <PriorityDot priority={ticket.priority} />

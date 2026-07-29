@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { Button } from '../src/components/ui/button';
 import { EmptyState } from '../src/components/ui/empty-state';
 import { PriorityDot, StatusBadge } from '../src/components/ui/status';
@@ -32,13 +32,25 @@ describe('PriorityDot', () => {
 });
 
 describe('Button', () => {
-  it('disables itself while loading but keeps its accessible name', () => {
-    render(<Button loading>Save</Button>);
+  it('stays focusable while loading (aria-disabled) and swallows clicks', () => {
+    const onClick = jest.fn();
+    render(
+      <Button loading onClick={onClick}>
+        Save
+      </Button>,
+    );
 
     const button = screen.getByRole('button', {
       name: 'Save',
     }) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
+    // aria-disabled, not disabled: keyboard focus must not be dropped
+    // to <body> when a focused submit button enters its loading state.
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-busy')).toBe('true');
+
+    fireEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('stays enabled and clickable by default', () => {

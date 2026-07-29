@@ -1,7 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { useAuth } from './auth-context';
 import { ButtonLink } from './ui/button';
 import { LogOutIcon, MoonIcon, SunIcon, UserIcon } from './ui/icons';
@@ -10,9 +16,18 @@ import styles from './app-shell.module.css';
 
 /**
  * Icon choice is CSS-driven off `[data-theme]` so the pre-hydration paint
- * already shows the right glyph; the handler only flips the attribute.
+ * already shows the right glyph; React state only exists to expose the
+ * toggle state (`aria-pressed`) to assistive tech after mount.
  */
 function ThemeToggle() {
+  const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
+
+  useEffect(() => {
+    setTheme(
+      document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+    );
+  }, []);
+
   function toggle() {
     const root = document.documentElement;
     const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
@@ -22,6 +37,7 @@ function ThemeToggle() {
     } catch {
       // private mode — the choice just won't persist
     }
+    setTheme(next);
   }
 
   return (
@@ -29,7 +45,8 @@ function ThemeToggle() {
       type="button"
       className={styles.iconButton}
       onClick={toggle}
-      aria-label="Toggle theme"
+      aria-label="Dark theme"
+      aria-pressed={theme === null ? undefined : theme === 'dark'}
     >
       <SunIcon size={18} className={styles.sun} />
       <MoonIcon size={18} className={styles.moon} />
@@ -70,8 +87,16 @@ function SessionArea() {
     }
   };
 
+  // <details> has no built-in Escape dismissal (only <dialog> does).
+  const closeOnEscape = (event: KeyboardEvent<HTMLDetailsElement>) => {
+    if (event.key === 'Escape' && menuRef.current?.open) {
+      closeMenu();
+      menuRef.current.querySelector('summary')?.focus();
+    }
+  };
+
   return (
-    <details ref={menuRef} className={styles.menu}>
+    <details ref={menuRef} className={styles.menu} onKeyDown={closeOnEscape}>
       <summary className={styles.avatar} aria-label="Account menu">
         {session.user.email.charAt(0).toUpperCase()}
       </summary>

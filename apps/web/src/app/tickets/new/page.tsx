@@ -36,7 +36,8 @@ export default function NewTicketPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!session) {
+    // aria-disabled submit stays focusable — guard against re-entry.
+    if (!session || submitting) {
       return;
     }
     setError(null);

@@ -33,7 +33,7 @@
   background: var(--accent);
   color: var(--accent-contrast);
 }
-.primary:hover:not(:disabled) {
+.primary:hover:not(:disabled):not([aria-disabled='true']) {
   background: var(--accent-hover);
 }
 
@@ -42,7 +42,7 @@
   border-color: var(--border-strong);
   color: var(--text);
 }
-.secondary:hover:not(:disabled) {
+.secondary:hover:not(:disabled):not([aria-disabled='true']) {
   background: var(--surface-2);
 }
 
@@ -50,7 +50,7 @@
   background: transparent;
   color: var(--text-secondary);
 }
-.ghost:hover:not(:disabled) {
+.ghost:hover:not(:disabled):not([aria-disabled='true']) {
   background: var(--surface-2);
   color: var(--text);
 }
@@ -60,21 +60,22 @@
   border-color: color-mix(in srgb, var(--danger) 35%, transparent);
   color: var(--danger);
 }
-.danger:hover:not(:disabled) {
+.danger:hover:not(:disabled):not([aria-disabled='true']) {
   background: var(--danger-soft);
 }
 
-.button:disabled {
+.button:disabled,
+.button[aria-disabled='true'] {
   opacity: 0.6;
   cursor: default;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .button:hover:not(:disabled) {
+  .button:hover:not(:disabled):not([aria-disabled='true']) {
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
   }
-  .button:active:not(:disabled) {
+  .button:active:not(:disabled):not([aria-disabled='true']) {
     transform: translateY(0);
     box-shadow: none;
   }
@@ -93,5 +94,18 @@
 @keyframes spin {
   to {
     transform: rotate(1turn);
+  }
+}
+
+/* Loading feedback stays, but as a gentle fade instead of rotation. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: spinner-pulse 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes spinner-pulse {
+  50% {
+    opacity: 0.4;
   }
 }

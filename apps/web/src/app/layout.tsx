@@ -18,9 +18,11 @@ export const metadata = {
 /**
  * Resolves the theme before hydration so the first paint already has the
  * right `data-theme` — no light/dark flash. localStorage wins; the OS
- * preference is the fallback.
+ * preference is the fallback. The storage read gets its own try/catch:
+ * where storage access itself throws (blocked cookies, sandboxed
+ * webviews) the OS-preference fallback must still run.
  */
-const themeInit = `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.dataset.theme=t;}catch(e){}})();`;
+const themeInit = `(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(t!=='light'&&t!=='dark'){try{t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}catch(e){t='light'}}document.documentElement.dataset.theme=t})();`;
 
 export default function RootLayout({
   children,

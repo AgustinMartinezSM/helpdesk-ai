@@ -27,7 +27,9 @@ export function relativeTime(iso: string | undefined): string {
   if (Number.isNaN(then)) {
     return '';
   }
-  let duration = (then - Date.now()) / 1000;
+  // Timestamps come from the server; clamp so clock skew can never
+  // produce future phrasing ("in 5 seconds") for a creation date.
+  let duration = Math.min(0, (then - Date.now()) / 1000);
   for (const division of DIVISIONS) {
     if (Math.abs(duration) < division.amount) {
       return relativeFormatter.format(Math.round(duration), division.unit);

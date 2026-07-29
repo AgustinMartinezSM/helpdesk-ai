@@ -84,6 +84,8 @@ svg {
   --text-muted: #71717a;
   --border: color-mix(in srgb, #18181b 12%, transparent);
   --border-strong: color-mix(in srgb, #18181b 22%, transparent);
+  /* Form-control boundary — keeps >= 3:1 non-text contrast (WCAG 1.4.11). */
+  --border-control: color-mix(in srgb, #18181b 48%, transparent);
 
   /* Accent (indigo) */
   --accent: #4f46e5;
@@ -139,9 +141,10 @@ svg {
   --surface-2: #1d1d22;
   --text: #f4f4f5;
   --text-secondary: #a1a1aa;
-  --text-muted: #7c7c87;
+  --text-muted: #8a8a94;
   --border: color-mix(in srgb, #f4f4f5 14%, transparent);
   --border-strong: color-mix(in srgb, #f4f4f5 24%, transparent);
+  --border-control: color-mix(in srgb, #f4f4f5 38%, transparent);
 
   --accent: #818cf8;
   --accent-hover: #a5b4fc;

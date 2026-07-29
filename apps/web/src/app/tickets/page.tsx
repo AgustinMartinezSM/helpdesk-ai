@@ -58,6 +58,7 @@ export default function TicketsPage() {
     }
     let cancelled = false;
     setTickets(null);
+    setTotal(null); // a stale count would describe the previous filter
     setError(null);
     listTickets(session.accessToken, filter === 'all' ? {} : { status: filter })
       .then((page) => {
