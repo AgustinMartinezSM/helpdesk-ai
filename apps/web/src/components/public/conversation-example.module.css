@@ -11,11 +11,25 @@
   overflow: hidden;
 }
 
+/*
+ * The header used a translucent brand wash, which composited over the
+ * card and pushed the muted label under AA (3.9:1 in dark). The brand
+ * now marks the header as an opaque top rule instead — no gradient sits
+ * behind any text.
+ */
 .head {
+  position: relative;
   padding: 1.25rem 1.25rem 1rem;
   border-bottom: 1px solid var(--border);
-  /* Warm brand wash marks the request header without tinting any text. */
-  background: linear-gradient(180deg, var(--brand-soft), transparent 120%);
+  background: var(--surface-2);
+}
+
+.head::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--brand-strong);
 }
 
 .requestLabel {
@@ -60,10 +74,12 @@
   background: var(--accent-soft);
 }
 
+/* --text-secondary, not --text-muted: the support bubble sits on
+   --accent-soft, where muted dropped to 4.23:1. */
 .author {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .body {

@@ -343,6 +343,26 @@
   color: var(--surface-cta-text);
   box-shadow: var(--shadow-lg);
   text-align: center;
+
+  /*
+   * The panel is always dark, in both themes, so any control inside it
+   * must resolve against a dark background. Rebinding the tokens here
+   * keeps the shared Button/focus styles correct instead of forcing
+   * per-variant overrides: on the light theme the inherited indigo focus
+   * ring measured 2.87:1 here and the ghost label 2.33:1.
+   */
+  --accent: #a5b4fc;
+  --accent-hover: #c7d2fe;
+  --accent-contrast: #1e1b4b;
+  --text: var(--surface-cta-text);
+  --text-secondary: color-mix(
+    in srgb,
+    var(--surface-cta-text) 82%,
+    transparent
+  );
+  --surface: color-mix(in srgb, var(--surface-cta-text) 12%, transparent);
+  --surface-2: color-mix(in srgb, var(--surface-cta-text) 16%, transparent);
+  --border-strong: color-mix(in srgb, var(--surface-cta-text) 38%, transparent);
 }
 
 .finalCtaInner::before {

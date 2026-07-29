@@ -43,6 +43,33 @@ Defined on `:root`, overridden under `[data-theme='dark']`.
 `--accent`, `--accent-hover`, `--accent-contrast`, `--accent-soft`
 (indigo: `#4f46e5` light, `#818cf8` dark); `--danger`, `--danger-soft`.
 
+Indigo is the **action colour and the accent text colour** in both
+themes — 6.02:1 on the light background, 6.67:1 on the dark one.
+
+### Brand accent — pastel yellow (decorative and surface only)
+
+| Token            | Purpose                                             |
+| ---------------- | --------------------------------------------------- |
+| `--brand`        | Fills: markers, chips, rules, highlight surfaces    |
+| `--brand-strong` | Hairlines and edges that need a touch more presence |
+| `--brand-soft`   | Low-opacity washes behind headers and icon tiles    |
+| `--brand-glow`   | Ambient radial fields                               |
+| `--brand-on`     | The text colour to place **on** a `--brand` surface |
+
+**The rule, and why it exists.** Measured against the real tokens:
+
+| Pastel yellow used as…            | Light          | Dark       |
+| --------------------------------- | -------------- | ---------- |
+| Text on the page background       | **1.13:1** ❌  | 16.92:1 ✅ |
+| Text on a card surface            | **1.18:1** ❌  | 15.77:1 ✅ |
+| A surface, with `--brand-on` text | **15.07:1** ✅ | 15.07:1 ✅ |
+
+So the brand colour **never carries text and never carries information
+on its own.** It is a fill, an edge or a glow; when it becomes a
+surface, `--brand-on` supplies the text. This keeps the brand identical
+in both themes instead of splitting into a light and a dark personality,
+and it keeps every combination above AA.
+
 ### Domain color
 
 Ticket status (`--status-{open,progress,resolved,closed}-{fg,bg,dot}`)
@@ -68,6 +95,30 @@ a status looks the same everywhere it appears.
 | `--display-xl`       | `clamp(2.375rem, 5.5vw, 3.5rem)`  | Page titles / hero               |
 | `--display-lg`       | `clamp(1.875rem, 4vw, 2.5rem)`    | Section titles                   |
 | `--display-md`       | `clamp(1.375rem, 2.5vw, 1.75rem)` | Sub-section titles               |
+
+### Section surface levels (Sprint 7.6.1)
+
+Sprint 7.6 alternated `--bg` and `--surface`. They are **1.7 L\* apart**,
+which is imperceptible — every public page read as one continuous sheet.
+The levels below are tuned in **L\*** (perceptual lightness) rather than
+WCAG contrast ratio, which compresses badly near white and near black
+and reported both pairs as "1.04:1" regardless of how they were changed.
+
+| Token              | Light L\* | Dark L\* | Use                                    |
+| ------------------ | --------- | -------- | -------------------------------------- |
+| `--bg` (base)      | 98.3      | 2.5      | The page itself                        |
+| `--surface-raised` | 100       | 8.5      | Elevated band; cards separate from it  |
+| `--surface-sunken` | 93.4      | 1.4      | Recessed band for supporting content   |
+| `--surface-tinted` | 96.8      | 8.8      | Warm brand-tinted band, human sections |
+| `--surface-cta`    | —         | —        | Contained dark panel for the final CTA |
+
+Adjacent sections now land 3.4–7.4 L\* apart, reinforced by a
+`--section-border` hairline. `--grid-line` draws the faint engineering
+grid used by the `technical` tone and the hero.
+
+`Section` exposes these as `tone="default | raised | sunken | tinted | technical"`
+and reflects the choice in `data-tone`, so specs can assert that no two
+adjacent sections share a surface.
 
 ## Typography
 
@@ -125,6 +176,25 @@ per theme so native controls follow.
 | Architecture event pulse         | `ArchitectureDiagram`     | Yes                                                 |
 | Spinner rotation                 | `Button` loading          | Falls back to an opacity pulse under reduced motion |
 | Inline-link arrow nudge          | Landing section CTAs      | Yes                                                 |
+
+## Content voice
+
+The public pages are not all written in the same voice, and that is
+deliberate:
+
+- **`/about` is first person.** It is my account of why the project
+  exists, so it says "I created", "I wanted", "I decided" — never
+  "Agustín created" or "the developer believes". My name appears once,
+  as attribution. `trust-pages.spec.tsx` asserts the first-person
+  markers and rejects the third-person patterns, so the voice cannot
+  quietly regress.
+- **`/how-it-works` is written for someone who has never used a help
+  desk.** Plain language comes before any technical term: it defines a
+  ticket as "a request for help that stays organized" before using the
+  word, and the deep vocabulary (event names, DTOs, cookies) lives on
+  `/engineering` instead.
+- **Everywhere else is product voice** — direct, concrete, and bound by
+  `product-status.ts` for anything that claims a capability exists.
 
 ## Rules for extending
 

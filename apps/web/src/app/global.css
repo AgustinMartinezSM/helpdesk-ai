@@ -81,7 +81,8 @@ svg {
   --surface-2: #f4f4f5;
   --text: #18181b;
   --text-secondary: #52525b;
-  --text-muted: #71717a;
+  /* Verified >= 4.5:1 on every public surface, not just --bg. */
+  --text-muted: #65656d;
   --border: color-mix(in srgb, #18181b 12%, transparent);
   --border-strong: color-mix(in srgb, #18181b 22%, transparent);
   /* Form-control boundary — keeps >= 3:1 non-text contrast (WCAG 1.4.11). */
