@@ -155,16 +155,17 @@ svg {
 
   /*
    * Public section surfaces. Sprint 7.6 alternated --bg and --surface,
-   * which differ by 1.04:1 in light and 1.07:1 in dark — imperceptible,
-   * so sections visually merged. These levels are separated enough to
-   * read as distinct bands while staying calm.
+   * which are 1.7 L* apart — imperceptible, so sections visually merged.
+   * These levels are tuned in L* (perceptual lightness), not in WCAG
+   * contrast ratio, which compresses badly near both extremes:
+   * base 98.3 · sunken 93.4 · raised 100 · tinted 96.8.
    */
   --surface-raised: #ffffff;
-  --surface-sunken: #f1f1f4;
-  --surface-tinted: #f6f5ef;
+  --surface-sunken: #ececed;
+  --surface-tinted: #faf6e6;
   --surface-cta: #16161a;
   --surface-cta-text: #fafafa;
-  --section-border: color-mix(in srgb, #18181b 9%, transparent);
+  --section-border: color-mix(in srgb, #18181b 12%, transparent);
   --grid-line: color-mix(in srgb, #18181b 5%, transparent);
 }
 
@@ -209,14 +210,19 @@ svg {
   --shadow-md: 0 1px 2px rgb(0 0 0 / 0.5), 0 4px 12px rgb(0 0 0 / 0.35);
   --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.5), 0 10px 28px rgb(0 0 0 / 0.45);
 
-  /* Public section surfaces — distinct levels, none of them pure black. */
-  --surface-raised: #131316;
-  --surface-sunken: #0d0d10;
-  --surface-tinted: #16150f;
-  --surface-cta: #1c1b16;
+  /*
+   * Same L*-based tuning as light: base 2.5 · sunken 1.4 · raised 8.5 ·
+   * tinted 8.8. The raised level had to climb well above --surface to be
+   * seen as a band at all — near black, large hex deltas are small
+   * perceptual ones.
+   */
+  --surface-raised: #18181e;
+  --surface-sunken: #050507;
+  --surface-tinted: #1b1913;
+  --surface-cta: #201e16;
   --surface-cta-text: #fafafa;
-  --section-border: color-mix(in srgb, #f4f4f5 10%, transparent);
-  --grid-line: color-mix(in srgb, #f4f4f5 5%, transparent);
+  --section-border: color-mix(in srgb, #f4f4f5 12%, transparent);
+  --grid-line: color-mix(in srgb, #f4f4f5 6%, transparent);
 }
 
 /* ------------------------------------------------------------------ base */

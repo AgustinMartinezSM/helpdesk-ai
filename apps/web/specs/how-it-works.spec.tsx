@@ -119,7 +119,7 @@ describe('How it works — engineering stays a link, not the page', () => {
     render(<HowItWorksPage />);
 
     const cta = screen.getByRole('link', {
-      name: /Explore the engineering behind HelpDesk AI/,
+      name: /Explore the engineering/,
     });
     expect(cta.getAttribute('href')).toBe('/engineering');
     // The deep technical vocabulary now lives on /engineering.

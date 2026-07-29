@@ -199,7 +199,7 @@ export default function EngineeringPage() {
       </Section>
 
       <Section
-        tone="raised"
+        tone="sunken"
         eyebrow="Stack"
         title="Boring where it should be, current where it counts"
       >
@@ -272,7 +272,7 @@ export default function EngineeringPage() {
       </Section>
 
       <Section
-        tone="raised"
+        tone="tinted"
         eyebrow="Delivery"
         title="How the work actually ships"
       >

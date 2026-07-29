@@ -4,8 +4,18 @@ import { Reveal } from '../../../components/public/reveal';
 import { Section } from '../../../components/public/section';
 import { StatusPill } from '../../../components/public/status-pill';
 import { ButtonLink } from '../../../components/ui/button';
+import type { SectionTone } from '../../../components/public/section';
 import { CAPABILITY_AREAS } from '../../../lib/product-status';
 import styles from './page.module.css';
+
+/** Cycled per area so five consecutive sections never look identical. */
+const AREA_TONES: SectionTone[] = [
+  'default',
+  'raised',
+  'sunken',
+  'tinted',
+  'raised',
+];
 
 export const metadata: Metadata = {
   title: 'Features',
@@ -34,7 +44,7 @@ export default function FeaturesPage() {
         <Section
           key={area.key}
           id={area.key}
-          tone={areaIndex % 2 === 1 ? 'raised' : 'default'}
+          tone={AREA_TONES[areaIndex % AREA_TONES.length]}
           title={area.title}
           lead={area.description}
         >

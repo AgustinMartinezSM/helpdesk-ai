@@ -112,6 +112,7 @@ export default function LandingPage() {
     <div className={styles.page}>
       <section className={styles.hero}>
         <div className={styles.heroGlow} aria-hidden="true" />
+        <div className={styles.heroGrid} aria-hidden="true" />
         <div className={styles.heroInner}>
           <div className={styles.heroCopy}>
             <p className={styles.heroEyebrow}>
@@ -146,6 +147,7 @@ export default function LandingPage() {
       </section>
 
       <Section
+        tone="raised"
         eyebrow="Who it serves"
         title="One platform, four jobs done well"
         lead="Support is a team sport. HelpDesk AI gives each role exactly the surface it needs — nothing more, nothing less."
@@ -164,7 +166,7 @@ export default function LandingPage() {
       </Section>
 
       <Section
-        tone="raised"
+        tone="sunken"
         eyebrow="Capabilities"
         title="Everything a support operation needs"
         lead="Shipped capabilities are labeled Available. Anything not usable today says so — clearly."
@@ -237,6 +239,7 @@ export default function LandingPage() {
       </Section>
 
       <Section
+        tone="technical"
         eyebrow="Architecture"
         title="An event-driven platform, end to end"
         lead="Nine applications and four libraries in an Nx monorepo — each service owns its data and reacts to events."
@@ -253,7 +256,7 @@ export default function LandingPage() {
       </Section>
 
       <Section
-        tone="raised"
+        tone="tinted"
         eyebrow="Project status"
         title="Exactly where the project stands"
         lead="Derived from the repository and roadmap — updated as the project moves."

@@ -9,6 +9,8 @@
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  /* Never let a long label push the page wider than the viewport. */
+  max-width: 100%;
   transition:
     background-color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
@@ -18,9 +20,22 @@
 }
 
 .md {
-  height: 2.5rem;
+  min-height: 2.5rem;
   padding: 0 1rem;
   font-size: 0.9375rem;
+}
+
+/* Below the smallest supported width a long label wraps instead of
+   overflowing; the control grows in height rather than in width. */
+@media (max-width: 420px) {
+  .button {
+    white-space: normal;
+    text-wrap: balance;
+  }
+
+  .md {
+    padding: 0.5rem 1rem;
+  }
 }
 
 .sm {

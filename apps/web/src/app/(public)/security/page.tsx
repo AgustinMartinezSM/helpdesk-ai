@@ -159,7 +159,7 @@ export default function SecurityPage() {
       </Section>
 
       <Section
-        tone="raised"
+        tone="sunken"
         eyebrow="Platform hardening"
         title="Guarded at every layer"
       >
@@ -191,7 +191,7 @@ export default function SecurityPage() {
       </Section>
 
       <Section
-        tone="raised"
+        tone="tinted"
         eyebrow="Honesty"
         title="What this project does not claim"
         lead="A security page that inflates its posture is itself a vulnerability. For clarity:"

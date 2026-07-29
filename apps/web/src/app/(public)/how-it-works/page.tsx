@@ -273,7 +273,7 @@ export default function HowItWorksPage() {
         </Reveal>
         <div className={styles.engineeringCta}>
           <ButtonLink href="/engineering">
-            Explore the engineering behind HelpDesk AI
+            Explore the engineering
             <ArrowRightIcon size={16} />
           </ButtonLink>
           <p className={styles.engineeringNote}>
