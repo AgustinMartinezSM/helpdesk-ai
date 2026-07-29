@@ -39,6 +39,9 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Local Claude preview configuration — developer machine only, not product
+.claude/launch.json
+
 # Temporary files
 tmp/
 temp/
