@@ -1,5 +1,46 @@
-.page {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 4rem 1.5rem;
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 6rem 1rem 5rem;
+  text-align: center;
+}
+
+/* Two large, very soft accent radials — cheap decorative depth. */
+.glow {
+  position: absolute;
+  inset: -4rem 0 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      40rem 20rem at 20% 10%,
+      var(--accent-soft),
+      transparent 70%
+    ),
+    radial-gradient(30rem 18rem at 85% 70%, var(--accent-soft), transparent 70%);
+}
+
+.title {
+  font-size: clamp(2.25rem, 6vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.title span {
+  color: var(--accent);
+}
+
+.tagline {
+  max-width: 30rem;
+  font-size: 1.0625rem;
+  color: var(--text-secondary);
+  text-wrap: balance;
+}
+
+.cta {
+  margin-top: 0.75rem;
 }

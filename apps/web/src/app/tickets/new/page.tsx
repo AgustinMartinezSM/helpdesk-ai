@@ -1,11 +1,18 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../../../components/auth-context';
+import { Button, ButtonLink } from '../../../components/ui/button';
+import { Card } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { FormError, Input, Textarea } from '../../../components/ui/field';
+import { LockIcon } from '../../../components/ui/icons';
+import { PriorityDot } from '../../../components/ui/status';
 import { createTicket, type TicketPriority } from '../../../lib/tickets';
-import styles from '../../page.module.css';
+import styles from './page.module.css';
+
+const PRIORITIES: TicketPriority[] = ['low', 'medium', 'high', 'urgent'];
 
 export default function NewTicketPage() {
   const { status, session } = useAuth();
@@ -18,11 +25,12 @@ export default function NewTicketPage() {
 
   if (status === 'anonymous') {
     return (
-      <main className={styles.page}>
-        <p>
-          You are not signed in. <Link href="/login">Sign in</Link>
-        </p>
-      </main>
+      <EmptyState
+        icon={<LockIcon size={22} />}
+        title="You are not signed in"
+        hint="Sign in to open a new support ticket."
+        action={<ButtonLink href="/login">Sign in</ButtonLink>}
+      />
     );
   }
 
@@ -50,48 +58,68 @@ export default function NewTicketPage() {
   }
 
   return (
-    <main className={styles.page}>
-      <h1>New ticket</h1>
-      <form onSubmit={handleSubmit} aria-label="new ticket form">
-        <label htmlFor="title">Title</label>
-        <input
-          id="title"
-          required
-          minLength={3}
-          maxLength={200}
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-
-        <label htmlFor="description">Description</label>
-        <textarea
-          id="description"
-          required
-          maxLength={5000}
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-        />
-
-        <label htmlFor="priority">Priority</label>
-        <select
-          id="priority"
-          value={priority}
-          onChange={(event) =>
-            setPriority(event.target.value as TicketPriority)
-          }
+    <div className={styles.wrap}>
+      <h1 className={styles.title}>New ticket</h1>
+      <Card className={styles.card}>
+        <form
+          onSubmit={handleSubmit}
+          aria-label="new ticket form"
+          className={styles.form}
         >
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="urgent">Urgent</option>
-        </select>
+          <Input
+            id="title"
+            label="Title"
+            required
+            minLength={3}
+            maxLength={200}
+            placeholder="Summarize the problem"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
 
-        {error ? <p role="alert">{error}</p> : null}
+          <Textarea
+            id="description"
+            label="Description"
+            required
+            maxLength={5000}
+            placeholder="What happened? What did you expect instead?"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Creating…' : 'Create ticket'}
-        </button>
-      </form>
-    </main>
+          <fieldset className={styles.priorityGroup}>
+            <legend className={styles.legend}>Priority</legend>
+            <div className={styles.priorityOptions}>
+              {PRIORITIES.map((option) => (
+                <label
+                  key={option}
+                  className={
+                    priority === option
+                      ? `${styles.priorityPill} ${styles.priorityActive}`
+                      : styles.priorityPill
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="priority"
+                    value={option}
+                    checked={priority === option}
+                    onChange={() => setPriority(option)}
+                    className="sr-only"
+                  />
+                  <PriorityDot priority={option} />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {error ? <FormError>{error}</FormError> : null}
+
+          <Button type="submit" loading={submitting} className={styles.submit}>
+            Create ticket
+          </Button>
+        </form>
+      </Card>
+    </div>
   );
 }

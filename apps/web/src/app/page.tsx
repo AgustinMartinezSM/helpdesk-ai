@@ -1,19 +1,28 @@
-import Link from 'next/link';
+'use client';
+
+import { useAuth } from '../components/auth-context';
+import { ButtonLink } from '../components/ui/button';
 import styles from './page.module.css';
 
 export default function Index() {
+  const { status } = useAuth();
+
   return (
-    <main className={styles.page}>
-      <h1>HelpDesk AI</h1>
-      <p>
-        Help desk platform with AI-assisted support workflows. Authentication is
-        live; ticket management arrives in upcoming sprints.
+    <div className={styles.hero}>
+      <div className={styles.glow} aria-hidden="true" />
+      <h1 className={styles.title}>
+        HelpDesk <span>AI</span>
+      </h1>
+      <p className={styles.tagline}>
+        Calm, fast support — with AI-assisted workflows behind every ticket.
       </p>
-      <p>
-        <Link href="/login">Sign in</Link> ·{' '}
-        <Link href="/tickets">Tickets</Link> ·{' '}
-        <Link href="/account">Account</Link>
-      </p>
-    </main>
+      <div className={styles.cta}>
+        {status === 'authenticated' ? (
+          <ButtonLink href="/tickets">Go to tickets</ButtonLink>
+        ) : (
+          <ButtonLink href="/login">Sign in</ButtonLink>
+        )}
+      </div>
+    </div>
   );
 }

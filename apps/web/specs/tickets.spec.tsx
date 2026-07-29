@@ -1,5 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { AuthProvider } from '../src/components/auth-context';
 import TicketsPage from '../src/app/tickets/page';
 import NewTicketPage from '../src/app/tickets/new/page';
@@ -55,6 +61,7 @@ describe('TicketsPage', () => {
                 title: 'Broken printer',
                 status: 'open',
                 priority: 'high',
+                createdAt: '2026-07-27T10:00:00.000Z',
               },
             ],
           },
@@ -68,8 +75,57 @@ describe('TicketsPage', () => {
       </AuthProvider>,
     );
 
-    expect(await screen.findByText('Broken printer')).toBeTruthy();
-    expect(screen.getByText('[open] · high')).toBeTruthy();
+    // Scope to the row: the status filter pills also render "Open".
+    const row = (await screen.findByText('Broken printer')).closest('a');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText('Open')).toBeTruthy();
+    expect(within(row as HTMLElement).getByText('High')).toBeTruthy();
+  });
+
+  it('shows a loading skeleton while tickets are being fetched', async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (/\/session\/refresh$/.test(url)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => SESSION,
+        } as Response;
+      }
+      // The tickets request never resolves — the skeleton must stay up.
+      return new Promise(() => undefined) as never;
+    }) as unknown as typeof fetch;
+
+    render(
+      <AuthProvider>
+        <TicketsPage />
+      </AuthProvider>,
+    );
+
+    expect(
+      await screen.findByRole('status', { name: 'Loading tickets' }),
+    ).toBeTruthy();
+  });
+
+  it('reloads the list with the selected status filter', async () => {
+    const calls = mockFetch([
+      [/\/session\/refresh$/, { status: 200, body: SESSION }],
+      [/\/tickets(\?.*)?$/, { status: 200, body: { total: 0, items: [] } }],
+    ]);
+
+    render(
+      <AuthProvider>
+        <TicketsPage />
+      </AuthProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'In progress' }));
+
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.url.endsWith('/tickets?status=in_progress')),
+      ).toBe(true),
+    );
   });
 
   it('prompts anonymous visitors to sign in without calling the tickets API', async () => {

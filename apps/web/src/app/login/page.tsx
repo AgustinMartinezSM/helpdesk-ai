@@ -3,7 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../../components/auth-context';
-import styles from '../page.module.css';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { FormError, Input } from '../../components/ui/field';
+import styles from './page.module.css';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -30,35 +33,41 @@ export default function LoginPage() {
   }
 
   return (
-    <main className={styles.page}>
-      <h1>Sign in</h1>
-      <form onSubmit={handleSubmit} aria-label="login form">
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
+    <div className={styles.wrap}>
+      <Card className={styles.card}>
+        <h1 className={styles.title}>Sign in</h1>
+        <p className={styles.subtitle}>Welcome back — use your work account.</p>
+        <form
+          onSubmit={handleSubmit}
+          aria-label="login form"
+          className={styles.form}
+        >
+          <Input
+            id="email"
+            label="Email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <Input
+            id="password"
+            label="Password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
 
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
+          {error ? <FormError>{error}</FormError> : null}
 
-        {error ? <p role="alert">{error}</p> : null}
-
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
-    </main>
+          <Button type="submit" loading={submitting} className={styles.submit}>
+            Sign in
+          </Button>
+        </form>
+      </Card>
+    </div>
   );
 }
