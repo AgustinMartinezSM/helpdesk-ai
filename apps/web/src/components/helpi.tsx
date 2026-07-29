@@ -3,12 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  HELPI_DISCLAIMER,
-  hintFor,
-  type HelpiHint,
-} from '../../lib/helpi-hints';
-import { ArrowRightIcon, CompassIcon, XIcon } from '../ui/icons';
+import { HELPI_DISCLAIMER, hintFor, type HelpiHint } from '../lib/helpi-hints';
+import { ArrowRightIcon, CompassIcon, XIcon } from './ui/icons';
 import styles from './helpi.module.css';
 
 const DISMISSED_KEY = 'helpi-dismissed';
@@ -38,8 +34,17 @@ function writeFlag(key: string, value: boolean) {
   }
 }
 
+export interface HelpiProps {
+  /**
+   * Which corner Helpi occupies. The authenticated app puts it on the
+   * left: its primary buttons (Comment, Create ticket, Sign out) are all
+   * bottom-right, and a floating element there would sit over them.
+   */
+  side?: 'right' | 'left';
+}
+
 /**
- * A small floating product guide for the public pages.
+ * A small floating product guide.
  *
  * It is a disclosure, not a dialog: it never traps focus, never covers the
  * page and never steals focus when it appears on its own — it is
@@ -47,7 +52,7 @@ function writeFlag(key: string, value: boolean) {
  * `helpi-hints.ts`; there is deliberately no text input and no
  * conversation, because Helpi is written guidance rather than AI.
  */
-export function Helpi() {
+export function Helpi({ side = 'right' }: HelpiProps = {}) {
   const pathname = usePathname();
   // Nothing renders until mounted: the dismissal flag lives in
   // localStorage, which the server cannot know, and guessing would either
@@ -56,6 +61,7 @@ export function Helpi() {
   const [dismissed, setDismissed] = useState(false);
   const [open, setOpen] = useState(false);
   const launcherRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -90,10 +96,65 @@ export function Helpi() {
     return () => window.removeEventListener(HELPI_RESTORE_EVENT, restore);
   }, []);
 
+  // While someone is typing, get out of the way. On narrow screens there is
+  // no empty margin to sit in, so a floating element can cover the field or
+  // the button being used.
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const isField = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+    const onFocus = (event: FocusEvent) => {
+      if (isField(event.target)) {
+        setTyping(true);
+      }
+    };
+    const onBlur = (event: FocusEvent) => {
+      if (isField(event.target)) {
+        setTyping(false);
+      }
+    };
+    document.addEventListener('focusin', onFocus);
+    document.addEventListener('focusout', onBlur);
+    return () => {
+      document.removeEventListener('focusin', onFocus);
+      document.removeEventListener('focusout', onBlur);
+    };
+  }, []);
+
   const close = useCallback(() => {
     setOpen(false);
     launcherRef.current?.focus();
   }, []);
+
+  /**
+   * The open panel floats over the page, and on a narrow screen it can
+   * land on top of a control (measured: it covers the comment textarea on
+   * the ticket detail at 375px). Rather than let it sit in the way, it
+   * behaves like every other popover here: a tap outside or a scroll
+   * dismisses it, so it is never something you have to work around.
+   * Focus is not moved on these paths — the user is already elsewhere.
+   */
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const root = rootRef.current;
+    function onPointerDown(event: MouseEvent | TouchEvent) {
+      if (root && !root.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onScroll() {
+      setOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, [open]);
 
   const dismiss = useCallback(() => {
     writeFlag(DISMISSED_KEY, true);
@@ -104,13 +165,16 @@ export function Helpi() {
 
   const hint: HelpiHint | null = hintFor(pathname);
 
-  if (!mounted || dismissed || !hint) {
+  if (!mounted || dismissed || !hint || typing) {
     return null;
   }
 
   return (
     <div
-      className={styles.root}
+      ref={rootRef}
+      className={[styles.root, side === 'left' ? styles.left : '']
+        .filter(Boolean)
+        .join(' ')}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && open) {
           event.stopPropagation();

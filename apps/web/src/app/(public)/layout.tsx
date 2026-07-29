@@ -1,4 +1,4 @@
-import { Helpi } from '../../components/public/helpi';
+import { Helpi } from '../../components/helpi';
 import { PublicFooter } from '../../components/public/public-footer';
 import { PublicNav } from '../../components/public/public-nav';
 import styles from './layout.module.css';

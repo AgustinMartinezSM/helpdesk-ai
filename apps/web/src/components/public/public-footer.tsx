@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { PUBLIC_NAV_LINKS, siteConfig } from '../../lib/site-config';
-import { HelpiRestore } from './helpi';
+import { HelpiRestore } from '../helpi';
 import styles from './public-footer.module.css';
 
 /**

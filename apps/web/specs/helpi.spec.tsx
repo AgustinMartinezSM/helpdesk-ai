@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { Helpi, HelpiRestore } from '../src/components/public/helpi';
+import { Helpi, HelpiRestore } from '../src/components/helpi';
 import {
   HELPI_DISCLAIMER,
   hintFor,
@@ -69,14 +69,35 @@ describe('Helpi hints are honest guidance, not a chatbot', () => {
     }
   });
 
-  it('says nothing on authenticated routes — it is public-only for now', () => {
-    expect(hintFor('/tickets')).toBeNull();
-    expect(hintFor('/tickets/new')).toBeNull();
-    expect(hintFor('/account')).toBeNull();
+  it('guides the authenticated app routes too', () => {
+    expect(hintFor('/tickets')?.message).toMatch(/filters/i);
+    expect(hintFor('/tickets/new')?.message).toMatch(/your own words/i);
+    expect(hintFor('/account')?.message).toMatch(/roles/i);
+  });
+
+  it('matches the ticket detail route by pattern, not by guessing', () => {
+    const detail = hintFor('/tickets/25556001-c028-4f75-bb66-25197de840c6');
+    expect(detail?.message).toMatch(/replies, status, history/);
+    // /tickets/new must win over the dynamic pattern.
+    expect(hintFor('/tickets/new')?.message).not.toMatch(/replies, status/);
+  });
+
+  it('stays quiet on an unknown authenticated route', () => {
+    // Guessing inside a tool someone is working in is worse than silence.
+    expect(hintFor('/tickets/abc/extra')).toBeNull();
+    expect(hintFor('/account/settings')).toBeNull();
   });
 
   it('falls back to the intro on an unknown public route', () => {
     expect(hintFor('/something-new')?.message).toMatch(/I'm Helpi/);
+  });
+
+  it('keeps app hints within the same length budget', () => {
+    for (const route of ['/tickets', '/tickets/new', '/account']) {
+      const message = hintFor(route)?.message ?? '';
+      expect(message.length).toBeGreaterThan(10);
+      expect(message.length).toBeLessThanOrEqual(90);
+    }
   });
 });
 
@@ -194,6 +215,64 @@ describe('Helpi behaviour', () => {
 
     expect(localStorage.getItem('helpi-dismissed')).toBeNull();
     expect(screen.getByRole('button', { name: 'Close Helpi' })).toBeTruthy();
+  });
+
+  it('anchors left inside the app so it clears the primary buttons', () => {
+    currentPath = '/tickets';
+    const { container } = render(<Helpi side="left" />);
+
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toMatch(/left/);
+  });
+
+  it('closes when the page is tapped or scrolled, so it never sits in the way', () => {
+    render(<Helpi />);
+    openPanel();
+    expect(document.getElementById('helpi-panel')).not.toBeNull();
+
+    // Measured at 375px: the open panel overlaps the comment textarea on
+    // the ticket detail, so it must yield to the first tap outside it.
+    fireEvent.pointerDown(document.body);
+    expect(document.getElementById('helpi-panel')).toBeNull();
+
+    openPanel();
+    expect(document.getElementById('helpi-panel')).not.toBeNull();
+    fireEvent.scroll(window);
+    expect(document.getElementById('helpi-panel')).toBeNull();
+  });
+
+  it('stays open when the tap lands inside it', () => {
+    render(<Helpi />);
+    openPanel();
+
+    const panel = document.getElementById('helpi-panel') as HTMLElement;
+    fireEvent.pointerDown(panel);
+    expect(document.getElementById('helpi-panel')).not.toBeNull();
+  });
+
+  it('gets out of the way while someone is typing', () => {
+    currentPath = '/tickets/new';
+    render(
+      <>
+        <textarea aria-label="Description" />
+        <Helpi side="left" />
+      </>,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Helpi, the product guide' }),
+    ).toBeTruthy();
+
+    // A floating element must never sit over the field being used.
+    fireEvent.focusIn(screen.getByLabelText('Description'));
+    expect(
+      screen.queryByRole('button', { name: 'Helpi, the product guide' }),
+    ).toBeNull();
+
+    fireEvent.focusOut(screen.getByLabelText('Description'));
+    expect(
+      screen.getByRole('button', { name: 'Helpi, the product guide' }),
+    ).toBeTruthy();
   });
 
   it('hides itself while the mobile menu owns the screen', () => {

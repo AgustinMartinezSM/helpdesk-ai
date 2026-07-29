@@ -22,6 +22,17 @@
   pointer-events: auto;
 }
 
+/*
+ * The authenticated app anchors Helpi on the left. Every primary button in
+ * the app (Comment, Create ticket, Sign out) is bottom-right within its
+ * container, and a fixed element there would sit over them once scrolled.
+ */
+.left {
+  right: auto;
+  left: 1.5rem;
+  align-items: flex-start;
+}
+
 /* Helpi must never compete with the mobile navigation. */
 :global(html[data-menu-open]) .root {
   display: none;
@@ -197,7 +208,8 @@
 /* -------------------------------------------------------------- responsive */
 
 @media (max-width: 480px) {
-  .root {
+  .root,
+  .left {
     right: 1rem;
     left: 1rem;
     bottom: calc(1rem + env(safe-area-inset-bottom, 0px));

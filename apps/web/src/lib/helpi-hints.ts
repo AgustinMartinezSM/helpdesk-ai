@@ -52,6 +52,27 @@ const HINTS: Record<string, HelpiHint> = {
   '/login': {
     message: 'You can sign in here to access the platform.',
   },
+
+  // Authenticated app. These hints are shorter and fewer on purpose:
+  // someone already working does not need to be taught the product, only
+  // pointed at a control they may not have noticed.
+  '/tickets': {
+    message: 'Use these filters to find requests faster.',
+    action: { href: '/tickets/new', label: 'Or open a new request' },
+  },
+  '/tickets/new': {
+    message:
+      'Describe the problem in your own words. Priority helps the team triage.',
+  },
+  '/account': {
+    message: 'Your roles decide what you can do across the platform.',
+  },
+};
+
+/** Ticket detail lives at /tickets/<id>, so it needs a pattern. */
+const TICKET_DETAIL_HINT: HelpiHint = {
+  message:
+    'Everything about this request stays here: replies, status, history.',
 };
 
 /**
@@ -64,7 +85,12 @@ export function hintFor(pathname: string): HelpiHint | null {
   if (exact) {
     return exact;
   }
-  // Authenticated routes are out of scope: Helpi is public-only for now.
+  // /tickets/<id> — checked after the exact table so /tickets/new wins.
+  if (/^\/tickets\/[^/]+$/.test(pathname)) {
+    return TICKET_DETAIL_HINT;
+  }
+  // An unknown authenticated route gets nothing: guessing inside a tool
+  // someone is working in is worse than staying quiet.
   if (pathname.startsWith('/tickets') || pathname.startsWith('/account')) {
     return null;
   }

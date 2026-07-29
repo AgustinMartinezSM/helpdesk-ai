@@ -216,7 +216,21 @@ Behavioural rules worth knowing before changing it:
   (`HelpiRestore`) brings it back, because one click should not remove a
   feature permanently. Blocked storage degrades to "the choice is not
   remembered", never to "the guide is gone".
-- Authenticated routes return no hint — Helpi is public-only for now.
+- **Never in the way of a control.** Three mechanisms, each added because
+  a measurement demanded it:
+  - `side="left"` in the authenticated app, since every primary button
+    there (Comment, Create ticket, Sign out) sits bottom-right;
+  - it disappears while an `input`, `textarea` or `select` has focus — on
+    a narrow screen there is no empty margin to sit in;
+  - a tap outside it or any scroll dismisses the open panel, because at
+    375 px the panel measurably covers the comment textarea on the ticket
+    detail. Neither path moves focus; the user is already elsewhere.
+- Unknown authenticated routes return no hint: guessing inside a tool
+  someone is working in is worse than staying quiet.
+
+Adding a hint for a new route means editing `helpi-hints.ts` and nothing
+else. If the route is dynamic, add a pattern **after** the exact-match
+table so `/tickets/new` keeps winning over `/tickets/<id>`.
 
 ## Content voice
 
