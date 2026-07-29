@@ -1,0 +1,75 @@
+.page {
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding: clamp(3rem, 7vw, 5rem) 0 1rem;
+}
+
+.headerInner {
+  max-width: var(--container-public);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.eyebrow {
+  margin-bottom: 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.title {
+  max-width: 40rem;
+  font-size: var(--display-xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.lead {
+  max-width: 44rem;
+  margin-top: 1rem;
+  font-size: 1.0625rem;
+  line-height: 1.9;
+  color: var(--text-secondary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.ctaBand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: var(--section-gap) 1.5rem;
+  text-align: center;
+}
+
+.ctaText {
+  max-width: 32rem;
+  font-size: 1.0625rem;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.ctaActions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (max-width: 480px) {
+  .headerInner {
+    padding: 0 1rem;
+  }
+}
