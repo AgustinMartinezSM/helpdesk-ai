@@ -1,5 +1,6 @@
 import './global.css';
 import { Inter } from 'next/font/google';
+import { AppShell } from '../components/app-shell';
 import { AuthProvider } from '../components/auth-context';
 
 const inter = Inter({
@@ -30,7 +31,9 @@ export default function RootLayout({
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

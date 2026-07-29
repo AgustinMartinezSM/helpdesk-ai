@@ -193,4 +193,15 @@ h3 {
   html {
     scroll-behavior: smooth;
   }
+
+  .page-enter {
+    animation: page-enter 250ms var(--ease-out) both;
+  }
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
