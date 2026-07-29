@@ -1,0 +1,73 @@
+.dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.625rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.open {
+  background: var(--status-open-bg);
+  color: var(--status-open-fg);
+}
+.open .dot {
+  background: var(--status-open-dot);
+}
+
+.inProgress {
+  background: var(--status-progress-bg);
+  color: var(--status-progress-fg);
+}
+.inProgress .dot {
+  background: var(--status-progress-dot);
+}
+
+.resolved {
+  background: var(--status-resolved-bg);
+  color: var(--status-resolved-fg);
+}
+.resolved .dot {
+  background: var(--status-resolved-dot);
+}
+
+.closed {
+  background: var(--status-closed-bg);
+  color: var(--status-closed-fg);
+}
+.closed .dot {
+  background: var(--status-closed-dot);
+}
+
+.priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pLow {
+  background: var(--priority-low);
+}
+.pMedium {
+  background: var(--priority-medium);
+}
+.pHigh {
+  background: var(--priority-high);
+}
+.pUrgent {
+  background: var(--priority-urgent);
+}
