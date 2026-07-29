@@ -38,7 +38,18 @@ const THREAD: Entry[] = [
     author: 'Support',
     body: 'The account was unlocked and access was restored. Please try again and tell me if anything still fails.',
   },
-  { kind: 'status', status: 'resolved', label: 'Resolved — fix confirmed' },
+  {
+    kind: 'status',
+    status: 'resolved',
+    label: 'Resolved — waiting for Marina to confirm',
+  },
+  {
+    kind: 'message',
+    from: 'user',
+    author: 'Marina, accounting',
+    body: 'I am in, and the payments went through. Thank you.',
+  },
+  { kind: 'status', status: 'closed', label: 'Closed — Marina confirmed it' },
 ];
 
 /**
@@ -85,7 +96,8 @@ export function ConversationExample(): ReactNode {
       </div>
       <figcaption className={styles.caption}>
         Nothing here lives in a private chat: the question, the answer, every
-        status change and who did what stay attached to the request.
+        status change and who did what stay attached to the request. Marina has
+        the last word — the team resolves, she confirms and closes.
       </figcaption>
     </figure>
   );

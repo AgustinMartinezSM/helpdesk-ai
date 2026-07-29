@@ -90,7 +90,8 @@ const ORGANIZATION_ROLES = [
   },
   {
     role: 'Administrators',
-    detail: 'Control who can do what, with every action recorded.',
+    detail:
+      'Rely on roles being enforced everywhere and on an audit trail that records every action.',
   },
 ];
 
@@ -203,7 +204,8 @@ export default function HowItWorksPage() {
         <p className={styles.rolesNote}>
           Requests, conversations, internal notes, history and role-based access
           work today. Manager dashboards and in-app notifications run behind the
-          API but do not have their product screens yet — the{' '}
+          API but have no product screens yet, and roles are assigned outside
+          the product — there is no administration UI. The{' '}
           <Link href="/features" className={styles.inlineLink}>
             features page
           </Link>{' '}

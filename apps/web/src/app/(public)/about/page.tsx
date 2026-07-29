@@ -188,7 +188,8 @@ export default function AboutPage() {
             HelpDesk AI is not a company and I am not pretending it is one.
             There are no clients, no funding and no production users, and you
             will not find invented numbers anywhere on this site. It is a real
-            platform I am building on my own, in the open, one sprint at a time.
+            platform I am building on my own, one sprint at a time, and anything
+            it does not do yet says so.
           </p>
           <p>What I am learning by doing it:</p>
           <ul className={styles.learningList} role="list">

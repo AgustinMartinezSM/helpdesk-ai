@@ -107,6 +107,26 @@ describe('About page', () => {
     );
   });
 
+  it('keeps exactly one h1 and a heading order that never skips a level', () => {
+    const { container } = render(<AboutPage />);
+
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    const levels = [...container.querySelectorAll('h1, h2, h3')].map((node) =>
+      Number(node.tagName[1]),
+    );
+    for (let i = 1; i < levels.length; i++) {
+      expect(levels[i] - levels[i - 1]).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('does not claim the repository is public while engineering says otherwise', () => {
+    render(<AboutPage />);
+
+    // /engineering states the repository is still local-only, so About
+    // must not imply an open repository a visitor could go and read.
+    expect(document.body.textContent).not.toMatch(/in the open/i);
+  });
+
   it('keeps the working principles', () => {
     render(<AboutPage />);
 

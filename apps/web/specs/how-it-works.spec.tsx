@@ -10,11 +10,29 @@ describe('How it works — plain language first', () => {
       level: 2,
       name: /A ticket is just a request for help that stays organized/,
     });
-    expect(definition).toBeTruthy();
-    // The definition avoids implementation vocabulary entirely.
-    const lead = definition.parentElement?.textContent ?? '';
-    expect(lead).toMatch(/request for help/i);
+    // The lead — not the heading — must carry the actual explanation, so
+    // assert on the lead paragraph alone. (Asserting on the header's
+    // combined text passes on the heading's own words and proves nothing.)
+    const lead = [...(definition.parentElement?.querySelectorAll('p') ?? [])]
+      .map((p) => p.textContent ?? '')
+      .find((text) => text.includes('“ticket” means'));
+    expect(lead).toBeDefined();
+    expect(lead).toMatch(/status/i);
+    expect(lead).toMatch(/conversation/i);
+    expect(lead).toMatch(/history/i);
     expect(lead).not.toMatch(/DTO|RabbitMQ|PostgreSQL|httpOnly|BFF/);
+  });
+
+  it('keeps exactly one h1 and a heading order that never skips a level', () => {
+    const { container } = render(<HowItWorksPage />);
+
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    const levels = [...container.querySelectorAll('h1, h2, h3')].map((node) =>
+      Number(node.tagName[1]),
+    );
+    for (let i = 1; i < levels.length; i++) {
+      expect(levels[i] - levels[i - 1]).toBeLessThanOrEqual(1);
+    }
   });
 
   it('leads with the three parts in a user-first order', () => {
@@ -76,9 +94,22 @@ describe('How it works — plain language first', () => {
     // Movement through states.
     expect(scoped.getByText(/Open — waiting for the team/)).toBeTruthy();
     expect(scoped.getByText(/In progress — someone is on it/)).toBeTruthy();
-    // And an ending.
+    // And a real ending: the team resolves, the requester confirms and it
+    // closes — the product's central claim, so the example must show it.
     expect(scoped.getByText(/access was restored/i)).toBeTruthy();
-    expect(scoped.getByText(/Resolved — fix confirmed/)).toBeTruthy();
+    expect(
+      scoped.getByText(/Resolved — waiting for Marina to confirm/),
+    ).toBeTruthy();
+    expect(scoped.getByText(/the payments went through/i)).toBeTruthy();
+    expect(scoped.getByText(/Closed — Marina confirmed it/)).toBeTruthy();
+  });
+
+  it('never labels the resolved state as already confirmed', () => {
+    render(<HowItWorksPage />);
+
+    // "Resolved" means waiting for the requester; only "Closed" is
+    // confirmed. The example used to contradict the lifecycle list.
+    expect(document.body.textContent).not.toMatch(/Resolved — fix confirmed/);
   });
 });
 
