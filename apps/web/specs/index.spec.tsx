@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { AuthProvider } from '../src/components/auth-context';
-import Page from '../src/app/page';
+import Page from '../src/app/(public)/page';
 
 describe('Landing page', () => {
   it('renders the product name as the main heading', async () => {

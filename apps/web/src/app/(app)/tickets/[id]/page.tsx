@@ -9,31 +9,31 @@ import {
   useState,
   type FormEvent,
 } from 'react';
-import { useAuth } from '../../../components/auth-context';
-import { Button, ButtonLink } from '../../../components/ui/button';
-import { Card } from '../../../components/ui/card';
-import { EmptyState } from '../../../components/ui/empty-state';
-import { FormError, Textarea } from '../../../components/ui/field';
+import { useAuth } from '../../../../components/auth-context';
+import { Button, ButtonLink } from '../../../../components/ui/button';
+import { Card } from '../../../../components/ui/card';
+import { EmptyState } from '../../../../components/ui/empty-state';
+import { FormError, Textarea } from '../../../../components/ui/field';
 import {
   ArrowLeftIcon,
   CheckIcon,
   LockIcon,
   SendIcon,
-} from '../../../components/ui/icons';
-import { Skeleton } from '../../../components/ui/skeleton';
+} from '../../../../components/ui/icons';
+import { Skeleton } from '../../../../components/ui/skeleton';
 import {
   PriorityDot,
   StatusBadge,
   STATUS_LABELS,
-} from '../../../components/ui/status';
-import { formatDateTime, relativeTime } from '../../../lib/format';
+} from '../../../../components/ui/status';
+import { formatDateTime, relativeTime } from '../../../../lib/format';
 import {
   addComment,
   changeStatus,
   getTicket,
   type TicketDetails,
   type TicketStatus,
-} from '../../../lib/tickets';
+} from '../../../../lib/tickets';
 import styles from './page.module.css';
 
 /** Legal next statuses, mirrored from the domain for button rendering only. */

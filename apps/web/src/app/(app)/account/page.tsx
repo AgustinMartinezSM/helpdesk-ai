@@ -1,11 +1,11 @@
 'use client';
 
-import { useAuth } from '../../components/auth-context';
-import { Button, ButtonLink } from '../../components/ui/button';
-import { Card } from '../../components/ui/card';
-import { EmptyState } from '../../components/ui/empty-state';
-import { LockIcon, LogOutIcon } from '../../components/ui/icons';
-import { Skeleton } from '../../components/ui/skeleton';
+import { useAuth } from '../../../components/auth-context';
+import { Button, ButtonLink } from '../../../components/ui/button';
+import { Card } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { LockIcon, LogOutIcon } from '../../../components/ui/icons';
+import { Skeleton } from '../../../components/ui/skeleton';
 import styles from './page.module.css';
 
 export default function AccountPage() {

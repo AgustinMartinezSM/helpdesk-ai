@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider } from '../src/components/auth-context';
-import LoginPage from '../src/app/login/page';
+import LoginPage from '../src/app/(public)/login/page';
 
 const push = jest.fn();
 jest.mock('next/navigation', () => ({

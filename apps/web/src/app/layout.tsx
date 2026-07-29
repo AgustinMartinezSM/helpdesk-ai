@@ -1,7 +1,8 @@
 import './global.css';
+import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { AppShell } from '../components/app-shell';
 import { AuthProvider } from '../components/auth-context';
+import { siteConfig } from '../lib/site-config';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -9,10 +10,25 @@ const inter = Inter({
   variable: '--font-sans',
 });
 
-export const metadata = {
-  title: 'HelpDesk AI',
+export const metadata: Metadata = {
+  // Real deployments set NEXT_PUBLIC_SITE_URL; locally Next falls back
+  // to localhost, which is fine for a not-yet-deployed portfolio build.
+  ...(siteConfig.siteUrl ? { metadataBase: new URL(siteConfig.siteUrl) } : {}),
+  title: {
+    default: 'HelpDesk AI — Intelligent support operations',
+    template: '%s — HelpDesk AI',
+  },
   description:
-    'Help desk platform with AI-assisted support workflows. Platform foundation stage.',
+    'Support operations platform: centralize requests, assist support teams with AI, and keep humans in control of every important decision. Designed and developed by Agustín Martínez.',
+  applicationName: 'HelpDesk AI',
+  authors: [{ name: 'Agustín Martínez' }],
+  openGraph: {
+    siteName: 'HelpDesk AI',
+    type: 'website',
+    title: 'HelpDesk AI — Intelligent support operations',
+    description:
+      'Support operations platform with AI-assisted workflows and human control.',
+  },
 };
 
 /**
@@ -33,9 +49,7 @@ export default function RootLayout({
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
-        <AuthProvider>
-          <AppShell>{children}</AppShell>
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

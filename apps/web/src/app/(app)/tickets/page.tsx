@@ -2,21 +2,25 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useAuth } from '../../components/auth-context';
-import { ButtonLink } from '../../components/ui/button';
-import { Card } from '../../components/ui/card';
-import { EmptyState } from '../../components/ui/empty-state';
-import { FormError } from '../../components/ui/field';
+import { useAuth } from '../../../components/auth-context';
+import { ButtonLink } from '../../../components/ui/button';
+import { Card } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { FormError } from '../../../components/ui/field';
 import {
   ChevronRightIcon,
   LockIcon,
   PlusIcon,
   TicketIcon,
-} from '../../components/ui/icons';
-import { Skeleton } from '../../components/ui/skeleton';
-import { PriorityDot, StatusBadge } from '../../components/ui/status';
-import { relativeTime } from '../../lib/format';
-import { listTickets, type Ticket, type TicketStatus } from '../../lib/tickets';
+} from '../../../components/ui/icons';
+import { Skeleton } from '../../../components/ui/skeleton';
+import { PriorityDot, StatusBadge } from '../../../components/ui/status';
+import { relativeTime } from '../../../lib/format';
+import {
+  listTickets,
+  type Ticket,
+  type TicketStatus,
+} from '../../../lib/tickets';
 import styles from './page.module.css';
 
 type Filter = TicketStatus | 'all';

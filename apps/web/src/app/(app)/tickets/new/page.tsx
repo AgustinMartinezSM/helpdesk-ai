@@ -2,14 +2,14 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
-import { useAuth } from '../../../components/auth-context';
-import { Button, ButtonLink } from '../../../components/ui/button';
-import { Card } from '../../../components/ui/card';
-import { EmptyState } from '../../../components/ui/empty-state';
-import { FormError, Input, Textarea } from '../../../components/ui/field';
-import { LockIcon } from '../../../components/ui/icons';
-import { PriorityDot } from '../../../components/ui/status';
-import { createTicket, type TicketPriority } from '../../../lib/tickets';
+import { useAuth } from '../../../../components/auth-context';
+import { Button, ButtonLink } from '../../../../components/ui/button';
+import { Card } from '../../../../components/ui/card';
+import { EmptyState } from '../../../../components/ui/empty-state';
+import { FormError, Input, Textarea } from '../../../../components/ui/field';
+import { LockIcon } from '../../../../components/ui/icons';
+import { PriorityDot } from '../../../../components/ui/status';
+import { createTicket, type TicketPriority } from '../../../../lib/tickets';
 import styles from './page.module.css';
 
 const PRIORITIES: TicketPriority[] = ['low', 'medium', 'high', 'urgent'];

@@ -7,8 +7,8 @@ import {
   within,
 } from '@testing-library/react';
 import { AuthProvider } from '../src/components/auth-context';
-import TicketsPage from '../src/app/tickets/page';
-import NewTicketPage from '../src/app/tickets/new/page';
+import TicketsPage from '../src/app/(app)/tickets/page';
+import NewTicketPage from '../src/app/(app)/tickets/new/page';
 
 const push = jest.fn();
 jest.mock('next/navigation', () => ({

@@ -1,8 +1,8 @@
 'use client';
 
-import { useAuth } from '../components/auth-context';
-import { ButtonLink } from '../components/ui/button';
-import { Skeleton } from '../components/ui/skeleton';
+import { useAuth } from '../../components/auth-context';
+import { ButtonLink } from '../../components/ui/button';
+import { Skeleton } from '../../components/ui/skeleton';
 import styles from './page.module.css';
 
 export default function Index() {

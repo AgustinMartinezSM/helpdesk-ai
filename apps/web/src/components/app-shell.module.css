@@ -64,39 +64,6 @@
   gap: 0.5rem;
 }
 
-/* ---------------------------------------------------------- theme toggle */
-
-.iconButton {
-  display: grid;
-  place-items: center;
-  width: 2.125rem;
-  height: 2.125rem;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
-}
-
-.iconButton:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.sun {
-  display: none;
-}
-
-:global([data-theme='dark']) .sun {
-  display: block;
-}
-
-:global([data-theme='dark']) .moon {
-  display: none;
-}
-
 /* ------------------------------------------------------------- user menu */
 
 .menu {

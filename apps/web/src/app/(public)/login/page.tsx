@@ -2,10 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
-import { useAuth } from '../../components/auth-context';
-import { Button } from '../../components/ui/button';
-import { Card } from '../../components/ui/card';
-import { FormError, Input } from '../../components/ui/field';
+import { useAuth } from '../../../components/auth-context';
+import { Button } from '../../../components/ui/button';
+import { Card } from '../../../components/ui/card';
+import { FormError, Input } from '../../../components/ui/field';
 import styles from './page.module.css';
 
 export default function LoginPage() {
