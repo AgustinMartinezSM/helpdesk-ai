@@ -50,25 +50,77 @@ describe('Security page', () => {
 });
 
 describe('About page', () => {
-  it('presents the project honestly with its principles and attribution', () => {
+  it('is written in the first person throughout', () => {
     render(<AboutPage />);
 
-    expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
+    const body = document.body.textContent ?? '';
+    // A handful of first-person markers spread across the page, not one
+    // token in a single sentence.
+    const firstPerson = body.match(/\b(I|My|me)\b/g) ?? [];
+    expect(firstPerson.length).toBeGreaterThan(20);
+    expect(body).toMatch(/I started this project/);
+    expect(body).toMatch(/I wanted/);
+  });
+
+  it('contains no third-person biography patterns', () => {
+    render(<AboutPage />);
+
+    const body = document.body.textContent ?? '';
+    for (const pattern of [
+      /Agustín (created|wanted|built|designed|decided|believes)/,
+      /The developer\b/,
+      /The author\b/,
+      /\bHe (created|designed|built|decided)\b/,
+      /is a portfolio project by Agustín/,
+      /was created by Agustín/,
+    ]) {
+      expect(body).not.toMatch(pattern);
+    }
+    // The name survives only as attribution.
+    expect(body.match(/Agustín Martínez/g) ?? []).toHaveLength(1);
+    expect(
+      screen.getByText('Designed and developed by Agustín Martínez.'),
+    ).toBeTruthy();
+  });
+
+  it('explains the real problem and my approach to AI in my own voice', () => {
+    render(<AboutPage />);
+
+    const body = document.body.textContent ?? '';
+    // The scattered-requests problem.
+    expect(body).toMatch(/direct message/i);
+    expect(body).toMatch(/spreadsheet/i);
+    expect(body).toMatch(/forgotten/i);
+    // Why not a simpler build.
+    expect(body).toMatch(/I could have built a form, a table and a database/);
+    // AI as an assistant, stated personally.
+    expect(body).toMatch(/What I do not want is for it to decide/);
+  });
+
+  it('invents no company, clients, funding or usage', () => {
+    render(<AboutPage />);
+
+    const body = document.body.textContent ?? '';
+    expect(body).toMatch(/not a company and I am not pretending it is one/i);
+    expect(body).not.toMatch(
+      /our (customers|clients|team of)|funded by|trusted by|\d+ (companies|customers|users)/i,
+    );
+  });
+
+  it('keeps the working principles', () => {
+    render(<AboutPage />);
+
     for (const principle of [
       'Quality over speed',
       'Architecture before implementation',
-      'Human control over AI suggestions',
-      'Security as a product requirement',
-      'Documentation as implementation',
+      'People decide, AI assists',
+      'Security is part of the feature',
       'Every decision must be defensible',
     ]) {
       expect(
         screen.getByRole('heading', { level: 3, name: principle }),
       ).toBeTruthy();
     }
-    expect(
-      screen.getByText('Designed and developed by Agustín Martínez.'),
-    ).toBeTruthy();
   });
 });
 

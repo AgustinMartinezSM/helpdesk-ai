@@ -43,13 +43,53 @@
   display: flex;
   flex-direction: column;
   gap: 1.125rem;
-  max-width: 44rem;
+  /* ~70 characters per line keeps long-form copy comfortable to read. */
+  max-width: 42rem;
 }
 
 .prose p {
-  font-size: 1rem;
+  font-size: 1.0625rem;
   line-height: 1.8;
   color: var(--text-secondary);
+}
+
+.pullQuote {
+  margin: 0.5rem 0;
+  padding: 0.25rem 0 0.25rem 1.25rem;
+  border-left: 3px solid var(--brand);
+  font-size: 1.1875rem;
+  line-height: 1.6;
+  font-weight: 500;
+  color: var(--text);
+  text-wrap: pretty;
+}
+
+.wantList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wantList li {
+  position: relative;
+  padding-left: 1.5rem;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.wantList li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6875rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
 }
 
 .principlesGrid {
@@ -87,14 +127,14 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  max-width: 44rem;
+  max-width: 42rem;
 }
 
 .learningItem {
   position: relative;
-  padding-left: 1.25rem;
-  font-size: 0.9375rem;
-  line-height: 1.65;
+  padding-left: 1.5rem;
+  font-size: 1rem;
+  line-height: 1.7;
   color: var(--text-secondary);
 }
 
@@ -102,15 +142,17 @@
   content: '';
   position: absolute;
   left: 0;
-  top: 0.55rem;
-  width: 0.4375rem;
-  height: 0.4375rem;
+  top: 0.65rem;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: var(--radius-pill);
-  background: var(--accent);
+  background: var(--brand);
 }
 
 .signature {
   margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--section-border);
   font-size: 0.9375rem;
   font-weight: 500;
 }
