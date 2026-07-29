@@ -1,0 +1,299 @@
+/**
+ * Single source of truth for the public site's capability and project
+ * status. Every status here must be derivable from the repository —
+ * the public site must never present planned work as available.
+ *
+ * - `available`     usable end-to-end in the product UI today
+ * - `api-ready`     implemented behind the gateway; product UI pending
+ * - `in-development` actively being built in the current sprint
+ * - `planned`       on the roadmap, not started
+ */
+
+export type CapabilityStatus =
+  'available' | 'api-ready' | 'in-development' | 'planned';
+
+export const CAPABILITY_STATUS_LABELS: Record<CapabilityStatus, string> = {
+  available: 'Available',
+  'api-ready': 'API ready',
+  'in-development': 'In development',
+  planned: 'Planned',
+};
+
+export interface Capability {
+  name: string;
+  description: string;
+  status: CapabilityStatus;
+  note?: string;
+}
+
+export interface CapabilityArea {
+  key: string;
+  title: string;
+  description: string;
+  capabilities: Capability[];
+}
+
+export const CAPABILITY_AREAS: CapabilityArea[] = [
+  {
+    key: 'support-operations',
+    title: 'Support operations',
+    description:
+      'The core of the product: a ticket lifecycle with explicit, audited transitions.',
+    capabilities: [
+      {
+        name: 'Ticket lifecycle',
+        description:
+          'Create, start progress, resolve, reopen and close — every transition is explicit and validated by the domain.',
+        status: 'available',
+      },
+      {
+        name: 'Priorities',
+        description:
+          'Low to urgent, chosen at creation and visible across the product.',
+        status: 'available',
+      },
+      {
+        name: 'Comments',
+        description:
+          'Conversation threads on every ticket, for requesters and staff.',
+        status: 'available',
+      },
+      {
+        name: 'Internal notes',
+        description:
+          'Staff-only notes, clearly labeled and never shown to requesters.',
+        status: 'available',
+      },
+      {
+        name: 'Ticket history',
+        description:
+          'Every action on a ticket is recorded and displayed as a timeline.',
+        status: 'available',
+      },
+      {
+        name: 'Assignments',
+        description: 'Route each ticket to the technician who owns it.',
+        status: 'api-ready',
+        note: 'The tickets API supports assignment; the assignee picker UI is planned.',
+      },
+      {
+        name: 'Categories',
+        description:
+          'Organize tickets by area — designed to pair with AI classification.',
+        status: 'planned',
+        note: 'The data model reserves a category per ticket.',
+      },
+      {
+        name: 'Attachments',
+        description: 'Files and screenshots attached to tickets and comments.',
+        status: 'planned',
+      },
+    ],
+  },
+  {
+    key: 'ai-assistance',
+    title: 'AI assistance',
+    description:
+      'AI as an assistant, never an authority: suggestions are reviewed by people, and every final action stays human.',
+    capabilities: [
+      {
+        name: 'Summarization',
+        description:
+          'Condense long ticket threads into a short, factual summary.',
+        status: 'planned',
+      },
+      {
+        name: 'Classification',
+        description: 'Suggest a category the moment a ticket arrives.',
+        status: 'planned',
+      },
+      {
+        name: 'Priority suggestion',
+        description:
+          'Estimate urgency from the request so triage starts pre-sorted.',
+        status: 'planned',
+      },
+      {
+        name: 'Suggested replies',
+        description:
+          'Draft a first response for the technician to review, edit and send.',
+        status: 'planned',
+      },
+      {
+        name: 'Duplicate detection',
+        description: 'Surface similar open tickets before work is done twice.',
+        status: 'planned',
+      },
+    ],
+  },
+  {
+    key: 'collaboration',
+    title: 'Collaboration',
+    description:
+      'Clear roles and clear ownership: everyone sees exactly what their role needs.',
+    capabilities: [
+      {
+        name: 'Role-based access',
+        description:
+          'Users, technicians and administrators, enforced end-to-end by role guards.',
+        status: 'available',
+      },
+      {
+        name: 'Ticket ownership',
+        description:
+          'Requesters keep control of their tickets — including the final "confirm fix and close".',
+        status: 'available',
+      },
+      {
+        name: 'Comment threads',
+        description: 'Public conversation plus staff-only internal notes.',
+        status: 'available',
+      },
+      {
+        name: 'Notifications',
+        description:
+          'In-app notifications when a ticket you care about changes.',
+        status: 'api-ready',
+        note: 'The notification service is live behind the gateway; the product UI is planned.',
+      },
+    ],
+  },
+  {
+    key: 'security-governance',
+    title: 'Security and governance',
+    description:
+      'Security is a product requirement, not an afterthought — see the Security page for the full picture.',
+    capabilities: [
+      {
+        name: 'Authentication',
+        description:
+          'argon2id password hashing, short-lived access tokens and refresh token rotation.',
+        status: 'available',
+      },
+      {
+        name: 'Authorization',
+        description:
+          'Role guards on every protected endpoint, from the BFF to each domain service.',
+        status: 'available',
+      },
+      {
+        name: 'Auditability',
+        description:
+          'An immutable audit service records every domain event, admin-only by design.',
+        status: 'api-ready',
+        note: 'Audit trail API is live; the browsing UI is planned.',
+      },
+      {
+        name: 'Input validation',
+        description:
+          'Every request body is validated against explicit DTOs before it reaches the domain.',
+        status: 'available',
+      },
+      {
+        name: 'Service isolation',
+        description:
+          'Each service owns its database — no shared tables, no cross-service queries.',
+        status: 'available',
+      },
+      {
+        name: 'Safe error handling',
+        description:
+          'Domain errors map to safe responses; internals are never leaked to clients.',
+        status: 'available',
+      },
+    ],
+  },
+  {
+    key: 'analytics-observability',
+    title: 'Analytics and observability',
+    description:
+      'Operational truth for managers and operators, projected from the event stream.',
+    capabilities: [
+      {
+        name: 'Ticket metrics',
+        description:
+          'Volumes, statuses and resolution snapshots projected per ticket.',
+        status: 'api-ready',
+        note: 'Staff-only summary API is live; dashboards are planned.',
+      },
+      {
+        name: 'Dashboards',
+        description: 'Visual operational dashboards for team managers.',
+        status: 'planned',
+      },
+      {
+        name: 'Structured logs',
+        description: 'Consistent, structured logging across every service.',
+        status: 'available',
+      },
+      {
+        name: 'Request correlation',
+        description:
+          'A correlation id follows each request across service boundaries.',
+        status: 'available',
+      },
+      {
+        name: 'Service health',
+        description: 'Health endpoints on every service in the platform.',
+        status: 'available',
+      },
+    ],
+  },
+];
+
+/** Curated subset shown on the landing page capability grid. */
+export const LANDING_CAPABILITIES: Capability[] = [
+  pick('support-operations', 'Ticket lifecycle'),
+  pick('collaboration', 'Role-based access'),
+  pick('support-operations', 'Internal notes'),
+  pick('support-operations', 'Ticket history'),
+  pick('ai-assistance', 'Summarization'),
+  pick('ai-assistance', 'Classification'),
+  pick('ai-assistance', 'Priority suggestion'),
+  pick('ai-assistance', 'Suggested replies'),
+  pick('ai-assistance', 'Duplicate detection'),
+  pick('collaboration', 'Notifications'),
+  pick('analytics-observability', 'Ticket metrics'),
+  pick('security-governance', 'Auditability'),
+];
+
+function pick(areaKey: string, name: string): Capability {
+  const area = CAPABILITY_AREAS.find((entry) => entry.key === areaKey);
+  const capability = area?.capabilities.find((entry) => entry.name === name);
+  if (!capability) {
+    throw new Error(`Unknown capability: ${areaKey}/${name}`);
+  }
+  return capability;
+}
+
+export interface ProjectStatusGroup {
+  title: 'Implemented' | 'In development' | 'Planned';
+  items: string[];
+}
+
+/** Honest project status, kept in sync with docs/progress. */
+export const PROJECT_STATUS: ProjectStatusGroup[] = [
+  {
+    title: 'Implemented',
+    items: [
+      'Authentication with refresh token rotation',
+      'Ticket lifecycle, comments and internal notes',
+      'Event-driven platform: audit, notifications and analytics services',
+      'API gateway and web BFF with an httpOnly session cookie',
+      'Design system, dark mode and accessible product UI',
+    ],
+  },
+  {
+    title: 'In development',
+    items: ['Public product experience — this site (Sprint 7.6)'],
+  },
+  {
+    title: 'Planned',
+    items: [
+      'AI service: summaries, classification, priorities and suggested replies',
+      'Notifications and analytics product UI',
+      'Self-service signup and assignee picker',
+      'Transactional outbox for event publishing',
+    ],
+  },
+];

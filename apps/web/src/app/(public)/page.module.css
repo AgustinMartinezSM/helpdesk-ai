@@ -1,46 +1,324 @@
-.hero {
-  position: relative;
+.page {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  padding: 6rem 1rem 5rem;
-  text-align: center;
 }
 
-/* Two large, very soft accent radials — cheap decorative depth. */
-.glow {
+/* -------------------------------------------------------------------- hero */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(3.5rem, 8vw, 6.5rem) 0 clamp(3rem, 7vw, 5.5rem);
+}
+
+.heroGlow {
   position: absolute;
-  inset: -4rem 0 0;
+  inset: 0;
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(
-      40rem 20rem at 20% 10%,
-      var(--accent-soft),
-      transparent 70%
-    ),
-    radial-gradient(30rem 18rem at 85% 70%, var(--accent-soft), transparent 70%);
+    radial-gradient(44rem 24rem at 12% 0%, var(--accent-soft), transparent 70%),
+    radial-gradient(36rem 20rem at 95% 90%, var(--accent-soft), transparent 72%);
 }
 
-.title {
-  font-size: clamp(2.25rem, 6vw, 3rem);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+.heroInner {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3.5rem;
+  align-items: center;
+  max-width: var(--container-public);
+  margin: 0 auto;
+  padding: 0 1.5rem;
 }
 
-.title span {
+.heroCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 36rem;
+}
+
+.heroEyebrow {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--accent);
 }
 
-.tagline {
-  max-width: 30rem;
-  font-size: 1.0625rem;
-  color: var(--text-secondary);
+.heroTitle {
+  font-size: var(--display-xl);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
   text-wrap: balance;
 }
 
-.cta {
-  margin-top: 0.75rem;
+.heroTitle span {
+  color: var(--accent);
+}
+
+.heroLead {
+  font-size: 1.125rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.heroActions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.heroNote {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------- role value */
+
+.rolesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.roleCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100%;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.roleIcon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-bottom: 0.25rem;
+  border-radius: var(--radius-control);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.roleName {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.roleValue {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------ capabilities */
+
+.capabilitiesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.sectionCta {
+  margin-top: 2rem;
+}
+
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--accent);
+  transition: gap var(--dur-fast) var(--ease-out);
+}
+
+.inlineLink:hover {
+  gap: 0.625rem;
+}
+
+/* ---------------------------------------------------------------- workflow */
+
+.workflowGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.workflowStep {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100%;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.workflowIndex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.workflowTitle {
+  font-size: 0.9875rem;
+  font-weight: 600;
+}
+
+.workflowText {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------------- security */
+
+.securityGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.securityItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg);
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+}
+
+.securityIcon {
+  flex-shrink: 0;
+  margin-top: 0.1875rem;
+  color: var(--status-resolved-fg);
+}
+
+/* ------------------------------------------------------------------ status */
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.statusColumn {
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg);
+}
+
+.statusTitle {
+  margin-bottom: 0.75rem;
+  font-size: 0.9875rem;
+  font-weight: 600;
+}
+
+.statusList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.statusItem {
+  position: relative;
+  padding-left: 1.125rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.statusItem::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* --------------------------------------------------------------- final CTA */
+
+.finalCta {
+  padding: var(--section-gap) 1.5rem;
+}
+
+.finalCtaInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: 40rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.finalCtaTitle {
+  font-size: var(--display-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.finalCtaLead {
+  font-size: 1.0625rem;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.finalCtaActions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+/* -------------------------------------------------------------- responsive */
+
+@media (min-width: 640px) {
+  .securityGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .statusGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .heroInner {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .heroInner {
+    padding: 0 1rem;
+  }
 }
