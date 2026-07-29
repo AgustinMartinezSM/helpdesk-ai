@@ -4,7 +4,23 @@
 }
 
 .header {
+  position: relative;
   padding: clamp(3rem, 7vw, 5rem) 0 1rem;
+  overflow: hidden;
+}
+
+.header::before {
+  content: '';
+  position: absolute;
+  inset: -6rem 0 auto;
+  height: 22rem;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    46rem 16rem at 20% 20%,
+    var(--brand-glow),
+    transparent 70%
+  );
 }
 
 .headerInner {
@@ -14,6 +30,9 @@
 }
 
 .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   margin-bottom: 0.625rem;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -22,8 +41,16 @@
   color: var(--accent);
 }
 
+.eyebrow::before {
+  content: '';
+  width: 1.25rem;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-strong);
+}
+
 .title {
-  max-width: 40rem;
+  max-width: 42rem;
   font-size: var(--display-xl);
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -32,188 +59,301 @@
 }
 
 .lead {
-  max-width: 44rem;
+  max-width: 42rem;
   margin-top: 1rem;
   font-size: 1.0625rem;
-  line-height: 1.9;
+  line-height: 1.75;
   color: var(--text-secondary);
 }
 
-/* ---------------------------------------------------------------- timeline */
+/* ------------------------------------------------------ part 1: journey */
 
-.timeline {
-  display: flex;
-  flex-direction: column;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-width: 46rem;
-}
-
-.step {
-  display: flex;
-  gap: 1.125rem;
-  padding-bottom: 1.75rem;
-}
-
-.stepMarker {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.stepIndex {
+.journeyGrid {
   display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.stepLine {
-  flex: 1;
-  width: 1px;
-  margin-top: 0.375rem;
-  background: var(--border);
-}
-
-.step:last-child .stepLine {
-  display: none;
-}
-
-.stepBody {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  padding-bottom: 0.25rem;
-}
-
-.stepHeading {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.stepTitle {
-  font-size: 1.0625rem;
-  font-weight: 600;
-}
-
-.stepText {
-  font-size: 0.9375rem;
-  line-height: 1.65;
-  color: var(--text-secondary);
-  max-width: 38rem;
-}
-
-/* ------------------------------------------------------------ ticket states */
-
-.statesRow {
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
-}
-
-.statesFlow {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: max-content;
-}
-
-.transition {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.statesNote {
-  margin-top: 1rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  max-width: 38rem;
-}
-
-/* ---------------------------------------------------------------- events */
-
-.eventsRow {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  list-style: none;
-  margin: 0 0 2rem;
-  padding: 0;
-}
-
-.eventChip {
-  padding: 0.375rem 0.75rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-
-/* ---------------------------------------------------------------- contrast */
-
-.contrastGrid {
-  display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
   gap: 1rem;
 }
 
-.contrastCard {
+.journeyCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100%;
   padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.journeyCard:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.journeyIcon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-bottom: 0.25rem;
+  border-radius: var(--radius-control);
+  background: var(--brand-soft);
+  color: var(--text);
+}
+
+.journeyTitle {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.journeyText {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.requestsBlock {
+  margin-top: 2.5rem;
+}
+
+.blockTitle {
+  margin-bottom: 1rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.requestList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
+  gap: 0.625rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.requestItem {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--section-border);
+  border-left: 3px solid var(--brand-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------- part 1: lifecycle */
+
+.lifecycleList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 44rem;
+}
+
+.lifecycleItem {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  flex-wrap: wrap;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+}
+
+.lifecycleMeaning {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+}
+
+.lifecycleNote {
+  margin-top: 1.25rem;
+  max-width: 40rem;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------- part 1: roles */
+
+.rolesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+  gap: 1rem;
+}
+
+.roleCard {
+  height: 100%;
+  padding: 1.125rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: var(--bg);
 }
 
-.contrastTitle {
-  margin-bottom: 0.5rem;
+.roleTitle {
   font-size: 0.9875rem;
   font-weight: 600;
 }
 
-.contrastText {
+.roleDetail {
+  margin-top: 0.375rem;
   font-size: 0.875rem;
-  line-height: 1.65;
+  line-height: 1.6;
   color: var(--text-secondary);
 }
 
-.ctaRow {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  flex-wrap: wrap;
-  margin-top: 2rem;
+.rolesNote {
+  margin-top: 1.5rem;
+  max-width: 44rem;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--text-muted);
 }
 
 .inlineLink {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* --------------------------------------------------------- part 2: AI */
+
+.aiExample {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.aiColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.aiColumnLabel {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.aiInput {
+  margin: 0;
+  padding: 1.125rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.aiOutputHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.aiRows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 1.125rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.aiRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.125rem;
+}
+
+.aiRow dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.aiRow dd {
+  margin: 0;
   font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.aiRule {
+  margin-top: 1.75rem;
+  padding: 1rem 1.25rem;
+  max-width: 44rem;
+  border-left: 3px solid var(--brand-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 1rem;
   font-weight: 500;
-  color: var(--accent);
+  line-height: 1.65;
+  color: var(--text);
 }
 
-.inlineLink:hover {
-  color: var(--accent-hover);
+.aiStatusNote {
+  margin-top: 1rem;
+  max-width: 44rem;
+  font-size: 0.9375rem;
+  line-height: 1.9;
+  color: var(--text-muted);
 }
 
-@media (min-width: 720px) {
-  .contrastGrid {
-    grid-template-columns: repeat(3, 1fr);
+/* -------------------------------------------------- part 3: engineering */
+
+.engineeringCta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 2.5rem;
+}
+
+.engineeringNote {
+  max-width: 40rem;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------- responsive */
+
+@media (min-width: 800px) {
+  .aiExample {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .aiRow {
+    grid-template-columns: 6rem 1fr;
+    gap: 0.75rem;
+  }
+
+  .aiRow dt {
+    text-align: right;
   }
 }
 

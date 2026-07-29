@@ -87,6 +87,14 @@ const LIBRARIES = [
   },
 ];
 
+const EVENTS = [
+  'user.registered.v1',
+  'ticket.created.v1',
+  'ticket.status-changed.v1',
+  'ticket.assigned.v1',
+  'ticket.comment-added.v1',
+];
+
 const STACK = [
   'Next.js 16',
   'React 19',
@@ -202,6 +210,46 @@ export default function EngineeringPage() {
             </li>
           ))}
         </ul>
+      </Section>
+
+      <Section
+        tone="technical"
+        eyebrow="Events"
+        title="The contracts everything downstream reacts to"
+        lead="Versioned payloads on a RabbitMQ topic exchange. Audit, notifications and analytics consume these — they never call the domain services directly."
+      >
+        <ul className={styles.eventsRow} role="list">
+          {EVENTS.map((event) => (
+            <li key={event} className={styles.eventChip}>
+              {event}
+            </li>
+          ))}
+        </ul>
+        <div className={styles.contrastGrid}>
+          <article className={styles.contrastCard}>
+            <h3 className={styles.contrastTitle}>Implemented today</h3>
+            <p className={styles.contrastText}>
+              Authentication, the full ticket lifecycle, comments, internal
+              notes and history — plus audit, notification and analytics
+              services consuming these events behind the gateway.
+            </p>
+          </article>
+          <article className={styles.contrastCard}>
+            <h3 className={styles.contrastTitle}>Target architecture</h3>
+            <p className={styles.contrastText}>
+              The event backbone the AI service will plug into already runs.
+              Adding AI means adding a consumer, not rewiring the platform.
+            </p>
+          </article>
+          <article className={styles.contrastCard}>
+            <h3 className={styles.contrastTitle}>Deliberately deferred</h3>
+            <p className={styles.contrastText}>
+              Publishing is best-effort: ADR 0006 records the exact triggers
+              that would justify a transactional outbox, so the complexity
+              arrives with evidence rather than by default.
+            </p>
+          </article>
+        </div>
       </Section>
 
       <Section

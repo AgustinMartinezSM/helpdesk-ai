@@ -1,102 +1,109 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArchitectureDiagram } from '../../../components/public/architecture-diagram';
+import { ConversationExample } from '../../../components/public/conversation-example';
 import { Reveal } from '../../../components/public/reveal';
 import { Section } from '../../../components/public/section';
 import { StatusPill } from '../../../components/public/status-pill';
 import { ButtonLink } from '../../../components/ui/button';
-import { ArrowRightIcon } from '../../../components/ui/icons';
+import {
+  ArrowRightIcon,
+  MessageSquareIcon,
+  PlusIcon,
+  SparklesIcon,
+  UserIcon,
+} from '../../../components/ui/icons';
 import { StatusBadge } from '../../../components/ui/status';
-import type { CapabilityStatus } from '../../../lib/product-status';
 import styles from './page.module.css';
 
 export const metadata: Metadata = {
   title: 'How it works',
   description:
-    'Follow a support request from submission through validation, events, planned AI analysis and human decisions — with every step honestly labeled.',
+    'What a support request looks like in HelpDesk AI, from asking for help to a confirmed fix — plus where AI assists the team and how the platform is built.',
 };
 
-interface WorkflowStep {
-  title: string;
-  description: string;
-  status: CapabilityStatus;
-}
-
-const STEPS: WorkflowStep[] = [
+const JOURNEY = [
   {
-    title: 'A user submits a support request',
-    description:
-      'The web app sends it through the BFF with the session held in an httpOnly cookie — the browser never stores tokens.',
-    status: 'available',
+    icon: <UserIcon size={18} />,
+    title: 'Sign in',
+    text: 'Your requests live in one place instead of being spread across chats and inboxes.',
   },
   {
-    title: 'The request is validated',
-    description:
-      'Explicit DTOs reject anything malformed before it reaches the domain. Unknown fields are stripped, limits enforced.',
-    status: 'available',
+    icon: <PlusIcon size={18} />,
+    title: 'Ask for help',
+    text: 'Describe the problem in your own words. No form to decode, no procedure to memorize.',
   },
   {
-    title: 'The ticket is persisted',
-    description:
-      'The tickets service owns the write, in its own PostgreSQL database. No other service can touch that data directly.',
-    status: 'available',
+    icon: <MessageSquareIcon size={18} />,
+    title: 'Talk it through',
+    text: 'Questions and answers stay attached to the request, so nobody has to be caught up twice.',
   },
   {
-    title: 'A domain event is published',
-    description:
-      'ticket.created.v1 goes out on the helpdesk.events exchange in RabbitMQ. Consumers react; nobody polls.',
-    status: 'available',
-  },
-  {
-    title: 'AI analysis is requested asynchronously',
-    description:
-      'The AI service will consume the event off the queue — nothing ever blocks the person who filed the request.',
-    status: 'planned',
-  },
-  {
-    title: 'Category, priority and summary suggestions are generated',
-    description:
-      'The analysis produces suggestions, never actions. They are stored alongside the ticket, clearly marked as suggestions.',
-    status: 'planned',
-  },
-  {
-    title: 'A technician reviews the suggestions',
-    description:
-      'Suggestions appear beside the ticket for a person to accept, adjust or ignore — the interface makes the difference obvious.',
-    status: 'planned',
-  },
-  {
-    title: 'The technician acts — and stays responsible',
-    description:
-      'Explicit transitions only: start progress, resolve, reopen, close. The requester keeps the final "confirm fix and close".',
-    status: 'available',
-  },
-  {
-    title: 'Every change lands in the audit history',
-    description:
-      'The audit service consumes every domain event into an immutable, admin-only trail — including what AI suggested.',
-    status: 'api-ready',
-  },
-  {
-    title: 'Notifications are generated when appropriate',
-    description:
-      'The notification service tells requesters and assignees what changed. The actor is never notified about their own action.',
-    status: 'api-ready',
-  },
-  {
-    title: 'Managers observe operational metrics',
-    description:
-      'The analytics service projects per-ticket snapshots from the same event stream, powering staff-only summaries.',
-    status: 'api-ready',
+    icon: <ArrowRightIcon size={18} />,
+    title: 'Follow the status',
+    text: 'You can see whether anyone has picked it up and what stage it is at, without asking.',
   },
 ];
 
-const EVENTS = [
-  'user.registered.v1',
-  'ticket.created.v1',
-  'ticket.status-changed.v1',
-  'ticket.assigned.v1',
-  'ticket.comment-added.v1',
+const EXAMPLE_REQUESTS = [
+  'I cannot access my company email.',
+  'The reception printer is not working.',
+  'My account is locked.',
+  'I need access to a shared folder.',
+  'I need a program installed.',
+  'The invoicing system closes when I save a payment.',
+];
+
+const LIFECYCLE: Array<{
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  meaning: string;
+}> = [
+  { status: 'open', meaning: 'Submitted and waiting for the team to pick up.' },
+  {
+    status: 'in_progress',
+    meaning: 'Someone has taken it on and is working through it.',
+  },
+  {
+    status: 'resolved',
+    meaning: 'The team believes it is fixed and is waiting for you to confirm.',
+  },
+  {
+    status: 'closed',
+    meaning: 'Confirmed done. The full history stays available.',
+  },
+];
+
+const ORGANIZATION_ROLES = [
+  {
+    role: 'Employees',
+    detail: 'Submit requests and follow them without chasing anyone.',
+  },
+  {
+    role: 'Technicians',
+    detail:
+      'Work the queue with priorities, internal notes and the full history of each request.',
+  },
+  {
+    role: 'Managers',
+    detail:
+      'Understand the workload from live figures rather than end-of-week guesses.',
+  },
+  {
+    role: 'Administrators',
+    detail: 'Control who can do what, with every action recorded.',
+  },
+];
+
+const AI_SUGGESTIONS = [
+  { label: 'Summary', value: 'The user cannot access the invoicing system.' },
+  { label: 'Category', value: 'Access and credentials' },
+  { label: 'Priority', value: 'High' },
+  { label: 'Reason', value: 'The issue blocks a time-sensitive task.' },
+  {
+    label: 'Next step',
+    value:
+      'Check whether the account is locked, then start credential recovery.',
+  },
 ];
 
 export default function HowItWorksPage() {
@@ -106,131 +113,173 @@ export default function HowItWorksPage() {
         <div className={styles.headerInner}>
           <p className={styles.eyebrow}>How it works</p>
           <h1 className={styles.title}>
-            From request to resolution — honestly labeled
+            What actually happens when someone asks for help
           </h1>
           <p className={styles.lead}>
-            This is the real workflow of the platform. Steps marked{' '}
-            <StatusPill status="available" /> work end-to-end today,{' '}
-            <StatusPill status="api-ready" /> run behind the gateway without a
-            product UI yet, and <StatusPill status="planned" /> describes the
-            designed AI behavior that has not been built.
+            Start here if you have never used a help desk before. This page
+            walks through a real request from the moment it is written to the
+            moment it is confirmed fixed — then covers where AI assists the
+            team, and finally how the platform is put together.
           </p>
         </div>
       </header>
 
+      {/* ------------------------------------------ PART A — using it */}
+
       <Section
-        eyebrow="The journey of a ticket"
-        title="Eleven steps, one principle: people decide"
+        eyebrow="Part 1 · Using HelpDesk AI"
+        title="A ticket is just a request for help that stays organized"
+        lead="Everywhere on this site, “ticket” means one thing: a request for help that keeps its status, its full conversation and its history in a single place — instead of scattering across messages, emails and spreadsheets."
       >
-        {/* role="list" keeps the semantics that list-style: none removes
-            in Safari/VoiceOver; the step number stays visible to everyone
-            and the list position carries the order for assistive tech. */}
-        <ol className={styles.timeline} role="list">
-          {STEPS.map((step, index) => (
-            <Reveal
-              as="li"
-              key={step.title}
-              className={styles.step}
-              delay={(index % 3) * 60}
-            >
-              <div className={styles.stepMarker}>
-                <span className={styles.stepIndex}>{index + 1}</span>
-                <span className={styles.stepLine} aria-hidden="true" />
-              </div>
-              <div className={styles.stepBody}>
-                <div className={styles.stepHeading}>
-                  <h3 className={styles.stepTitle}>{step.title}</h3>
-                  <StatusPill status={step.status} />
-                </div>
-                <p className={styles.stepText}>{step.description}</p>
-              </div>
+        <div className={styles.journeyGrid}>
+          {JOURNEY.map((step, index) => (
+            <Reveal key={step.title} delay={index * 60}>
+              <article className={styles.journeyCard}>
+                <span className={styles.journeyIcon}>{step.icon}</span>
+                <h3 className={styles.journeyTitle}>{step.title}</h3>
+                <p className={styles.journeyText}>{step.text}</p>
+              </article>
             </Reveal>
           ))}
-        </ol>
+        </div>
+
+        <div className={styles.requestsBlock}>
+          <h3 className={styles.blockTitle}>
+            The kind of thing people actually ask
+          </h3>
+          <ul className={styles.requestList} role="list">
+            {EXAMPLE_REQUESTS.map((request) => (
+              <li key={request} className={styles.requestItem}>
+                “{request}”
+              </li>
+            ))}
+          </ul>
+        </div>
       </Section>
 
       <Section
         tone="raised"
-        eyebrow="Ticket states"
-        title="Explicit transitions, no magic strings"
-        lead="The domain allows exactly these movements — anything else is rejected before it happens."
+        eyebrow="Following along"
+        title="Four states, and what each one means for you"
+        lead="You never have to ask “is anyone looking at this?” — the request answers that itself."
       >
-        <div
-          className={styles.statesRow}
-          role="img"
-          aria-label="Ticket lifecycle: open moves to in progress via Start progress; in progress moves to resolved via Resolve; resolved moves to closed via Close. Reopen returns in-progress or resolved tickets to open."
-        >
-          <div className={styles.statesFlow} aria-hidden="true">
-            <StatusBadge status="open" />
-            <span className={styles.transition}>Start progress →</span>
-            <StatusBadge status="in_progress" />
-            <span className={styles.transition}>Resolve →</span>
-            <StatusBadge status="resolved" />
-            <span className={styles.transition}>Close →</span>
-            <StatusBadge status="closed" />
-          </div>
-        </div>
-        <p className={styles.statesNote}>
-          Reopen returns an in-progress or resolved ticket to open; requesters
-          close their own resolved tickets with “Confirm fix and close”.
+        <ul className={styles.lifecycleList} role="list">
+          {LIFECYCLE.map((entry) => (
+            <li key={entry.status} className={styles.lifecycleItem}>
+              <StatusBadge status={entry.status} />
+              <span className={styles.lifecycleMeaning}>{entry.meaning}</span>
+            </li>
+          ))}
+        </ul>
+        <p className={styles.lifecycleNote}>
+          You have the final word on your own request: when the team marks it
+          resolved, closing it is your call.
         </p>
       </Section>
 
       <Section
-        eyebrow="Domain events"
-        title="Everything downstream reacts to these"
-        lead="Versioned contracts on a RabbitMQ topic exchange — audit, notifications and analytics never call the domain directly."
+        eyebrow="A complete example"
+        title="One request, from locked account to confirmed fix"
+        lead="This is the whole point of the product: not a list of records, but an organized conversation with an owner, a status, context and an ending."
       >
-        <ul className={styles.eventsRow} role="list">
-          {EVENTS.map((event) => (
-            <li key={event} className={styles.eventChip}>
-              {event}
-            </li>
-          ))}
-        </ul>
         <Reveal>
-          <ArchitectureDiagram />
+          <ConversationExample />
         </Reveal>
       </Section>
 
       <Section
         tone="raised"
-        eyebrow="Today vs. target"
-        title="What is real today, and what is designed"
+        eyebrow="In an organization"
+        title="Everyone sees the part that concerns them"
       >
-        <div className={styles.contrastGrid}>
-          <div className={styles.contrastCard}>
-            <h3 className={styles.contrastTitle}>Implemented behavior</h3>
-            <p className={styles.contrastText}>
-              Authentication, the full ticket lifecycle, comments, internal
-              notes, history — plus audit, notification and analytics services
-              consuming real events behind the gateway.
-            </p>
+        <div className={styles.rolesGrid}>
+          {ORGANIZATION_ROLES.map((entry) => (
+            <article key={entry.role} className={styles.roleCard}>
+              <h3 className={styles.roleTitle}>{entry.role}</h3>
+              <p className={styles.roleDetail}>{entry.detail}</p>
+            </article>
+          ))}
+        </div>
+        <p className={styles.rolesNote}>
+          Requests, conversations, internal notes, history and role-based access
+          work today. Manager dashboards and in-app notifications run behind the
+          API but do not have their product screens yet — the{' '}
+          <Link href="/features" className={styles.inlineLink}>
+            features page
+          </Link>{' '}
+          lists exactly what is available and what is not.
+        </p>
+      </Section>
+
+      {/* ------------------------------------------- PART B — where AI helps */}
+
+      <Section
+        tone="tinted"
+        eyebrow="Part 2 · Where AI helps"
+        title="It reads the repetitive part, a person decides the rest"
+        lead="Support teams spend a lot of their day re-reading long messages to work out what is being asked and how urgent it is. That is the part I want AI to take on."
+      >
+        <div className={styles.aiExample}>
+          <div className={styles.aiColumn}>
+            <p className={styles.aiColumnLabel}>What the person wrote</p>
+            <blockquote className={styles.aiInput}>
+              “I have tried several times since yesterday, but the invoicing
+              system rejects my password and I need to register payments before
+              2 PM.”
+            </blockquote>
           </div>
-          <div className={styles.contrastCard}>
-            <h3 className={styles.contrastTitle}>Target architecture</h3>
-            <p className={styles.contrastText}>
-              The event backbone the AI service will plug into already exists.
-              Adding AI is adding a consumer — not rewiring the platform.
-            </p>
-          </div>
-          <div className={styles.contrastCard}>
-            <h3 className={styles.contrastTitle}>Planned AI behavior</h3>
-            <p className={styles.contrastText}>
-              Summaries, classification, priority and reply suggestions —
-              generated asynchronously, presented as suggestions, and never
-              executed without a person.
-            </p>
+
+          <div className={styles.aiColumn}>
+            <div className={styles.aiOutputHead}>
+              <p className={styles.aiColumnLabel}>
+                <SparklesIcon size={14} />
+                What AI would suggest
+              </p>
+              <StatusPill status="planned" />
+            </div>
+            <dl className={styles.aiRows}>
+              {AI_SUGGESTIONS.map((row) => (
+                <div key={row.label} className={styles.aiRow}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
-        <div className={styles.ctaRow}>
-          <ButtonLink href="/features" variant="secondary">
-            Browse all capabilities
+
+        <p className={styles.aiRule}>
+          AI suggestions are reviewed by a person. The support team remains
+          responsible for the final decision.
+        </p>
+        <p className={styles.aiStatusNote}>
+          None of this is built yet. Summaries, classification, priority
+          suggestions, suggested replies and duplicate detection are all marked{' '}
+          <StatusPill status="planned" /> — the event stream they will read from
+          is what already runs.
+        </p>
+      </Section>
+
+      {/* --------------------------------------- PART C — how it is built */}
+
+      <Section
+        tone="technical"
+        eyebrow="Part 3 · How the platform is built"
+        title="A short version, for the curious"
+        lead="Each request travels through a small set of independent services. Nothing here is required to use the product — it is here because how it is built is part of what this project is about."
+      >
+        <Reveal>
+          <ArchitectureDiagram />
+        </Reveal>
+        <div className={styles.engineeringCta}>
+          <ButtonLink href="/engineering">
+            Explore the engineering behind HelpDesk AI
+            <ArrowRightIcon size={16} />
           </ButtonLink>
-          <Link href="/engineering" className={styles.inlineLink}>
-            Read the engineering decisions
-            <ArrowRightIcon size={15} />
-          </Link>
+          <p className={styles.engineeringNote}>
+            The stack, the services, the event contracts, testing, observability
+            and the decision records all live there.
+          </p>
         </div>
       </Section>
     </div>
