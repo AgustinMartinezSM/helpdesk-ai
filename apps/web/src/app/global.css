@@ -87,11 +87,25 @@ svg {
   /* Form-control boundary — keeps >= 3:1 non-text contrast (WCAG 1.4.11). */
   --border-control: color-mix(in srgb, #18181b 48%, transparent);
 
-  /* Accent (indigo) */
+  /* Accent (indigo) — actions and accent TEXT. AA in both themes. */
   --accent: #4f46e5;
   --accent-hover: #4338ca;
   --accent-contrast: #ffffff;
   --accent-soft: color-mix(in srgb, #4f46e5 9%, transparent);
+
+  /*
+   * Brand accent (pastel yellow). DECORATIVE AND SURFACE ONLY.
+   * As text on --bg it measures 1.13:1, so it must never carry text or
+   * any information on its own. Valid uses: ambient glow, gradient
+   * fields, highlight surfaces (with --brand-on text), markers,
+   * connectors, dividers and icon fills on dark surfaces.
+   */
+  --brand: #ffee8c;
+  --brand-strong: #f5d76e;
+  --brand-soft: color-mix(in srgb, #ffee8c 22%, transparent);
+  --brand-glow: color-mix(in srgb, #ffee8c 30%, transparent);
+  /* Text/icon color to place ON a --brand surface — 15.07:1. */
+  --brand-on: #18181b;
 
   /* Feedback */
   --danger: #dc2626;
@@ -138,6 +152,20 @@ svg {
   --display-xl: clamp(2.375rem, 5.5vw, 3.5rem);
   --display-lg: clamp(1.875rem, 4vw, 2.5rem);
   --display-md: clamp(1.375rem, 2.5vw, 1.75rem);
+
+  /*
+   * Public section surfaces. Sprint 7.6 alternated --bg and --surface,
+   * which differ by 1.04:1 in light and 1.07:1 in dark — imperceptible,
+   * so sections visually merged. These levels are separated enough to
+   * read as distinct bands while staying calm.
+   */
+  --surface-raised: #ffffff;
+  --surface-sunken: #f1f1f4;
+  --surface-tinted: #f6f5ef;
+  --surface-cta: #16161a;
+  --surface-cta-text: #fafafa;
+  --section-border: color-mix(in srgb, #18181b 9%, transparent);
+  --grid-line: color-mix(in srgb, #18181b 5%, transparent);
 }
 
 [data-theme='dark'] {
@@ -158,6 +186,13 @@ svg {
   --accent-contrast: #1e1b4b;
   --accent-soft: color-mix(in srgb, #818cf8 14%, transparent);
 
+  /* Same rule as light: decorative and surface only, never text. */
+  --brand: #ffee8c;
+  --brand-strong: #ffe45c;
+  --brand-soft: color-mix(in srgb, #ffee8c 16%, transparent);
+  --brand-glow: color-mix(in srgb, #ffee8c 12%, transparent);
+  --brand-on: #18181b;
+
   --danger: #f87171;
   --danger-soft: color-mix(in srgb, #f87171 14%, transparent);
 
@@ -173,6 +208,15 @@ svg {
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
   --shadow-md: 0 1px 2px rgb(0 0 0 / 0.5), 0 4px 12px rgb(0 0 0 / 0.35);
   --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.5), 0 10px 28px rgb(0 0 0 / 0.45);
+
+  /* Public section surfaces — distinct levels, none of them pure black. */
+  --surface-raised: #131316;
+  --surface-sunken: #0d0d10;
+  --surface-tinted: #16150f;
+  --surface-cta: #1c1b16;
+  --surface-cta-text: #fafafa;
+  --section-border: color-mix(in srgb, #f4f4f5 10%, transparent);
+  --grid-line: color-mix(in srgb, #f4f4f5 5%, transparent);
 }
 
 /* ------------------------------------------------------------------ base */
