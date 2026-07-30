@@ -68,6 +68,13 @@ async function bootstrap(): Promise<void> {
       target: env.ANALYTICS_SERVICE_URL,
     }),
   );
+  app.use(
+    createServiceProxy({
+      pathFilter: '/api/ai',
+      rewriteTo: '/ai',
+      target: env.AI_SERVICE_URL,
+    }),
+  );
   // CORS is intentionally NOT enabled: browsers never call the gateway
   // directly — only the web BFF and other services do, server to server.
   app.enableShutdownHooks();

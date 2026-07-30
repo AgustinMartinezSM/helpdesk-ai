@@ -43,6 +43,12 @@ export const apiGatewayEnvSchema = baseEnvSchema.extend({
     .url()
     .default('http://localhost:3008')
     .transform((value) => value.replace(/\/+$/, '')),
+  // Downstream service the gateway routes /api/ai/* to.
+  AI_SERVICE_URL: z
+    .string()
+    .url()
+    .default('http://localhost:3009')
+    .transform((value) => value.replace(/\/+$/, '')),
 });
 
 export type ApiGatewayEnv = z.infer<typeof apiGatewayEnvSchema>;
