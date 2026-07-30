@@ -3,9 +3,9 @@
 **Date:** 2026-07-30
 **Sprint:** 9.4 — Write paths and the first scoped reads (in progress)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `feat/s9-5-tenant-writes`, **unmerged and unpushed**. `main` is at
-`4f4ae5d` with remote CI green through phase 4. Working tree clean, full gate
-and all nine integration suites green locally.
+**Branch:** `main` at `75b2bbb` — fast-forwarded from
+`feat/s9-5-tenant-writes` (no merge commit, no rewritten history) and pushed.
+Working tree clean, and **remote CI is green** on the first attempt.
 
 Read `docs/progress/SPRINT-009.4.md` first, then `SPRINT-009.3.md`. This file
 is the operational summary of both.
@@ -387,7 +387,7 @@ Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect feat/s9-5-tenant-writes
+git branch --show-current      # expect main
 git log --oneline -5
 git status --short             # expect clean
 docker compose up -d

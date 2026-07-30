@@ -142,3 +142,6 @@ Full gate green: `format:check`, `lint` (15 projects), `typecheck` (14),
 `test` (15), `build` (15). All nine integration suites against real PostgreSQL
 and RabbitMQ, tickets-service now at nine including the two-organization
 isolation test.
+
+Remotely too: `main` fast-forwarded to `75b2bbb`, GitHub Actions run
+`30589056698` green on its first attempt.
