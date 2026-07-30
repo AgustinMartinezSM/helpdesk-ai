@@ -1,8 +1,9 @@
 # Tenancy migration — risk register and phased plan
 
-Status: **Proposed** (Sprint 9.1 audit; not approved). Phases map to sprints
-9.2–9.4 in the delivery plan; the threat ids are from
-`tenancy-threat-model.md`.
+Status: **Approved 2026-07-30.** Phases map to sprints 9.2–9.4 in the
+delivery plan; the threat ids are from `tenancy-threat-model.md`. Nothing
+here is implemented — approval means the sequence is agreed, not that any
+phase has run.
 
 ## The ordering constraint that drives everything
 

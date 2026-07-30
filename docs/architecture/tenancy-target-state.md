@@ -1,11 +1,12 @@
 # Tenancy — target state
 
-Status: **Proposed** (Sprint 9.1 audit). Nothing here is implemented. This
-document describes where the domain is going and why; the current system is
-described in `tenancy-current-state.md`.
+Status: **Approved 2026-07-30, not implemented.** This document describes
+where the domain is going and why; the current system is described in
+`tenancy-current-state.md`.
 
-Every structural decision below is recorded in an ADR (0012–0017), all of
-which are Proposed rather than Accepted.
+Every structural decision below is recorded in an ADR (0012–0017), all now
+Accepted. Approved does not mean built: nothing here exists in the codebase
+yet, and `tenancy-migration-plan.md` is the sequence that builds it.
 
 ## The shape
 
@@ -110,11 +111,13 @@ hard-coded names, so custom roles later reuse the same evaluator.
 | `REQUESTER`            | self         | Asks for help, follows their own requests                      |
 | `AUDITOR`              | organization | Reads the trail and analytics; changes nothing                 |
 
-## Permission matrix — DRAFT, requires approval
+## Permission matrix
 
-**This is a draft.** It is the part of the audit most likely to be wrong,
-because it encodes product intent I inferred rather than product intent
-someone stated. Read it as a proposal to argue with.
+**Approved 2026-07-30.** It was drafted from inferred product intent and
+reviewed as a whole; the four judgement calls flagged below were confirmed
+rather than changed. It stays the part of this document most likely to need
+revision once real organizations use it — a permission that turns out wrong
+is a row edit plus a test, not a redesign.
 
 `●` granted · `○` granted for own scope only · blank not granted
 
@@ -163,9 +166,12 @@ Four things in that table are deliberate and worth challenging:
 - **`AUDITOR` reads everything and writes nothing.** Including `tickets.read_all`,
   which is a lot of trust; the alternative is an auditor who cannot verify what
   they are auditing.
-- **`BRANCH_MANAGER` cannot `people.suspend`.** Suspension is an
-  organization-level act with security consequences. I could be argued out of
-  this for a retail chain where the store manager is the only person on site.
+- **`BRANCH_MANAGER` cannot `people.suspend`.** Confirmed on review.
+  Suspension is an organization-level act with security consequences, and a
+  branch manager who genuinely needs it can be given `ORGANIZATION_ADMIN` —
+  which is a visible, audited grant rather than a quiet widening of what
+  every branch manager can do. The retail case where the store manager is
+  alone on site is real; the answer is a second role, not a broader one.
 - **`AGENT` has no `people.invite`.** Deliberate: onboarding is an
   administrative act, not an operational one.
 

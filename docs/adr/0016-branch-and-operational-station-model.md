@@ -1,6 +1,6 @@
 # ADR 0016 — Branch and operational station model
 
-- Status: **Proposed** (Sprint 9.1 audit; not approved)
+- Status: Accepted (approved 2026-07-30)
 - Date: 2026-07-30
 - Sprint: 9.1 (Product domain and tenancy audit)
 

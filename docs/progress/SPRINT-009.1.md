@@ -1,6 +1,7 @@
 # Sprint 9.1 — Product domain and tenancy audit
 
-Status: **Audit complete**, pending review. No product code changed.
+Status: **CLOSED (2026-07-30).** Audit complete and approved; all six ADRs
+Accepted. No product code changed.
 
 Goal: understand the real system before changing its domain. This sprint
 produced no feature and no migration — it produced an evidence base, six
@@ -125,9 +126,10 @@ written down in ADR 0014 rather than discovered later.
 | ADR 0016                                      | Branch and operational station model                                             |
 | ADR 0017                                      | Authentication identifiers versus profile attributes                             |
 
-**All six ADRs are `Proposed`, not Accepted.** None of these decisions has
-been approved, and the permission matrix in particular is a draft encoding
-product intent I inferred rather than intent someone stated.
+**All six ADRs were reviewed and Accepted on 2026-07-30**, along with the
+permission matrix. Accepted means the decision is settled, not that anything
+is built — none of it exists in the codebase, and the migration plan is what
+builds it.
 
 ## Recommendation for Sprint 9.2
 
@@ -160,18 +162,22 @@ with a platform that behaves **exactly** as it does today, plus an
 organization nobody references yet. If anything user-visible changes, the
 sprint has done too much.
 
-## Open questions I could not resolve from the code
+## Open questions
+
+Resolved on review: the permission matrix is approved as drafted, and
+`BRANCH_MANAGER` does **not** hold `people.suspend` — a branch manager who
+needs it gets `ORGANIZATION_ADMIN`, which is a visible grant rather than a
+quiet widening for every branch manager.
+
+Still open, and none blocks Sprint 9.2:
 
 - Whether a session is per-person or per-organization. `refresh_tokens` has no
-  column for it. ADR 0014 leans per-person; it needs deciding before
-  implementation.
+  column for it. ADR 0014 leans per-person; it needs deciding before phase 6,
+  when membership lifecycle lands.
 - Whether `branch_memberships` needs a scope qualifier per row, or whether the
-  role template carries the meaning (ADR 0016).
+  role template carries the meaning (ADR 0016). Decidable at phase 7.
 - Whether organization-scoped login identifiers are worth building at all, or
-  whether SSO makes them unnecessary (ADR 0017).
-- Whether `BRANCH_MANAGER` should hold `people.suspend`. I said no; a retail
-  chain where the store manager is the only person on site is a reasonable
-  counter-argument.
+  whether SSO makes them unnecessary (ADR 0017). No sprint depends on it.
 
 ## Documentation improved, and what was removed
 
