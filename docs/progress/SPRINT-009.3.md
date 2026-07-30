@@ -179,6 +179,12 @@ commit, no rewritten history — and pushed. GitHub Actions run `30582924271`
 was green on its first attempt, with the same counts the local gate reported
 and all nine integration suites against real service containers.
 
+Phase 4 followed the same way: `main` fast-forwarded to `e3ecbc5`, run
+`30585275171` green on its first attempt. That run is the one that matters
+most of the two, because it applied all five migrations and their backfills to
+databases created from scratch — which is a different claim from applying them
+to this machine's, where the tables already had rows.
+
 ## Phase 4 — the columns exist
 
 Eight tables across five services gained a nullable `organization_id`, and

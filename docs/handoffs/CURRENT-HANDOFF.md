@@ -3,9 +3,9 @@
 **Date:** 2026-07-30
 **Sprint:** 9.3 — Event contracts v2 and tenant columns (phases 3 and 4)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `feat/s9-4-tenant-columns`, **unmerged and unpushed**. `main` is at
-`0843b9b` with remote CI green through phase 3. Working tree clean, full gate
-and all nine integration suites green locally.
+**Branch:** `main` at `e3ecbc5` — fast-forwarded from
+`feat/s9-4-tenant-columns` (no merge commit, no rewritten history) and pushed.
+Working tree clean, and **remote CI is green** on the first attempt.
 
 Read `docs/progress/SPRINT-009.3.md` first, then `SPRINT-009.2.md`. This file
 is the operational summary of both.
@@ -349,7 +349,7 @@ Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect feat/s9-4-tenant-columns
+git branch --show-current      # expect main
 git log --oneline -5
 git status --short             # expect clean
 docker compose up -d
@@ -358,12 +358,11 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Phases 3 and 4 are done on `feat/s9-4-tenant-columns` — unmerged and
-> unpushed, tree clean, gate and all nine integration suites green locally.
-> Five v2 contracts carry the organization on the envelope and nothing
-> consumes them; eight tables have a backfilled `organization_id` and nothing
-> reads it. Decide first whether to merge and push, since phase 4 has not run
-> in CI. Then continue with phase 5, the read paths: make the repository
+> Phases 3 and 4 are done and merged: `main` is at `e3ecbc5`, pushed, and
+> remote CI is green. Five v2 contracts carry the organization on the envelope
+> and nothing consumes them; eight tables have a backfilled `organization_id`
+> and nothing reads it. Continue with phase 5, the read paths: make the
+> repository
 > scope a **required** argument so a missing one is a compile error, delete
 > `isStaff`/`isAdmin` rather than changing their signature — including the
 > duplicate `Actor` copies in tickets-service and users-service, which have to
