@@ -1,4 +1,5 @@
 import {
+  aiSuggestionCreatedV1,
   eventEnvelopeSchema,
   ticketCreatedV1,
   userRegisteredV1,
@@ -18,6 +19,16 @@ const validTicketPayload = {
   priority: 'high',
   status: 'open',
   createdAt: '2026-07-28T12:00:00.000Z',
+};
+
+const validSuggestionPayload = {
+  suggestionId: '9b1f2c76-3f4d-4a55-9d21-0b3c5be2b333',
+  ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
+  task: 'summary',
+  provider: 'local',
+  model: 'heuristics-v1',
+  requestedBy: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+  createdAt: '2026-07-29T12:00:00.000Z',
 };
 
 describe('event contracts', () => {
@@ -55,6 +66,33 @@ describe('event contracts', () => {
       priority: 'catastrophic',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts a valid ai.suggestion.created.v1 payload', () => {
+    expect(
+      aiSuggestionCreatedV1.payloadSchema.safeParse(validSuggestionPayload)
+        .success,
+    ).toBe(true);
+  });
+
+  it('rejects an ai.suggestion.created.v1 payload with an unknown task', () => {
+    const result = aiSuggestionCreatedV1.payloadSchema.safeParse({
+      ...validSuggestionPayload,
+      task: 'sentiment',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('strips suggestion content from an ai.suggestion.created.v1 payload', () => {
+    // The contract carries metadata only: a publisher that tries to attach
+    // the draft must not be able to smuggle it past the schema.
+    const result = aiSuggestionCreatedV1.payloadSchema.safeParse({
+      ...validSuggestionPayload,
+      output: { body: 'Hello, we are looking into it.' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('output');
   });
 });
 

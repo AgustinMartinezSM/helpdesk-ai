@@ -113,3 +113,25 @@ export const ticketCommentAddedV1 = defineEvent(
     addedAt: z.iso.datetime(),
   }),
 );
+
+/**
+ * A model answered something about a ticket. Metadata only — no summary
+ * text, no draft, no rationale: the suggestion itself is read from
+ * ai-service by a caller whose token authorizes it (ADR 0011), so this
+ * event cannot become a side channel around that check. The task/provider
+ * vocabulary is duplicated from ai-service's domain for the usual reason:
+ * a contract must not import a service's internals.
+ */
+export const aiSuggestionCreatedV1 = defineEvent(
+  'ai.suggestion.created.v1',
+  z.object({
+    suggestionId: z.uuid(),
+    ticketId: z.uuid(),
+    task: z.enum(['summary', 'classification', 'priority', 'reply']),
+    /** Provider id and model that produced it, e.g. 'local'/'heuristics-v1'. */
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    requestedBy: z.uuid(),
+    createdAt: z.iso.datetime(),
+  }),
+);
