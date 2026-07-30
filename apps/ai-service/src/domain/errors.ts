@@ -35,6 +35,19 @@ export class ForbiddenAiActionError extends AiDomainError {
 }
 
 /**
+ * The caller's token carries no organization, so a suggestion produced now
+ * could not be attributed to anybody — including for spend.
+ *
+ * Ordinary rather than exceptional: it is the state of an account between
+ * registering and organizations-service creating its membership.
+ */
+export class NoOrganizationContextError extends AiDomainError {
+  constructor() {
+    super('Your account is not part of an organization yet');
+  }
+}
+
+/**
  * The ticket does not exist, or the caller may not see it. One error for
  * both cases on purpose: tickets-service already refuses to confirm a
  * ticket's existence to non-owners (ADR 0011) and this service must not

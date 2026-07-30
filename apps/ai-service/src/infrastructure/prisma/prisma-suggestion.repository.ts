@@ -17,6 +17,7 @@ interface SuggestionRow {
   provider: string;
   model: string;
   contextHash: string;
+  organizationId: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
   latencyMs: number;
@@ -40,6 +41,7 @@ export class PrismaSuggestionRepository implements SuggestionRepository {
     await this.prisma.suggestion.create({
       data: {
         id: suggestion.id,
+        organizationId: suggestion.organizationId,
         ticketId: suggestion.ticketId,
         task: suggestion.task,
         output: suggestion.output,
@@ -107,8 +109,20 @@ export class PrismaSuggestionRepository implements SuggestionRepository {
         );
         continue;
       }
+      if (!row.organizationId) {
+        // Written in the window between the column being added and the write
+        // path setting it. Skipped rather than shown, for the same reason as
+        // the two cases above: a row this service cannot attribute is a row
+        // it should not put in front of anybody. Re-running the tenant
+        // backfill is the fix.
+        this.logger?.warn(
+          `skipping suggestion ${row.id}: no organization; re-run the tenant backfill`,
+        );
+        continue;
+      }
       suggestions.push({
         id: row.id,
+        organizationId: row.organizationId,
         ticketId: row.ticketId,
         task: row.task,
         output: parsed.data,

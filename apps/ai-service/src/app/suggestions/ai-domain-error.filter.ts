@@ -7,6 +7,7 @@ import {
 import {
   AiDomainError,
   ForbiddenAiActionError,
+  NoOrganizationContextError,
   ProviderOutputError,
   ProviderUnavailableError,
   TicketAccessUnauthorizedError,
@@ -41,7 +42,10 @@ export class AiDomainErrorFilter implements ExceptionFilter {
 }
 
 function classify(exception: AiDomainError): { status: number; error: string } {
-  if (exception instanceof ForbiddenAiActionError) {
+  if (
+    exception instanceof ForbiddenAiActionError ||
+    exception instanceof NoOrganizationContextError
+  ) {
     return { status: HttpStatus.FORBIDDEN, error: 'Forbidden' };
   }
   if (exception instanceof TicketNotFoundError) {

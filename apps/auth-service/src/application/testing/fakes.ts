@@ -162,9 +162,14 @@ export class FakeMembershipResolver implements MembershipResolver {
 
 export class RecordingLogger implements SessionLogger {
   readonly warnings: string[] = [];
+  readonly errors: string[] = [];
 
   warn(message: string): void {
     this.warnings.push(message);
+  }
+
+  error(message: string): void {
+    this.errors.push(message);
   }
 }
 

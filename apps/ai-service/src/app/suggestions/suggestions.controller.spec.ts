@@ -27,6 +27,8 @@ import { TicketNotFoundError } from '../../domain/errors';
 import { LocalHeuristicProvider } from '../../infrastructure/providers/local.provider';
 import { AppModule } from '../app.module';
 
+const TEST_ORGANIZATION = '00000000-0000-4000-8000-000000000001';
+
 const TEST_ENV = {
   NODE_ENV: 'test',
   LOG_LEVEL: 'fatal',
@@ -129,11 +131,11 @@ describe('AI HTTP API (fakes, real JWT verification)', () => {
 
     const jwt = app.get(JwtService);
     requesterToken = await jwt.signAsync(
-      { email: 'ada@example.com', roles: ['user'] },
+      { email: 'ada@example.com', roles: ['user'], org: TEST_ORGANIZATION },
       { subject: REQUESTER },
     );
     agentToken = await jwt.signAsync(
-      { email: 'agent@example.com', roles: ['agent'] },
+      { email: 'agent@example.com', roles: ['agent'], org: TEST_ORGANIZATION },
       { subject: AGENT },
     );
   });

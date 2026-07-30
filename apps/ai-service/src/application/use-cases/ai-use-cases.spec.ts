@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Actor } from '@helpdesk-ai/security';
 import {
   ForbiddenAiActionError,
+  NoOrganizationContextError,
   ProviderOutputError,
   ProviderUnavailableError,
   TicketNotFoundError,
@@ -32,8 +33,20 @@ import {
 const REQUESTER_ID = randomUUID();
 const TICKET_ID = randomUUID();
 
-const staff: Actor = { id: randomUUID(), roles: ['agent'] };
-const requester: Actor = { id: REQUESTER_ID, roles: ['user'] };
+const TEST_ORGANIZATION = '00000000-0000-4000-8000-000000000001';
+
+const staff: Actor = {
+  id: randomUUID(),
+  roles: ['agent'],
+  organizationId: TEST_ORGANIZATION,
+};
+const requester: Actor = {
+  id: REQUESTER_ID,
+  roles: ['user'],
+  organizationId: TEST_ORGANIZATION,
+};
+/** Staff, but between registering and getting a membership. */
+const tenantlessStaff: Actor = { id: randomUUID(), roles: ['agent'] };
 
 const VALID_OUTPUTS: Record<SuggestionTask, unknown> = {
   summary: { text: 'Cannot sign in since the password reset.', bullets: [] },
@@ -128,6 +141,38 @@ describe('GenerateSuggestionUseCase', () => {
 
     expect(tickets.calls).toHaveLength(0);
     expect(provider.requests).toHaveLength(0);
+  });
+
+  it('refuses staff with no organization, before reading the ticket or spending budget', async () => {
+    const { generate, tickets, provider, suggestions } = harness();
+
+    // A suggestion nothing can attribute is a record of spend nobody owns,
+    // so this is checked in the same place and for the same reason as the
+    // staff check: before a paid provider is ever called.
+    await expect(
+      generate.execute(tenantlessStaff, {
+        ticketId: TICKET_ID,
+        task: 'summary',
+        accessToken: 'token',
+      }),
+    ).rejects.toBeInstanceOf(NoOrganizationContextError);
+
+    expect(tickets.calls).toHaveLength(0);
+    expect(provider.requests).toHaveLength(0);
+    expect(suggestions.rows).toHaveLength(0);
+  });
+
+  it('stamps the caller organization on the stored suggestion', async () => {
+    const { generate, suggestions } = harness();
+
+    const suggestion = await generate.execute(staff, {
+      ticketId: TICKET_ID,
+      task: 'summary',
+      accessToken: 'token',
+    });
+
+    expect(suggestion.organizationId).toBe(TEST_ORGANIZATION);
+    expect(suggestions.rows[0].organizationId).toBe(TEST_ORGANIZATION);
   });
 
   it('stores the validated answer attributed to the provider that gave it', async () => {
@@ -331,6 +376,7 @@ describe('GenerateSuggestionUseCase', () => {
         model: 'scripted-v1',
         requestedBy: staff.id,
         createdAt: result.createdAt,
+        organizationId: TEST_ORGANIZATION,
       },
     ]);
     expect(JSON.stringify(events.published)).not.toContain(
@@ -466,6 +512,7 @@ describe('suggestion queries', () => {
   it('caps a history request', async () => {
     const { history, suggestions } = harness();
     const base = {
+      organizationId: TEST_ORGANIZATION,
       ticketId: TICKET_ID,
       task: 'summary' as SuggestionTask,
       output: VALID_OUTPUTS.summary as { text: string; bullets: string[] },

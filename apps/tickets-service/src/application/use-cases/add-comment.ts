@@ -6,6 +6,7 @@ import {
 import {
   canView,
   isStaff,
+  requireOrganizationOf,
   type Actor,
   type TicketComment,
 } from '../../domain/ticket';
@@ -42,10 +43,12 @@ export class AddCommentUseCase {
       throw new ForbiddenTicketActionError();
     }
 
+    const organizationId = requireOrganizationOf(actor, ticket);
     const now = this.clock.now();
     const comment: TicketComment = {
       id: randomUUID(),
       ticketId,
+      organizationId,
       authorId: actor.id,
       body: input.body,
       internal,
@@ -55,6 +58,7 @@ export class AddCommentUseCase {
     await this.tickets.addComment(comment, {
       id: randomUUID(),
       ticketId,
+      organizationId,
       actorId: actor.id,
       action: 'comment_added',
       detail: internal ? 'internal' : 'public',
@@ -68,7 +72,7 @@ export class AddCommentUseCase {
       internal,
       addedAt: now,
       traceId,
-      organizationId: actor.organizationId,
+      organizationId,
     });
 
     return comment;

@@ -6,6 +6,7 @@ import type {
   TicketPriority,
   TicketStatus,
 } from '../../domain/ticket';
+import { UntenantedRowError } from '../../domain/errors';
 import type {
   TicketListFilter,
   TicketPage,
@@ -15,6 +16,8 @@ import type { PrismaService } from './prisma.service';
 
 interface TicketRow {
   id: string;
+  /** Nullable in the column until the enforcement phase; see toDomain. */
+  organizationId: string | null;
   title: string;
   description: string;
   status: string;
@@ -29,9 +32,31 @@ interface TicketRow {
 function toDomain(row: TicketRow): Ticket {
   return {
     ...row,
+    organizationId: tenantOf(row.id, row.organizationId),
     status: row.status as TicketStatus,
     priority: row.priority as TicketPriority,
   };
+}
+
+/**
+ * A row with no organization is a provisioning fault, not a request fault.
+ *
+ * The column is still nullable, so the type system cannot rule this out yet,
+ * but nothing should produce one: the backfill filled every row that existed,
+ * and the write paths have refused to create an untenanted one since. What is
+ * left is a row written in the window between the two, and the fix is to
+ * re-run the backfill — which is idempotent and which the enforcement phase
+ * has to run anyway before it can add NOT NULL.
+ *
+ * Failing loudly beats defaulting. Guessing a tenant here would put somebody
+ * else's row in front of a reader, which is the entire failure mode this
+ * migration exists to prevent.
+ */
+function tenantOf(rowId: string, organizationId: string | null): string {
+  if (!organizationId) {
+    throw new UntenantedRowError(rowId);
+  }
+  return organizationId;
 }
 
 export class PrismaTicketRepository implements TicketRepository {
@@ -98,10 +123,14 @@ export class PrismaTicketRepository implements TicketRepository {
     ticketId: string,
     includeInternal: boolean,
   ): Promise<TicketComment[]> {
-    return this.prisma.ticketComment.findMany({
+    const rows = await this.prisma.ticketComment.findMany({
       where: { ticketId, ...(includeInternal ? {} : { internal: false }) },
       orderBy: { createdAt: 'asc' },
     });
+    return rows.map((row) => ({
+      ...row,
+      organizationId: tenantOf(row.id, row.organizationId),
+    }));
   }
 
   async historyFor(
@@ -124,6 +153,7 @@ export class PrismaTicketRepository implements TicketRepository {
     });
     return rows.map((row) => ({
       ...row,
+      organizationId: tenantOf(row.id, row.organizationId),
       action: row.action as TicketAction,
     }));
   }

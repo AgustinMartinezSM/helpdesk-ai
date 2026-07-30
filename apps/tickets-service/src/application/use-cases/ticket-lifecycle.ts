@@ -8,6 +8,7 @@ import {
   canTransition,
   canView,
   isStaff,
+  requireOrganizationOf,
   type Actor,
   type Ticket,
   type TicketStatus,
@@ -47,11 +48,13 @@ export class ChangeTicketStatusUseCase {
       throw new InvalidStatusTransitionError(ticket.status, to);
     }
 
+    const organizationId = requireOrganizationOf(actor, ticket);
     const now = this.clock.now();
     const updated: Ticket = { ...ticket, status: to, updatedAt: now };
     await this.tickets.update(updated, {
       id: randomUUID(),
       ticketId: ticket.id,
+      organizationId,
       actorId: actor.id,
       action: 'status_changed',
       detail: `${ticket.status} -> ${to}`,
@@ -65,7 +68,7 @@ export class ChangeTicketStatusUseCase {
       toStatus: to,
       changedAt: now,
       traceId,
-      organizationId: actor.organizationId,
+      organizationId,
     });
 
     return updated;
@@ -94,11 +97,13 @@ export class AssignTicketUseCase {
       throw new TicketNotFoundError();
     }
 
+    const organizationId = requireOrganizationOf(actor, ticket);
     const now = this.clock.now();
     const updated: Ticket = { ...ticket, assigneeId, updatedAt: now };
     await this.tickets.update(updated, {
       id: randomUUID(),
       ticketId: ticket.id,
+      organizationId,
       actorId: actor.id,
       action: 'assigned',
       detail: assigneeId ?? 'unassigned',
@@ -111,7 +116,7 @@ export class AssignTicketUseCase {
       assigneeId,
       assignedAt: now,
       traceId,
-      organizationId: actor.organizationId,
+      organizationId,
     });
 
     return updated;

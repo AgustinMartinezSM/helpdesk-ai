@@ -1,9 +1,11 @@
 import {
   ForbiddenTicketActionError,
   InvalidStatusTransitionError,
+  NoOrganizationContextError,
   TicketNotFoundError,
 } from '../../domain/errors';
 import { canTransition, type Actor } from '../../domain/ticket';
+import { OTHER_ORGANIZATION, TEST_ORGANIZATION } from '../../testing/fixtures';
 import {
   FakeEventPublisher,
   FixedClock,
@@ -20,14 +22,28 @@ import {
 const REQUESTER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
   roles: ['user'],
+  organizationId: TEST_ORGANIZATION,
 };
 const OTHER_USER: Actor = {
   id: '22222222-2222-4222-8222-222222222222',
   roles: ['user'],
+  organizationId: TEST_ORGANIZATION,
 };
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
   roles: ['agent'],
+  organizationId: TEST_ORGANIZATION,
+};
+/** Staff, but acting in a different tenant. */
+const FOREIGN_AGENT: Actor = {
+  id: '44444444-4444-4444-8444-444444444444',
+  roles: ['agent'],
+  organizationId: OTHER_ORGANIZATION,
+};
+/** Authenticated, but between registering and getting a membership. */
+const TENANTLESS_USER: Actor = {
+  id: '55555555-5555-4555-8555-555555555555',
+  roles: ['user'],
 };
 
 function buildContext() {
@@ -68,6 +84,7 @@ describe('domain event publication', () => {
         title: 'Printer on fire',
         priority: 'medium',
         status: 'open',
+        organizationId: TEST_ORGANIZATION,
         createdAt: ctx.clock.now(),
       },
     ]);
@@ -78,6 +95,7 @@ describe('domain event publication', () => {
         fromStatus: 'open',
         toStatus: 'in_progress',
         changedAt: ctx.clock.now(),
+        organizationId: TEST_ORGANIZATION,
       },
     ]);
     expect(ctx.events.assigned).toEqual([
@@ -86,6 +104,7 @@ describe('domain event publication', () => {
         actorId: AGENT.id,
         assigneeId: AGENT.id,
         assignedAt: ctx.clock.now(),
+        organizationId: TEST_ORGANIZATION,
       },
     ]);
     expect(ctx.events.commentsAdded).toEqual([
@@ -95,6 +114,7 @@ describe('domain event publication', () => {
         authorId: REQUESTER.id,
         internal: false,
         addedAt: ctx.clock.now(),
+        organizationId: TEST_ORGANIZATION,
       },
     ]);
 
@@ -134,6 +154,74 @@ describe('CreateTicketUseCase', () => {
       action: 'created',
       actorId: REQUESTER.id,
     });
+  });
+});
+
+describe('writes require a tenant', () => {
+  it('refuses to open a ticket for a caller with no organization', async () => {
+    const ctx = buildContext();
+
+    // Reachable in ordinary use: this is every account between registering
+    // and organizations-service consuming the registration event.
+    await expect(
+      ctx.create.execute(TENANTLESS_USER, { title: 'T', description: 'D' }),
+    ).rejects.toBeInstanceOf(NoOrganizationContextError);
+    expect(ctx.tickets.tickets.size).toBe(0);
+    expect(ctx.events.created).toEqual([]);
+  });
+
+  it('stamps the caller organization on the ticket and its history', async () => {
+    const ctx = buildContext();
+
+    const ticket = await ctx.create.execute(REQUESTER, {
+      title: 'T',
+      description: 'D',
+    });
+
+    expect(ticket.organizationId).toBe(TEST_ORGANIZATION);
+    expect(ctx.tickets.history[0].organizationId).toBe(TEST_ORGANIZATION);
+  });
+
+  it('takes a child row organization from the ticket, not from the writer', async () => {
+    const ctx = buildContext();
+    const ticket = await ctx.create.execute(REQUESTER, {
+      title: 'T',
+      description: 'D',
+    });
+
+    const comment = await ctx.comment.execute(AGENT, ticket.id, {
+      body: 'looking into it',
+    });
+
+    // A comment belongs to its ticket's tenant regardless of who wrote it.
+    // The event contracts could not make this distinction yet — a ticket
+    // event carried the caller's organization because the ticket had none.
+    expect(comment.organizationId).toBe(ticket.organizationId);
+  });
+
+  it('refuses a mutation from staff acting in another organization', async () => {
+    const ctx = buildContext();
+    const ticket = await ctx.create.execute(REQUESTER, {
+      title: 'T',
+      description: 'D',
+    });
+
+    // Nothing can reach this today, because the read would not have handed
+    // the ticket over. That is the point of checking it here as well: it does
+    // not depend on the read staying correct.
+    await expect(
+      ctx.comment.execute(FOREIGN_AGENT, ticket.id, { body: 'hello' }),
+    ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
+    await expect(
+      ctx.changeStatus.execute(FOREIGN_AGENT, ticket.id, 'in_progress'),
+    ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
+    await expect(
+      ctx.assign.execute(FOREIGN_AGENT, ticket.id, AGENT.id),
+    ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
+
+    expect(ctx.events.commentsAdded).toEqual([]);
+    expect(ctx.events.statusChanged).toEqual([]);
+    expect(ctx.events.assigned).toEqual([]);
   });
 });
 

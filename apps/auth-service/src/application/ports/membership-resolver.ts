@@ -24,4 +24,5 @@ export interface MembershipResolver {
 /** Structural subset of Nest's LoggerService; console satisfies it too. */
 export interface SessionLogger {
   warn(message: string): void;
+  error(message: string): void;
 }

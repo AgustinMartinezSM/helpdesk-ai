@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { TenantContextUnavailableError } from '../domain/errors';
 import type { User } from '../domain/user';
 import type { Clock } from './ports/clock';
 import type {
@@ -87,19 +88,27 @@ export class SessionService {
   }
 
   /**
-   * Resolves the tenant claims, and lets a failure through.
+   * Resolves the tenant claims, and now refuses rather than guessing.
    *
-   * ADR 0014 accepts that auth-service gains a synchronous dependency on
-   * organizations-service and says login fails when it is unavailable. That
-   * becomes the right behaviour when the claims decide something. They do not
-   * yet — no service reads them — so failing closed today would turn a new
-   * service nobody depends on into a single point of failure for every login,
-   * in exchange for protecting nothing.
+   * Sprint 9.2 let a failure through, on the argument that no service read
+   * the claims so failing closed protected nothing. That stopped being true
+   * the moment the write paths started taking the organization from the
+   * token: a tenant-less token now produces rows that belong to nobody, and
+   * those are indistinguishable from rows deliberately left global.
    *
-   * The warning is the point: a resolution that keeps failing has to be
-   * visible before the enforcement phase makes it fatal. When write paths
-   * start setting the organization from the claim, this must become a
-   * refusal to mint.
+   * The distinction that matters is between two things a resolver can say:
+   *
+   * - **"This person belongs to no organization."** A real answer, and a
+   *   token is still minted for it — with no tenant claims, so the caller can
+   *   sign in, see nothing, and be refused by the write paths with a reason.
+   *   That state is ordinary: it is every account between registering and the
+   *   consumer creating its membership.
+   * - **"I could not ask."** Unreachable service, rejected credential, a body
+   *   that did not parse. Nothing is known, so nothing is minted.
+   *
+   * `MembershipResolver` keeps those apart on purpose — null for the first,
+   * a throw for the second — which is what makes this distinction possible
+   * rather than a guess about what an error meant.
    */
   private async resolveMembership(userId: string) {
     if (!this.memberships) {
@@ -108,12 +117,12 @@ export class SessionService {
     try {
       return await this.memberships.resolveFor(userId);
     } catch (error) {
-      this.logger?.warn(
-        `minting a token without tenant claims: ${
+      this.logger?.error(
+        `refusing to mint a token: tenant context unavailable (${
           error instanceof Error ? error.message : String(error)
-        }`,
+        })`,
       );
-      return null;
+      throw new TenantContextUnavailableError();
     }
   }
 }

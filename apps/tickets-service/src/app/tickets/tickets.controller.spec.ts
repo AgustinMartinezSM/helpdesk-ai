@@ -10,6 +10,7 @@ import {
   InMemoryTicketRepository,
 } from '../../application/testing/fakes';
 import { ticketsServiceEnvSchema } from '../../config/env';
+import { TEST_ORGANIZATION } from '../../testing/fixtures';
 import { AppModule } from '../app.module';
 
 const TEST_ENV = {
@@ -52,15 +53,15 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
 
     const jwt = app.get(JwtService);
     userToken = await jwt.signAsync(
-      { email: 'user@x.com', roles: ['user'] },
+      { email: 'user@x.com', roles: ['user'], org: TEST_ORGANIZATION },
       { subject: '11111111-1111-4111-8111-111111111111' },
     );
     otherToken = await jwt.signAsync(
-      { email: 'other@x.com', roles: ['user'] },
+      { email: 'other@x.com', roles: ['user'], org: TEST_ORGANIZATION },
       { subject: '22222222-2222-4222-8222-222222222222' },
     );
     agentToken = await jwt.signAsync(
-      { email: 'agent@x.com', roles: ['agent'] },
+      { email: 'agent@x.com', roles: ['agent'], org: TEST_ORGANIZATION },
       { subject: '33333333-3333-4333-8333-333333333333' },
     );
   });

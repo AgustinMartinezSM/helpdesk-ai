@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { requireOrganization } from '../../domain/ticket';
 import type { Actor, Ticket, TicketPriority } from '../../domain/ticket';
 import type { EventPublisher } from '../ports/event-publisher';
 import type { Clock, TicketRepository } from '../ports/ticket.repository';
@@ -22,9 +23,11 @@ export class CreateTicketUseCase {
     input: CreateTicketInput,
     traceId?: string,
   ): Promise<Ticket> {
+    const organizationId = requireOrganization(actor);
     const now = this.clock.now();
     const ticket: Ticket = {
       id: randomUUID(),
+      organizationId,
       title: input.title,
       description: input.description,
       status: 'open',
@@ -39,6 +42,7 @@ export class CreateTicketUseCase {
     await this.tickets.create(ticket, {
       id: randomUUID(),
       ticketId: ticket.id,
+      organizationId,
       actorId: actor.id,
       action: 'created',
       detail: null,

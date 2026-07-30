@@ -1,3 +1,4 @@
+import { TenantContextUnavailableError } from '../domain/errors';
 import type { User } from '../domain/user';
 import { SessionService } from './session.service';
 import {
@@ -88,22 +89,47 @@ describe('SessionService tenant claims', () => {
       roles: user.roles,
     });
     expect('org' in (tokenIssuer.lastClaims ?? {})).toBe(false);
-    // Belonging nowhere is an expected state during the migration, not a
-    // fault: it must not fill the log with warnings.
+    // Belonging nowhere is a real answer, not a fault. It is the state of
+    // every account between registering and the consumer creating its
+    // membership, so the token is issued and the write paths are what refuse.
     expect(logger.warnings).toEqual([]);
+    expect(logger.errors).toEqual([]);
   });
 
-  it('still issues a session, and warns, when resolution fails', async () => {
+  it('refuses to mint when resolution fails', async () => {
     const { sessions, tokenIssuer, logger } = buildSessions(
       FakeMembershipResolver.failing('connect ECONNREFUSED 127.0.0.1:3010'),
     );
 
-    const session = await sessions.issueSession(user);
+    // "I could not ask" is not "they belong nowhere". Minting on that
+    // uncertainty would produce a tenant-less token, and the write paths now
+    // take the organization from the token — so it would write rows that
+    // belong to nobody and look exactly like rows meant to be global.
+    await expect(sessions.issueSession(user)).rejects.toBeInstanceOf(
+      TenantContextUnavailableError,
+    );
+    expect(tokenIssuer.issued).toEqual([]);
+    expect(logger.errors).toHaveLength(1);
+    expect(logger.errors[0]).toContain('ECONNREFUSED');
+  });
 
-    expect(session.accessToken).toBe(`access:${user.id}`);
-    expect(tokenIssuer.lastClaims?.org).toBeUndefined();
-    expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).toContain('ECONNREFUSED');
+  it('does not create a refresh token for a session it refused to mint', async () => {
+    const refreshTokens = new InMemoryRefreshTokenRepository();
+    const sessions = new SessionService(
+      refreshTokens,
+      new FakeTokenIssuer(),
+      new FixedClock(new Date('2026-07-30T12:00:00.000Z')),
+      REFRESH_TTL_SECONDS,
+      FakeMembershipResolver.failing(),
+      new RecordingLogger(),
+    );
+
+    await expect(sessions.issueSession(user)).rejects.toBeInstanceOf(
+      TenantContextUnavailableError,
+    );
+    // Resolution happens before anything is persisted, so a refused mint
+    // leaves no orphan refresh row behind.
+    expect(refreshTokens.tokens.size).toBe(0);
   });
 
   it('mints without tenant claims when no resolver is configured', async () => {

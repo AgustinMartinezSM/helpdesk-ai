@@ -40,3 +40,24 @@ export class RefreshTokenReuseError extends AuthDomainError {
     super('Refresh token is invalid or expired');
   }
 }
+
+/**
+ * Membership could not be determined while minting a token.
+ *
+ * Not the same as "this person belongs to no organization", which is a real
+ * answer and mints a token with no tenant claims. This is the case where the
+ * question could not be asked at all — organizations-service unreachable, a
+ * rejected service credential, a response that did not parse.
+ *
+ * A token minted on that uncertainty would carry no tenant, and the write
+ * paths now take the tenant from the token, so it would produce untenanted
+ * rows that look exactly like rows belonging to nobody. Refusing is the only
+ * honest answer, and it is deliberately a 503 rather than a 401: the caller's
+ * credentials were fine, and telling them otherwise would send them to reset
+ * a password that works.
+ */
+export class TenantContextUnavailableError extends AuthDomainError {
+  constructor() {
+    super('Sign-in is temporarily unavailable. Please try again.');
+  }
+}

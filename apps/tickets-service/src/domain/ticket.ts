@@ -1,3 +1,8 @@
+import {
+  ForbiddenTicketActionError,
+  NoOrganizationContextError,
+} from './errors';
+
 export const TICKET_STATUSES = [
   'open',
   'in_progress',
@@ -27,6 +32,15 @@ export function canTransition(from: TicketStatus, to: TicketStatus): boolean {
 
 export interface Ticket {
   readonly id: string;
+  /**
+   * Tenant this ticket belongs to (ADR 0012). Required: a ticket belonging to
+   * no organization is not something this platform can decide anything about,
+   * so the write paths refuse rather than storing one.
+   *
+   * An opaque identifier — organizations live in another service's database
+   * (ADR 0003), so nothing here can validate it beyond its shape.
+   */
+  readonly organizationId: string;
   readonly title: string;
   readonly description: string;
   readonly status: TicketStatus;
@@ -42,6 +56,8 @@ export interface Ticket {
 export interface TicketComment {
   readonly id: string;
   readonly ticketId: string;
+  /** Denormalized from the ticket, so a scoped read needs no join. */
+  readonly organizationId: string;
   readonly authorId: string;
   readonly body: string;
   /** Internal notes are visible to staff only, never to the requester. */
@@ -55,6 +71,8 @@ export type TicketAction =
 export interface TicketHistoryEntry {
   readonly id: string;
   readonly ticketId: string;
+  /** Denormalized from the ticket, so a scoped read needs no join. */
+  readonly organizationId: string;
   readonly actorId: string;
   readonly action: TicketAction;
   readonly detail: string | null;
@@ -82,6 +100,42 @@ export interface Actor {
    * tickets carry their own column.
    */
   readonly organizationId?: string;
+}
+
+/**
+ * The tenant to write a row under, or a refusal.
+ *
+ * The only way to turn the actor's optional organization into the required
+ * one the domain types ask for. That is deliberate: a write path cannot get a
+ * usable value without passing through the refusal, so forgetting the check
+ * is a type error rather than a row that belongs to nobody.
+ */
+export function requireOrganization(actor: Actor): string {
+  if (!actor.organizationId) {
+    throw new NoOrganizationContextError();
+  }
+  return actor.organizationId;
+}
+
+/**
+ * The tenant to write a child row under, having confirmed the caller is
+ * acting inside the ticket's organization and not merely able to see it.
+ *
+ * This is the distinction the event contracts could not make yet: a ticket
+ * event carried the *caller's* organization because the ticket had none.
+ * Now it has one, so a mutation can insist they are the same, and the row
+ * takes the ticket's — a comment belongs to its ticket's tenant regardless of
+ * who wrote it.
+ *
+ * Nothing can reach this across organizations today, because a caller only
+ * gets a ticket back if the read let them have it. That is exactly why the
+ * check belongs here as well: it does not depend on the read staying correct.
+ */
+export function requireOrganizationOf(actor: Actor, ticket: Ticket): string {
+  if (requireOrganization(actor) !== ticket.organizationId) {
+    throw new ForbiddenTicketActionError();
+  }
+  return ticket.organizationId;
 }
 
 export function isStaff(actor: Actor): boolean {

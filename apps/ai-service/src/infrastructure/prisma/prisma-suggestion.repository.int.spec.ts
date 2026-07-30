@@ -3,6 +3,8 @@ import type { Suggestion, SuggestionTask } from '../../domain/suggestion';
 import { PrismaSuggestionRepository } from './prisma-suggestion.repository';
 import { PrismaService } from './prisma.service';
 
+const TEST_ORGANIZATION = '00000000-0000-4000-8000-000000000001';
+
 // Runs against helpdesk_ai_test through the test-integration target.
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -59,6 +61,7 @@ describe('PrismaSuggestionRepository (real PostgreSQL)', () => {
     };
     return {
       id: randomUUID(),
+      organizationId: TEST_ORGANIZATION,
       ticketId,
       task,
       output: outputs[task],

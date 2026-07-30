@@ -90,6 +90,12 @@ export interface TokenUsage {
  */
 export interface Suggestion {
   readonly id: string;
+  /**
+   * Tenant this suggestion belongs to (ADR 0012). Required: a suggestion is
+   * a record of spend and of what a model was shown, and one that belongs to
+   * no organization cannot be attributed to anybody.
+   */
+  readonly organizationId: string;
   readonly ticketId: string;
   readonly task: SuggestionTask;
   readonly output: SuggestionOutput;

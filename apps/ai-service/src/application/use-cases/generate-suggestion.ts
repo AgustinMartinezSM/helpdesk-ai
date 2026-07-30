@@ -4,6 +4,7 @@ import { TRACE_ID_HEADER } from '@helpdesk-ai/observability';
 import {
   AiDomainError,
   ForbiddenAiActionError,
+  NoOrganizationContextError,
   ProviderOutputError,
   ProviderUnavailableError,
 } from '../../domain/errors';
@@ -68,6 +69,15 @@ export class GenerateSuggestionUseCase {
       throw new ForbiddenAiActionError();
     }
 
+    // Before the ticket fetch, and well before the provider call: a caller
+    // with no organization produces a suggestion nothing can attribute, and
+    // this one is the only guard in the platform that also stops money being
+    // spent on a request that was going to be rejected anyway.
+    const organizationId = actor.organizationId;
+    if (!organizationId) {
+      throw new NoOrganizationContextError();
+    }
+
     // Throws TicketNotFound / TicketAccessUnauthorized / unavailable — all
     // of them mean "do not call a paid provider", so this comes first.
     const snapshot = await this.tickets.fetch(
@@ -100,6 +110,7 @@ export class GenerateSuggestionUseCase {
 
     const suggestion: Suggestion = {
       id: randomUUID(),
+      organizationId,
       // The id the ticket store confirmed, not the one the caller typed.
       ticketId: context.ticketId,
       task: input.task,
@@ -127,7 +138,7 @@ export class GenerateSuggestionUseCase {
       // Already on the way in, because the ticket read forwards it too — so
       // the suggestion event and the ticket fetch it came from share a trace.
       traceId: input.correlation?.[TRACE_ID_HEADER],
-      organizationId: actor.organizationId,
+      organizationId,
     });
 
     return suggestion;
