@@ -190,12 +190,13 @@ describe('Engineering page', () => {
     expect(document.body.textContent).not.toMatch(
       /repository is still local-only|never run on a remote/,
     );
-    // The remote run covered fourteen projects and eight suites. The ninth
-    // service landed afterwards on an unpushed branch, so the page must say
-    // what actually ran rather than what the gate now covers locally.
-    expect(document.body.textContent).toMatch(/only been run locally/);
+    // A green pipeline is not a deployment, and the page has claimed more
+    // than the pipeline delivered before: it once described a remote run
+    // covering a project and suite count that had only ever run locally.
+    // Deliberately no counts here — the page states what the run covered
+    // without a number that goes stale the next time a service is added.
     expect(document.body.textContent).not.toMatch(
-      /remote execution — format, lint, unit tests and build across all\s+fifteen/,
+      /deployed|in production|live environment/i,
     );
   });
 });

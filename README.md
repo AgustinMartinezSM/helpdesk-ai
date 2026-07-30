@@ -49,7 +49,7 @@ and a complete public product experience.
 | Self-service signup, assignee picker, attachments                                                  | Planned             |
 | Transactional outbox for event publishing                                                          | Deferred (ADR 0006) |
 | Distributed tracing, gateway rate limiting                                                         | Deferred            |
-| CI on GitHub Actions: gate + 9 integration suites; the ninth has not run remotely yet              | Implemented         |
+| CI on GitHub Actions: gate + 9 integration suites, green on a remote runner                        | Implemented         |
 
 Architecture: `web → web-bff → api-gateway → {auth, tickets, users, ai}`
 over HTTP for commands, with domain events on RabbitMQ consumed by

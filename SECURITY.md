@@ -63,4 +63,4 @@ None of the following is implemented. Do not assume any of it exists when assess
 
 - The attack surface is limited to local HTTP services and local-only infrastructure containers. Nothing is exposed beyond localhost: the source is public on GitHub, but no environment of this project is deployed.
 - Infrastructure containers (PostgreSQL 18, Redis 8 with `requirepass`, RabbitMQ 4.3) are development-only and not hardened for external exposure.
-- The CI workflow now runs on GitHub Actions and passed on its first remote execution, including the integration suites against real service containers. That run covered the workflow as it stood then; the organizations-service suite was added afterwards and has not executed remotely.
+- The CI workflow runs on GitHub Actions and passed on its first remote execution, including the integration suites against real service containers. It has stayed green as the workflow grew: the run on `4cb62a2` covered lint across 15 projects, typecheck across 14, test and build across 15, and all 9 integration suites.

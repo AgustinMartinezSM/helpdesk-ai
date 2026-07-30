@@ -295,11 +295,10 @@ export default function EngineeringPage() {
         </ul>
         <p className={styles.honestNote}>
           Honest status: the pipeline runs on GitHub Actions, and its last
-          remote run was green — format, lint, unit tests and build across
-          fourteen projects, then eight integration suites against real
-          PostgreSQL and RabbitMQ service containers. A ninth service and a
-          ninth suite have landed since and have only been run locally so far.
-          What is still missing is a deployment: nothing is hosted yet.
+          remote run was green — format, lint, types, unit tests and build
+          across every project, then nine integration suites against real
+          PostgreSQL and RabbitMQ service containers. What is still missing is a
+          deployment: nothing is hosted yet.
         </p>
         <div className={styles.actions}>
           {siteConfig.githubUrl ? (

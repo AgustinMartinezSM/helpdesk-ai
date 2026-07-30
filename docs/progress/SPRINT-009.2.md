@@ -281,6 +281,20 @@ databases:
   2 to `organization_admin` and 9 to `requester`, and a second run changed
   nothing. Zero duplicate `(organization_id, user_id)` pairs.
 
+### Remotely, after the merge
+
+`main` was fast-forwarded to `4cb62a2` — no merge commit, no rewritten
+history — and pushed. GitHub Actions run `30564325494` was green on its first
+attempt, with the same counts the local gate reported and all nine integration
+suites against real service containers.
+
+That run is what actually closes R10 rather than merely claiming to. The
+provisioning half of the risk fails loudly if you get it wrong, so it proves
+itself; the `test-integration` invocation does not, and the only way to know
+it landed was to watch the ninth suite run in the log. Sprint 9.0's lesson
+holds — green locally and green on a fresh clone are separate claims, and an
+untracked empty `src/assets` was enough to separate them once.
+
 ## What this sprint deliberately did not do
 
 No `organization_id` on any table. No event contract versioned. Nothing in

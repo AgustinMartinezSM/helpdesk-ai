@@ -3,10 +3,10 @@
 **Date:** 2026-07-30
 **Sprint:** 9.2 — Tenant foundation (closed)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `feat/s9-2-tenant-foundation` at `c0d24cc` plus the documentation
-commit — **four commits, unmerged and unpushed.** `origin/main` is still at
-`14728cd`. Working tree clean, full gate and all nine integration suites green
-locally.
+**Branch:** `main` at `4cb62a2` — fast-forwarded from
+`feat/s9-2-tenant-foundation` (no merge commit, no rewritten history) and
+pushed. Working tree clean, and **remote CI is green**, including the ninth
+integration suite on its first remote run.
 
 Read `docs/progress/SPRINT-009.2.md` first; it explains every decision below
 and why each one was made. This file is the operational summary.
@@ -175,11 +175,19 @@ Beyond the suites, verified by hand with both services running:
   `organization_admin`, 9 `requester`); a second run changed nothing, and
   there are zero duplicate `(organization_id, user_id)` pairs.
 
-**Not verified remotely.** The last remote GitHub Actions run was on
-`6d2a94c`, with 14 projects and 8 integration suites. This branch is unpushed,
-so the ninth suite and the fifteenth project have never run in CI. Do not
-describe them as remotely green anywhere — the public engineering page was
-corrected for exactly this.
+**Verified remotely too.** GitHub Actions run `30564325494` on `4cb62a2` was
+green on its first attempt: lint 15, typecheck 14, test 15, build 15, and all
+nine integration suites against real service containers, including
+organizations-service. The provisioning step created the
+`organizations_service` role and `helpdesk_organizations_test` from `ci.yml`,
+which is the half of R10 that fails loudly — the other half, the
+`test-integration` invocation, was confirmed by seeing the ninth suite
+actually run in the log rather than by trusting the edit.
+
+Worth knowing why that was in doubt: local green and green on a fresh clone
+are separate claims, and this repository has been bitten by the difference
+before (an untracked empty `src/assets` broke `ai-service:build` in CI in
+Sprint 9.0 while passing locally).
 
 ## Services required to run this locally
 
@@ -231,7 +239,7 @@ Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect feat/s9-2-tenant-foundation
+git branch --show-current      # expect main
 git log --oneline -5
 git status --short             # expect clean
 docker compose up -d
@@ -240,17 +248,18 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Sprint 9.2 is closed on `feat/s9-2-tenant-foundation` (four commits plus
-> docs, unmerged, unpushed, tree clean, gate and all nine integration suites
-> green locally). Phases 0, 1 and 2 of the tenancy migration plan are done:
-> organizations-service exists on port 3010 with a bootstrap organization, and
-> the access token carries `org`, `perms` and `mv` which every service
-> ignores. Decide first whether to merge and push this branch, since the ninth
-> integration suite and the fifteenth project have never run in CI. Then
-> continue with phase 3 — versioning the event contracts so the envelope
-> carries an organization — which is the ordering constraint the whole plan
-> hangs off. Read the Sprint 9.2 section of this handoff first, particularly
-> that membership resolution currently fails open and must not stay that way.
+> Sprint 9.2 is closed and merged: `main` is at `4cb62a2`, pushed, and remote
+> CI is green including the ninth integration suite. Phases 0, 1 and 2 of the
+> tenancy migration plan are done — organizations-service exists on port 3010
+> with a bootstrap organization, and the access token carries `org`, `perms`
+> and `mv` which every service ignores. Continue with phase 3: versioning the
+> event contracts so the envelope carries an organization, publishing both v1
+> and v2 during the compatibility window (ADR 0005 forbids mutating a contract
+> in place). That is the ordering constraint the whole plan hangs off — audit,
+> notification and analytics learn everything from the bus and have nothing to
+> scope by until the envelope carries a tenant. Read the Sprint 9.2 section of
+> this handoff first, particularly that membership resolution currently fails
+> open and must not stay that way.
 
 ## Repository isolation
 
