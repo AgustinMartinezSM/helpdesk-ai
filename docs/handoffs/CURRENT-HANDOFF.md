@@ -1,15 +1,46 @@
 # Current handoff
 
 **Date:** 2026-07-30
-**Sprint:** 9.0 — Close Sprint 8 and connect a model provider
+**Sprint:** 9.1 — Product domain and tenancy audit (closed)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `main` at `6d2a94c` — Sprint 9.0 merged, pushed, remote CI green
+**Branch:** `main` at `e0f4c61` — Sprints 9.0 and 9.1 merged, pushed, remote
+CI green
 
-## Git state
+## Sprint 9.1 — closed
 
-Sprint 9.0 is closed. `feat/ai-service` fast-forwarded onto `main` (ten
-commits, no merge commit, no rewritten history) and was pushed. One
-forward fix followed after the first remote run failed.
+An audit sprint: **no product code changed**, no schema touched, no migration
+written. `docs/s9-1-product-domain-audit` fast-forwarded onto `main` as four
+commits (`a3765aa`, `76f132b`, `4af2eac`, `e0f4c61`), no merge commit.
+
+It produced four architecture documents and six ADRs, **all now Accepted**
+(0012 tenant isolation · 0013 organization and membership ownership · 0014
+active organization context · 0015 permission model · 0016 branch and
+operational station model · 0017 authentication identifiers vs profile
+attributes). Accepted means the decisions are settled — **nothing is built**.
+
+The findings that matter most for whoever implements this:
+
+- **The gateway and BFF perform no authorization.** There is no chokepoint
+  where a tenant could be resolved once, and a browser-set organization
+  header would be forwarded verbatim. Tenancy therefore lives in the signed
+  token (ADR 0014).
+- **Six of seven tickets repository methods take a bare id**, and the one
+  scopable method has an optional filter that fails open.
+- **The current test suite would not catch a cross-tenant leak.** The single
+  tickets integration spec asserts totals, never that a foreign row is absent.
+  This is why the migration opens by writing the isolation test and watching
+  it fail.
+- **Two live bugs, unrelated to tenancy**: internal-note existence leaks to
+  requesters through unfiltered history, and ticket assignment validates
+  nothing about the assignee.
+
+Read `docs/progress/SPRINT-009.1.md` first; it links the rest.
+
+## Sprint 9.0 — closed earlier the same day
+
+`feat/ai-service` fast-forwarded onto `main` (ten commits, no merge commit,
+no rewritten history) and was pushed. One forward fix followed after the
+first remote run failed.
 
 Four commits were created on `feat/ai-service` this sprint, on top of
 `c6cc37b docs: record sprint 8 and the AI security posture`:
@@ -190,9 +221,34 @@ auth-service, tickets-service, ai-service, api-gateway, web-bff and web.
 
 ## Exact next action
 
-Sprint 9.0 is closed. Nothing is in flight. The next step is Sprint 9.1 —
-the product domain and tenancy audit — on its own branch, and it needs
-explicit approval before it starts.
+Sprints 9.0 and 9.1 are closed and nothing is in flight. The next step is
+**Sprint 9.2 — phases 0 to 2 of `docs/architecture/tenancy-migration-plan.md`**,
+on its own branch from current `main`.
+
+Do, in order:
+
+1. Write the two-organization isolation tests and **watch them fail**. The
+   suite cannot currently detect the failure mode this migration risks, so
+   seeing them red first is the only way to trust them later.
+2. Build the shared fixture module. There is none; every integration suite
+   truncates its tables, so a two-tenant test would delete the other tenant's
+   rows.
+3. Create organizations-service and `helpdesk_organizations` — remembering the
+   role list lives in **two** places (`01-service-databases.sh` and `ci.yml`)
+   with no shared source.
+4. One bootstrap organization, memberships for every existing user.
+5. `org`, `perms`, `mv` claims on the token; extend `Actor`. Downstream
+   services receive them and **ignore** them.
+6. Pass `correlationId` in the three publishers — independent of tenancy,
+   cheap, and it makes every later investigation possible.
+
+Do **not**: add `organization_id` to any table (phase 4), version the event
+contracts (phase 3), touch analytics or audit (they cannot be scoped until
+the envelope carries a tenant), or change `canView`.
+
+The sprint should end with a platform that behaves **exactly** as it does
+today, plus an organization nobody references yet. If anything user-visible
+changes, it has done too much.
 
 ## Resume commands
 
@@ -207,12 +263,13 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Sprint 9.0 is closed: the AI work is on `main`, remote CI is green, and
-> the AI capabilities are published as API ready. Start Sprint 9.1 — the
-> product domain and tenancy audit — on a branch off current `main`. It is
-> an audit, so produce the current- and target-state domain maps, the
-> permission matrix draft, the tenancy threat model and the migration risk
-> register before changing any schema.
+> Sprints 9.0 and 9.1 are closed on `main` with remote CI green. The tenancy
+> audit is done and ADRs 0012–0017 are Accepted. Start Sprint 9.2 on a branch
+> off current `main`, implementing phases 0–2 of
+> `docs/architecture/tenancy-migration-plan.md` only. Read
+> `docs/progress/SPRINT-009.1.md` first — particularly the finding that the
+> current test suite cannot detect a cross-tenant leak, which is why phase 0
+> writes a failing test before anything else.
 
 ## Repository isolation
 
