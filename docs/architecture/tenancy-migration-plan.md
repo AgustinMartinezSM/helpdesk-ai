@@ -204,10 +204,10 @@ nothing else to read from. The two cannot differ today, because a caller only
 reaches tickets they may already see, but nothing enforces that. Phase 4 has to
 reconcile them once the column exists.
 
-Verified locally only: `libs/messaging` gained 39 unit and 5 integration tests,
-new adapter specs in tickets-service and ai-service pin the dual publish and the
-skip-and-warn, and the full gate is green. The branch is not pushed, so no CI
-run has confirmed it.
+Verified: `libs/messaging` gained 39 unit and 5 integration tests, new adapter
+specs in tickets-service and ai-service pin the dual publish and the
+skip-and-warn, and the full gate is green — locally and on a remote runner,
+green on the first attempt.
 
 ### Phase 4 — nullable columns and backfill (9.3)
 

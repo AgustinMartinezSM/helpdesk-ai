@@ -174,7 +174,10 @@ produces two publishes with an organization and exactly one without, the
 payload object is shared so the versions cannot describe the same fact
 differently, and a v1 that fails to publish does not suppress the v2.
 
-**Not verified remotely.** This branch is unpushed.
+**Verified remotely too.** `main` was fast-forwarded to `cd033ab` — no merge
+commit, no rewritten history — and pushed. GitHub Actions run `30582924271`
+was green on its first attempt, with the same counts the local gate reported
+and all nine integration suites against real service containers.
 
 ## Debts this phase creates
 

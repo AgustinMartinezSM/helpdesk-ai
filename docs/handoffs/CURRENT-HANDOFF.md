@@ -3,9 +3,9 @@
 **Date:** 2026-07-30
 **Sprint:** 9.3 — Event contracts v2 (phase 3 complete)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `feat/s9-3-event-contracts-v2`, **unmerged and unpushed**. `main`
-is at `eaaf053` with remote CI green; Sprint 9.2 is merged and behind us.
-Working tree clean, full gate and all nine integration suites green locally.
+**Branch:** `main` at `cd033ab` — fast-forwarded from
+`feat/s9-3-event-contracts-v2` (no merge commit, no rewritten history) and
+pushed. Working tree clean, and **remote CI is green** on the first attempt.
 
 Read `docs/progress/SPRINT-009.3.md` first, then `SPRINT-009.2.md`. This file
 is the operational summary of both.
@@ -291,7 +291,7 @@ Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect feat/s9-3-event-contracts-v2
+git branch --show-current      # expect main
 git log --oneline -5
 git status --short             # expect clean
 docker compose up -d
@@ -300,11 +300,9 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Phase 3 is done on `feat/s9-3-event-contracts-v2` — unmerged and unpushed,
-> tree clean, gate and all nine integration suites green locally. Five v2
-> contracts publish alongside their v1, carrying the organization on the
-> envelope; nothing consumes one. Decide first whether to merge and push,
-> since this branch has not run in CI. Then continue with phase 4: add
+> Phase 3 is done and merged: `main` is at `cd033ab`, pushed, and remote CI
+> is green. Five v2 contracts publish alongside their v1, carrying the
+> organization on the envelope; nothing consumes one. Continue with phase 4: add
 > `organization_id` nullable to the ten organization-owned tables and backfill
 > every existing row to the bootstrap organization, with audit_events done per
 > event type against an explicit map and misses logged rather than guessed
