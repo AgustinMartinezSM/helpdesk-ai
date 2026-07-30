@@ -71,13 +71,20 @@ export class PrismaTicketRepository implements TicketRepository {
     ]);
   }
 
-  async findById(id: string): Promise<Ticket | null> {
-    const row = await this.prisma.ticket.findUnique({ where: { id } });
+  async findById(organizationId: string, id: string): Promise<Ticket | null> {
+    // findFirst, not findUnique: the organization is part of the predicate,
+    // so a ticket belonging to someone else answers null rather than being
+    // fetched and then judged. Nothing downstream can forget to judge it.
+    const row = await this.prisma.ticket.findFirst({
+      where: { id, organizationId },
+    });
     return row ? toDomain(row) : null;
   }
 
   async list(filter: TicketListFilter): Promise<TicketPage> {
     const where = {
+      // Not spread-optional like the rest: this one always narrows.
+      organizationId: filter.organizationId,
       ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
       ...(filter.assigneeId ? { assigneeId: filter.assigneeId } : {}),
       ...(filter.status ? { status: filter.status } : {}),

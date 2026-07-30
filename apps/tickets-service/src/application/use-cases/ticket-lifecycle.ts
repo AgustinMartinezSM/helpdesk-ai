@@ -8,6 +8,7 @@ import {
   canTransition,
   canView,
   isStaff,
+  requireOrganization,
   requireOrganizationOf,
   type Actor,
   type Ticket,
@@ -29,7 +30,10 @@ export class ChangeTicketStatusUseCase {
     to: TicketStatus,
     traceId?: string,
   ): Promise<Ticket> {
-    const ticket = await this.tickets.findById(ticketId);
+    const ticket = await this.tickets.findById(
+      requireOrganization(actor),
+      ticketId,
+    );
     if (!ticket || !canView(actor, ticket)) {
       throw new TicketNotFoundError();
     }
@@ -92,7 +96,10 @@ export class AssignTicketUseCase {
       throw new ForbiddenTicketActionError();
     }
 
-    const ticket = await this.tickets.findById(ticketId);
+    const ticket = await this.tickets.findById(
+      requireOrganization(actor),
+      ticketId,
+    );
     if (!ticket) {
       throw new TicketNotFoundError();
     }

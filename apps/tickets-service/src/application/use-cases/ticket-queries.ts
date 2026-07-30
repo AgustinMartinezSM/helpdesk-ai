@@ -2,6 +2,7 @@ import { TicketNotFoundError } from '../../domain/errors';
 import {
   canView,
   isStaff,
+  requireOrganization,
   type Actor,
   type Ticket,
   type TicketComment,
@@ -21,7 +22,10 @@ export class GetTicketUseCase {
   constructor(private readonly tickets: TicketRepository) {}
 
   async execute(actor: Actor, ticketId: string): Promise<TicketDetails> {
-    const ticket = await this.tickets.findById(ticketId);
+    const ticket = await this.tickets.findById(
+      requireOrganization(actor),
+      ticketId,
+    );
     // Non-owners get the same 404 as a missing ticket: a 403 would confirm
     // the ticket exists.
     if (!ticket || !canView(actor, ticket)) {
@@ -52,12 +56,14 @@ export class ListTicketsUseCase {
   constructor(private readonly tickets: TicketRepository) {}
 
   async execute(actor: Actor, input: ListTicketsInput): Promise<TicketPage> {
+    const organizationId = requireOrganization(actor);
     const take = Math.min(input.take ?? 20, MAX_PAGE_SIZE);
     const skip = Math.max(input.skip ?? 0, 0);
 
     // Requesters are always scoped to their own tickets, whatever they ask.
     if (!isStaff(actor)) {
       return this.tickets.list({
+        organizationId,
         requesterId: actor.id,
         status: input.status,
         skip,
@@ -65,7 +71,10 @@ export class ListTicketsUseCase {
       });
     }
 
+    // Staff see every ticket in their organization and nothing outside it.
+    // Before this, the omitted scope widened the query to the whole table.
     return this.tickets.list({
+      organizationId,
       status: input.status,
       assigneeId: input.assigneeId,
       skip,

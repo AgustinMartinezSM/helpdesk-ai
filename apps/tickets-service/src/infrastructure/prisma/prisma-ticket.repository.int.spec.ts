@@ -4,6 +4,8 @@ import {
   aHistoryEntry,
   aTicket,
   idsOf,
+  OTHER_ORGANIZATION,
+  TEST_ORGANIZATION,
 } from '../../testing/fixtures';
 import { PrismaTicketRepository } from './prisma-ticket.repository';
 import { PrismaService } from './prisma.service';
@@ -37,7 +39,7 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
     const ticket = aTicket();
     await repository.create(ticket, aHistoryEntry(ticket));
 
-    const found = await repository.findById(ticket.id);
+    const found = await repository.findById(TEST_ORGANIZATION, ticket.id);
     expect(found).toMatchObject({
       id: ticket.id,
       status: 'open',
@@ -69,6 +71,7 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
     await repository.create(foreign, aHistoryEntry(foreign));
 
     const page = await repository.list({
+      organizationId: TEST_ORGANIZATION,
       requesterId: requester,
       skip: 0,
       take: 10,
@@ -91,6 +94,7 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
     }
 
     const page = await repository.list({
+      organizationId: TEST_ORGANIZATION,
       requesterId: requester,
       status: 'open',
       skip: 0,
@@ -114,6 +118,7 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
     await repository.create(foreign, aHistoryEntry(foreign));
 
     const firstPage = await repository.list({
+      organizationId: TEST_ORGANIZATION,
       requesterId: requester,
       skip: 0,
       take: 1,
@@ -124,22 +129,57 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
     expect(idsOf(own)).toContain(firstPage.items[0].id);
   });
 
-  it('returns every ticket when no requester filter is passed', async () => {
-    // Documenting the fail-open shape rather than endorsing it. `list` builds
-    // its predicate from optional spreads, so omitting the scope returns the
-    // whole table. That is correct for staff today and is precisely what the
-    // tenancy migration has to remove — when the organization scope becomes
-    // required, this test must be rewritten deliberately rather than quietly
-    // continuing to pass.
+  it('returns every ticket in the organization when no requester filter is passed', async () => {
+    // This test used to document the fail-open shape: `list` built its
+    // predicate from optional spreads, so omitting the scope returned the
+    // whole table, and its own comment said it had to be rewritten
+    // deliberately when the organization scope became required. This is that
+    // rewrite. The unscoped call it used to make no longer compiles.
     const mine = aTicket();
     const theirs = aTicket();
     for (const ticket of [mine, theirs]) {
       await repository.create(ticket, aHistoryEntry(ticket));
     }
 
-    const page = await repository.list({ skip: 0, take: 10 });
+    const page = await repository.list({
+      organizationId: TEST_ORGANIZATION,
+      skip: 0,
+      take: 10,
+    });
 
     expect(idsOf(page.items)).toEqual(idsOf([mine, theirs]));
+  });
+
+  it('never returns a ticket from another organization, by id or by list', async () => {
+    // The two-organization assertion the migration was written for. Asserted
+    // by identity rather than by count: a count of "one" cannot tell the
+    // right ticket from the wrong one.
+    const ours = aTicket();
+    const theirs = aTicket({ organizationId: OTHER_ORGANIZATION });
+    // Same requester in both, so nothing but the organization can be doing
+    // the filtering.
+    const shared = aTicket({
+      organizationId: OTHER_ORGANIZATION,
+      requesterId: ours.requesterId,
+    });
+    for (const ticket of [ours, theirs, shared]) {
+      await repository.create(ticket, aHistoryEntry(ticket));
+    }
+
+    const page = await repository.list({
+      organizationId: TEST_ORGANIZATION,
+      skip: 0,
+      take: 10,
+    });
+    expect(idsOf(page.items)).toEqual([ours.id]);
+    expect(page.total).toBe(1);
+
+    // A foreign ticket answers null, exactly as a missing one does —
+    // a 404 rather than a 403, so existence is not confirmed.
+    expect(await repository.findById(TEST_ORGANIZATION, theirs.id)).toBeNull();
+    expect(
+      await repository.findById(OTHER_ORGANIZATION, theirs.id),
+    ).not.toBeNull();
   });
 
   it('updates lifecycle fields and appends history', async () => {
@@ -151,7 +191,7 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
       aHistoryEntry(ticket, { action: 'status_changed' }),
     );
 
-    const found = await repository.findById(ticket.id);
+    const found = await repository.findById(TEST_ORGANIZATION, ticket.id);
     expect(found?.status).toBe('in_progress');
     expect(found?.assigneeId).not.toBeNull();
     expect(await repository.historyFor(ticket.id, true)).toHaveLength(2);

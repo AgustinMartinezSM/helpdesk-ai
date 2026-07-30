@@ -4,7 +4,11 @@ import {
   NoOrganizationContextError,
   TicketNotFoundError,
 } from '../../domain/errors';
-import { canTransition, type Actor } from '../../domain/ticket';
+import {
+  canTransition,
+  requireOrganizationOf,
+  type Actor,
+} from '../../domain/ticket';
 import { OTHER_ORGANIZATION, TEST_ORGANIZATION } from '../../testing/fixtures';
 import {
   FakeEventPublisher,
@@ -199,29 +203,54 @@ describe('writes require a tenant', () => {
     expect(comment.organizationId).toBe(ticket.organizationId);
   });
 
-  it('refuses a mutation from staff acting in another organization', async () => {
+  it('hides a ticket in another organization behind the not-found answer', async () => {
     const ctx = buildContext();
     const ticket = await ctx.create.execute(REQUESTER, {
       title: 'T',
       description: 'D',
     });
 
-    // Nothing can reach this today, because the read would not have handed
-    // the ticket over. That is the point of checking it here as well: it does
-    // not depend on the read staying correct.
-    await expect(
+    // Not "forbidden": the scoped read never returns the row, so staff in
+    // another organization cannot even learn that it exists. Confirming
+    // existence is the leak, so the weaker-sounding error is the right one.
+    for (const attempt of [
       ctx.comment.execute(FOREIGN_AGENT, ticket.id, { body: 'hello' }),
-    ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
-    await expect(
       ctx.changeStatus.execute(FOREIGN_AGENT, ticket.id, 'in_progress'),
-    ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
-    await expect(
       ctx.assign.execute(FOREIGN_AGENT, ticket.id, AGENT.id),
-    ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
+      ctx.get.execute(FOREIGN_AGENT, ticket.id),
+    ]) {
+      await expect(attempt).rejects.toBeInstanceOf(TicketNotFoundError);
+    }
 
     expect(ctx.events.commentsAdded).toEqual([]);
     expect(ctx.events.statusChanged).toEqual([]);
     expect(ctx.events.assigned).toEqual([]);
+  });
+});
+
+describe('requireOrganizationOf', () => {
+  const ticket = {
+    id: 'ticket',
+    organizationId: TEST_ORGANIZATION,
+  } as Parameters<typeof requireOrganizationOf>[1];
+
+  it('returns the ticket organization when the caller is acting in it', () => {
+    expect(requireOrganizationOf(AGENT, ticket)).toBe(TEST_ORGANIZATION);
+  });
+
+  it('refuses a caller acting in a different organization', () => {
+    // Unreachable through the read path now that findById is scoped, and
+    // tested here for exactly that reason: it is the second gate, and a
+    // second gate nothing exercises is a second gate nobody notices breaking.
+    expect(() => requireOrganizationOf(FOREIGN_AGENT, ticket)).toThrow(
+      ForbiddenTicketActionError,
+    );
+  });
+
+  it('refuses a caller with no organization at all', () => {
+    expect(() => requireOrganizationOf(TENANTLESS_USER, ticket)).toThrow(
+      NoOrganizationContextError,
+    );
   });
 });
 

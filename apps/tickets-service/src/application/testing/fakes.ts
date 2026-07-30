@@ -29,12 +29,17 @@ export class InMemoryTicketRepository implements TicketRepository {
     this.history.push(history);
   }
 
-  async findById(id: string): Promise<Ticket | null> {
-    return this.tickets.get(id) ?? null;
+  async findById(organizationId: string, id: string): Promise<Ticket | null> {
+    // The fake enforces the scope for real. A double that ignored it would
+    // let every unit test pass against a repository that leaks, which is the
+    // exact failure the phase 0 assertions were written to catch.
+    const ticket = this.tickets.get(id);
+    return ticket && ticket.organizationId === organizationId ? ticket : null;
   }
 
   async list(filter: TicketListFilter): Promise<TicketPage> {
     const all = [...this.tickets.values()]
+      .filter((t) => t.organizationId === filter.organizationId)
       .filter(
         (t) => !filter.requesterId || t.requesterId === filter.requesterId,
       )

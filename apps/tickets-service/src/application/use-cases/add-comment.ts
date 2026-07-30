@@ -6,6 +6,7 @@ import {
 import {
   canView,
   isStaff,
+  requireOrganization,
   requireOrganizationOf,
   type Actor,
   type TicketComment,
@@ -31,7 +32,10 @@ export class AddCommentUseCase {
     input: AddCommentInput,
     traceId?: string,
   ): Promise<TicketComment> {
-    const ticket = await this.tickets.findById(ticketId);
+    const ticket = await this.tickets.findById(
+      requireOrganization(actor),
+      ticketId,
+    );
     if (!ticket || !canView(actor, ticket)) {
       throw new TicketNotFoundError();
     }
