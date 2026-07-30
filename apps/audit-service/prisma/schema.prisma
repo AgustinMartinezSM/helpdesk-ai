@@ -25,6 +25,19 @@ model AuditEvent {
   payload       Json
   recordedAt    DateTime @map("recorded_at") @db.Timestamptz(3)
 
+  /// Tenant this event belongs to (ADR 0012). An opaque identifier, never a
+  /// foreign key (ADR 0003).
+  ///
+  /// Every row that existed when the column was added was assigned the
+  /// bootstrap organization by a backfill, because there was no other
+  /// organization it could have been. Going forward the value is on the v2
+  /// envelope, and the consumer starts persisting it in the phase that
+  /// teaches the consumers to read v2 — until then new rows are null.
+  ///
+  /// The backfill is the only UPDATE this table will ever see. The trail is
+  /// append-only to the application; a migration is not the application.
+  organizationId String? @map("organization_id") @db.Uuid
+
   @@index([type, occurredAt])
   @@index([occurredAt])
   @@map("audit_events")

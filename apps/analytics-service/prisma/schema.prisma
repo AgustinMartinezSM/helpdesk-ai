@@ -29,6 +29,11 @@ model TicketSnapshot {
   /// Envelope occurredAt of the newest applied event — the LWW guard.
   lastEventAt DateTime  @map("last_event_at") @db.Timestamptz(3)
 
+  /// Tenant this snapshot belongs to (ADR 0012). An opaque identifier, never
+  /// a foreign key (ADR 0003). Nullable for now: populated by a backfill and
+  /// read by nothing until the aggregates take a required scope.
+  organizationId String? @map("organization_id") @db.Uuid
+
   @@index([status])
   @@map("ticket_snapshots")
 }

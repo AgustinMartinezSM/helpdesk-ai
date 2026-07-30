@@ -23,6 +23,11 @@ model TicketRef {
   ticketId    String @id @map("ticket_id") @db.Uuid
   requesterId String @map("requester_id") @db.Uuid
 
+  /// Tenant this ticket belongs to (ADR 0012). An opaque identifier, never a
+  /// foreign key (ADR 0003). Nullable for now: populated by a backfill and
+  /// read by nothing until recipient resolution compares tenant as well as id.
+  organizationId String? @map("organization_id") @db.Uuid
+
   @@map("ticket_refs")
 }
 
@@ -37,6 +42,11 @@ model Notification {
   sourceEventId String    @map("source_event_id") @db.Uuid
   readAt        DateTime? @map("read_at") @db.Timestamptz(3)
   createdAt     DateTime  @map("created_at") @db.Timestamptz(3)
+
+  /// Tenant the recipient was acting in when this was produced (ADR 0012).
+  /// An opaque identifier, never a foreign key (ADR 0003). Nullable for now:
+  /// populated by a backfill, read by nothing yet.
+  organizationId String? @map("organization_id") @db.Uuid
 
   @@unique([userId, sourceEventId])
   @@index([userId, createdAt])

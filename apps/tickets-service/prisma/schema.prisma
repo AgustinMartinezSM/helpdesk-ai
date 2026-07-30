@@ -41,6 +41,17 @@ model Ticket {
   createdAt   DateTime       @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime       @map("updated_at") @db.Timestamptz(3)
 
+  /// Tenant this ticket belongs to (ADR 0012). An opaque identifier, never a
+  /// foreign key — organizations live in another service's database
+  /// (ADR 0003).
+  ///
+  /// Nullable for now. A backfill populated every row that existed when the
+  /// column was added, and nothing reads it yet; rows written between then
+  /// and the phase that teaches the write paths to set it will be null, which
+  /// is why the enforcement phase re-runs the backfill before adding the
+  /// NOT NULL constraint.
+  organizationId String? @map("organization_id") @db.Uuid
+
   comments TicketComment[]
   history  TicketHistoryEntry[]
 
@@ -58,6 +69,11 @@ model TicketComment {
   internal  Boolean
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
 
+  /// Denormalized from the parent ticket. Redundant while a comment can only
+  /// belong to one ticket, and deliberate: a scoped query must not have to
+  /// join to the ticket to know whose data it is reading.
+  organizationId String? @map("organization_id") @db.Uuid
+
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId])
@@ -71,6 +87,10 @@ model TicketHistoryEntry {
   action    String
   detail    String?
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  /// Denormalized from the parent ticket, for the same reason as on a
+  /// comment: a scoped read must not need a join to know whose row it is.
+  organizationId String? @map("organization_id") @db.Uuid
 
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 

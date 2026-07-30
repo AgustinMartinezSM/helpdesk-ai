@@ -58,6 +58,13 @@ model Suggestion {
 
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
 
+  /// Tenant this suggestion belongs to (ADR 0012). An opaque identifier,
+  /// never a foreign key (ADR 0003).
+  ///
+  /// Nullable for now: populated by a backfill, read by nothing, and NOT NULL
+  /// only once the write path sets it.
+  organizationId String? @map("organization_id") @db.Uuid
+
   @@index([ticketId, task, createdAt])
   @@map("suggestions")
 }
