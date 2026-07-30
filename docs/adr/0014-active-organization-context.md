@@ -132,16 +132,28 @@ Sprint 9.2 built the claims. Three things are worth recording here, because
 the code now differs from what this ADR describes, and a reader should not
 have to discover that by reading it.
 
-**Resolution fails open, and must not stay that way.** This ADR says login
-fails when organizations-service is unavailable. The implementation mints the
-token without `org`, `perms` and `mv` instead, and logs a warning. The reason
-is sequencing: no service reads the claims yet, so failing closed would have
-made a service nobody depends on a single point of failure for every login,
-in exchange for protecting nothing. That trade reverses the moment write
-paths start setting the organization from the claim — at which point a token
-with no tenant context is a token that must not be issued. The warning exists
-so a resolution that keeps failing is visible before then, rather than
-discovered when it becomes fatal.
+**Resolution failed open until Sprint 9.4, and now fails closed — but only on
+uncertainty.** For two sprints the implementation minted a token without
+`org`, `perms` and `mv` when resolution failed, because no service read the
+claims and failing closed would have made a service nobody depended on a
+single point of failure for every login. That trade reversed the moment write
+paths started taking the organization from the claim.
+
+What makes the closed version safe is a distinction this ADR did not draw,
+and which turned out to be the load-bearing one:
+
+- **"I asked, and this person belongs to no organization."** A real answer.
+  A token is still minted, with no tenant claims. This is ordinary rather
+  than exceptional — it is the state of every account between registering and
+  organizations-service consuming the registration event — and refusing it
+  would make register-then-login racy.
+- **"I could not ask."** Unreachable service, rejected credential, a body
+  that did not parse. Nothing is known, so nothing is minted.
+
+Only the second refuses, and it answers **503, not 401**: the caller's
+password was fine, and a 401 would send them to reset one that works. The
+first is caught at the write instead, where the alternative would be a row
+nobody can be shown to own.
 
 **`perms` is empty.** The claim is present and carries an empty array,
 because role templates are still plain strings and the template-to-permission

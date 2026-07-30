@@ -1,14 +1,51 @@
 # Current handoff
 
 **Date:** 2026-07-30
-**Sprint:** 9.3 — Event contracts v2 and tenant columns (phases 3 and 4)
+**Sprint:** 9.4 — Write paths and the first scoped reads (in progress)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `main` at `e3ecbc5` — fast-forwarded from
-`feat/s9-4-tenant-columns` (no merge commit, no rewritten history) and pushed.
-Working tree clean, and **remote CI is green** on the first attempt.
+**Branch:** `feat/s9-5-tenant-writes`, **unmerged and unpushed**. `main` is at
+`4f4ae5d` with remote CI green through phase 4. Working tree clean, full gate
+and all nine integration suites green locally.
 
-Read `docs/progress/SPRINT-009.3.md` first, then `SPRINT-009.2.md`. This file
+Read `docs/progress/SPRINT-009.4.md` first, then `SPRINT-009.3.md`. This file
 is the operational summary of both.
+
+## Sprint 9.4 — writes are tenant-safe, reads are being scoped
+
+**The plan's phase order was wrong and I inverted it.** Reads before writes
+produces a broken product: reads would filter by `organization_id` while
+writes still did not set it, so a ticket created in that window would carry a
+null organization and its own author would not find it. Writes first has no
+such state — the leak window is unchanged from today, because reads were
+already unscoped.
+
+**Every write in tickets-service and ai-service takes the organization from
+the token.** `requireOrganization` is the only bridge from the actor's
+optional organization to the domain's required one, so forgetting the check is
+a type error rather than a row belonging to nobody.
+
+**A child row takes its parent's tenant**, and a mutation insists the caller is
+acting inside the ticket's organization rather than merely able to see it.
+That discharges the debt phase 3 recorded.
+
+**tickets-service reads are scoped.** `findById(organizationId, id)`, and
+`organizationId` is required on `TicketListFilter` while every other field
+stays optional — the filter builds its predicate from optional spreads, so a
+forgotten field used to _widen_ the query. A foreign ticket answers null
+exactly as a missing one does, so it is a 404 and not a 403: confirming
+existence is the leak.
+
+### What is left of phases 5 and 6
+
+- **users-service directory, the audit filter, the five analytics
+  aggregates** are still unscoped. R5 says the analytics five must change in
+  one commit: a partial change leaves a dashboard mixing scoped and unscoped
+  numbers, which is worse than either.
+- **`isStaff`/`isAdmin` are still defined four times.** Delete them rather
+  than change their signature, and delete the duplicate `Actor` copies in
+  tickets-service and users-service in the same change or they drift.
+- **Consumers still read v1**, so the rows they project carry no tenant.
+- **Assignee validation** still accepts any uuid.
 
 ## Sprint 9.3 — phase 3, event contracts v2
 
@@ -127,18 +164,19 @@ without a reason; browsers currently have no path to it at all.
 **It declares no `JWT_ACCESS_SECRET`**, unlike every other service, because it
 verifies no access tokens.
 
-**The access token carries `org`, `perms` and `mv`.** Every service receives
-them and ignores them. `perms` is an empty array.
+**The access token carries `org`, `perms` and `mv`.** tickets-service and
+ai-service now read `org`; every other service still ignores all three.
+`perms` is still an empty array.
 
 ## Things that will bite you if you do not know them
 
-**Resolution fails open.** ADR 0014 says login fails when
-organizations-service is unavailable. It does not — the token is minted
-without the three claims and auth-service logs
-`minting a token without tenant claims: ...`. This is deliberate and
-documented in ADR 0014 and the sprint report. **It must become fail-closed in
-the phase where writes start setting the organization from the claim.** If you
-are that phase, this is your job.
+**Resolution fails closed now — but only on uncertainty.** This changed in
+Sprint 9.4. If organizations-service cannot be asked, no token is minted and
+login answers **503** (not 401 — the password was fine). If it _can_ be asked
+and the answer is "this person belongs nowhere", a token is still minted with
+no tenant claims, because that is the ordinary state of an account between
+registering and the consumer creating its membership. That second case is
+refused at the **write** instead, with a 403 that says so.
 
 **Memberships are not a projection.** They cannot be rebuilt from the event
 log. This is the first data in the platform with that property, and it is why
@@ -349,7 +387,7 @@ Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect main
+git branch --show-current      # expect feat/s9-5-tenant-writes
 git log --oneline -5
 git status --short             # expect clean
 docker compose up -d
