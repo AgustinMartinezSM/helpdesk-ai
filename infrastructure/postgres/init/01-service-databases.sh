@@ -16,6 +16,7 @@ AUDIT_PASSWORD="${HELPDESK_AUDIT_DB_PASSWORD:-helpdesk_local_only_audit}"
 NOTIFICATIONS_PASSWORD="${HELPDESK_NOTIFICATIONS_DB_PASSWORD:-helpdesk_local_only_notifications}"
 ANALYTICS_PASSWORD="${HELPDESK_ANALYTICS_DB_PASSWORD:-helpdesk_local_only_analytics}"
 AI_PASSWORD="${HELPDESK_AI_DB_PASSWORD:-helpdesk_local_only_ai}"
+ORGANIZATIONS_PASSWORD="${HELPDESK_ORGANIZATIONS_DB_PASSWORD:-helpdesk_local_only_organizations}"
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
   CREATE ROLE auth_service LOGIN PASSWORD '${AUTH_PASSWORD}' CREATEDB;
@@ -45,4 +46,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   CREATE ROLE ai_service LOGIN PASSWORD '${AI_PASSWORD}' CREATEDB;
   CREATE DATABASE helpdesk_ai OWNER ai_service;
   CREATE DATABASE helpdesk_ai_test OWNER ai_service;
+
+  CREATE ROLE organizations_service LOGIN PASSWORD '${ORGANIZATIONS_PASSWORD}' CREATEDB;
+  CREATE DATABASE helpdesk_organizations OWNER organizations_service;
+  CREATE DATABASE helpdesk_organizations_test OWNER organizations_service;
 EOSQL

@@ -6,8 +6,9 @@
 #   container still listens on 5432.
 # - One PostgreSQL instance will host one logical database per service
 #   (helpdesk_auth, helpdesk_users, helpdesk_tickets, helpdesk_audit,
-#   helpdesk_notifications, helpdesk_analytics, helpdesk_ai), each with its
-#   own credentials, created when the owning service is introduced. See
+#   helpdesk_notifications, helpdesk_analytics, helpdesk_ai,
+#   helpdesk_organizations), each with its own credentials, created when the
+#   owning service is introduced. See
 #   docs/architecture/data-ownership.md.
 # - Credentials below are non-default examples for LOCAL DEVELOPMENT ONLY and
 #   can be overridden through a git-ignored .env file (see .env.example).
@@ -32,6 +33,7 @@ services:
       HELPDESK_NOTIFICATIONS_DB_PASSWORD: ${HELPDESK_NOTIFICATIONS_DB_PASSWORD:-helpdesk_local_only_notifications}
       HELPDESK_ANALYTICS_DB_PASSWORD: ${HELPDESK_ANALYTICS_DB_PASSWORD:-helpdesk_local_only_analytics}
       HELPDESK_AI_DB_PASSWORD: ${HELPDESK_AI_DB_PASSWORD:-helpdesk_local_only_ai}
+      HELPDESK_ORGANIZATIONS_DB_PASSWORD: ${HELPDESK_ORGANIZATIONS_DB_PASSWORD:-helpdesk_local_only_organizations}
     ports:
       - '5433:5432'
     volumes:

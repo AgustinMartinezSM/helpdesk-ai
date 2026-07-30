@@ -1,0 +1,62 @@
+// Persistence model for organizations-service. Maps to PERSISTENCE shapes
+// only; domain entities live in src/domain and are mapped inside the
+// repository adapter (ADR 0004).
+//
+// Unlike the projections in users-service, notification-service and
+// analytics-service, this data is NOT rebuildable from the event log: losing
+// a membership locks a person out of an organization (ADR 0013). Treat every
+// row here as a source of truth.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Organization {
+  id        String   @id @db.Uuid
+  slug      String   @unique
+  name      String
+  status    String
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  memberships Membership[]
+
+  @@map("organizations")
+}
+
+model Membership {
+  id String @id @db.Uuid
+
+  // A real intra-service foreign key. ADR 0013 put the whole organizational
+  // graph in one database precisely so these edges are enforceable.
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // userId is the identifier auth-service issued in user.registered.v1 —
+  // an opaque id, never a cross-service foreign key (ADR 0003).
+  userId String @map("user_id") @db.Uuid
+
+  // A plain string key until role templates become seeded rows with their
+  // permission mappings (ADR 0015). The evaluator lands with the read-path
+  // migration, not here.
+  roleTemplate String @map("role_template")
+  status       String
+
+  // Membership version carried as the `mv` token claim (ADR 0014). Bumped by
+  // the membership lifecycle so an operation that cannot tolerate a stale
+  // claim can compare versions instead of trusting the token's snapshot.
+  version Int @default(1)
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
