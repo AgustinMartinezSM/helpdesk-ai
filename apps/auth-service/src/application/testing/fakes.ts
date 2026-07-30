@@ -5,6 +5,11 @@ import type {
   EventPublisher,
   UserRegisteredEvent,
 } from '../ports/event-publisher';
+import type {
+  MembershipResolver,
+  ResolvedMembership,
+  SessionLogger,
+} from '../ports/membership-resolver';
 import type { PasswordHasher } from '../ports/password-hasher';
 import type { RefreshTokenRepository } from '../ports/refresh-token.repository';
 import type {
@@ -104,10 +109,62 @@ export class FakeEventPublisher implements EventPublisher {
 }
 
 export class FakeTokenIssuer implements TokenIssuer {
+  /** Every claim set handed to the issuer, so specs can assert on them. */
+  readonly issued: AccessTokenClaims[] = [];
+
   async issueAccessToken(
     claims: AccessTokenClaims,
   ): Promise<IssuedAccessToken> {
+    this.issued.push(claims);
     return { token: `access:${claims.sub}`, expiresInSeconds: 900 };
+  }
+
+  get lastClaims(): AccessTokenClaims | undefined {
+    return this.issued.at(-1);
+  }
+}
+
+export class FakeMembershipResolver implements MembershipResolver {
+  calls: string[] = [];
+
+  constructor(
+    private readonly outcome:
+      | { kind: 'resolved'; membership: ResolvedMembership }
+      | { kind: 'none' }
+      | { kind: 'fails'; error: Error },
+  ) {}
+
+  static resolving(membership: ResolvedMembership): FakeMembershipResolver {
+    return new FakeMembershipResolver({ kind: 'resolved', membership });
+  }
+
+  static resolvingNothing(): FakeMembershipResolver {
+    return new FakeMembershipResolver({ kind: 'none' });
+  }
+
+  static failing(
+    message = 'organizations-service is down',
+  ): FakeMembershipResolver {
+    return new FakeMembershipResolver({
+      kind: 'fails',
+      error: new Error(message),
+    });
+  }
+
+  async resolveFor(userId: string): Promise<ResolvedMembership | null> {
+    this.calls.push(userId);
+    if (this.outcome.kind === 'fails') {
+      throw this.outcome.error;
+    }
+    return this.outcome.kind === 'resolved' ? this.outcome.membership : null;
+  }
+}
+
+export class RecordingLogger implements SessionLogger {
+  readonly warnings: string[] = [];
+
+  warn(message: string): void {
+    this.warnings.push(message);
   }
 }
 

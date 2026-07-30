@@ -10,6 +10,10 @@ import {
   type EventPublisher,
 } from '../application/ports/event-publisher';
 import {
+  MEMBERSHIP_RESOLVER,
+  type MembershipResolver,
+} from '../application/ports/membership-resolver';
+import {
   PASSWORD_HASHER,
   type PasswordHasher,
 } from '../application/ports/password-hasher';
@@ -31,6 +35,7 @@ import { LogoutUseCase } from '../application/use-cases/logout';
 import { RefreshSessionUseCase } from '../application/use-cases/refresh-session';
 import { RegisterUserUseCase } from '../application/use-cases/register-user';
 import { APP_ENV, SERVICE_NAME, type AuthServiceEnv } from '../config/env';
+import { HttpMembershipResolver } from '../infrastructure/http/http-membership-resolver';
 import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-event-publisher';
 import { PrismaRefreshTokenRepository } from '../infrastructure/prisma/prisma-refresh-token.repository';
 import { PrismaUserRepository } from '../infrastructure/prisma/prisma-user.repository';
@@ -101,19 +106,48 @@ export class AppModule {
           inject: [JwtService],
         },
         {
+          // Absent when no service credential is configured: the resolver is
+          // then null rather than a client that would call with nothing, and
+          // tokens are minted without tenant claims.
+          provide: MEMBERSHIP_RESOLVER,
+          useFactory: (logger: Logger): MembershipResolver | null => {
+            if (!env.INTERNAL_SERVICE_TOKEN) {
+              logger.warn(
+                'INTERNAL_SERVICE_TOKEN is not set: tokens will be minted without tenant claims',
+              );
+              return null;
+            }
+            return new HttpMembershipResolver(
+              env.ORGANIZATIONS_SERVICE_URL,
+              env.INTERNAL_SERVICE_TOKEN,
+            );
+          },
+          inject: [Logger],
+        },
+        {
           provide: SessionService,
           useFactory: (
             refreshTokens: RefreshTokenRepository,
             tokenIssuer: TokenIssuer,
             clock: Clock,
+            memberships: MembershipResolver | null,
+            logger: Logger,
           ) =>
             new SessionService(
               refreshTokens,
               tokenIssuer,
               clock,
               env.JWT_REFRESH_TTL_SECONDS,
+              memberships ?? undefined,
+              logger,
             ),
-          inject: [REFRESH_TOKEN_REPOSITORY, TOKEN_ISSUER, CLOCK],
+          inject: [
+            REFRESH_TOKEN_REPOSITORY,
+            TOKEN_ISSUER,
+            CLOCK,
+            MEMBERSHIP_RESOLVER,
+            Logger,
+          ],
         },
         {
           // The adapter owns its broker connection; overriding this token in

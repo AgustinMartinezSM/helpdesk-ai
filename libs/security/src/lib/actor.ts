@@ -7,6 +7,18 @@
 export interface Actor {
   readonly id: string;
   readonly roles: string[];
+  /**
+   * Tenant context (ADR 0014). Optional for now, and nothing reads it.
+   *
+   * They are what the read-path migration turns required, which is the point
+   * at which the compiler starts pointing at every authorization call site
+   * that has not been updated. That only works once the duplicate local
+   * copies of this interface in tickets-service and users-service are
+   * deleted, so making these required before then would hide the very call
+   * sites the change is meant to surface.
+   */
+  readonly organizationId?: string;
+  readonly permissions?: ReadonlySet<string>;
 }
 
 /** Staff can see and drive other people's tickets and directories. */
