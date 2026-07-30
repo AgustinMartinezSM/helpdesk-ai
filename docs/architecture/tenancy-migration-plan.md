@@ -2,8 +2,8 @@
 
 Status: **Approved 2026-07-30.** Phases map to sprints 9.2–9.4 in the
 delivery plan; the threat ids are from `tenancy-threat-model.md`. Phases 0, 1
-and 2 ran in Sprint 9.2, each with deviations recorded in its own entry below.
-Phases 3–8 are unchanged and unstarted.
+and 2 ran in Sprint 9.2 and phase 3 in Sprint 9.3, each with deviations
+recorded in its own entry below. Phases 4–8 are unchanged and unstarted.
 
 ## The ordering constraint that drives everything
 
@@ -28,7 +28,7 @@ cell says so and names the commit.
 | R1  | **Optional scope field silently widens every query.** `organizationId?` type-checks everywhere and defaults to cross-tenant.                                                             | `prisma-ticket.repository.ts:56` optional spread; audit's filter is all-optional too | **High** | **High** | tickets, audit, analytics, ai  | Scope is a **required** field. Missing scope must be a compile error. Add a test asserting the query is scoped, not just that counts match.                                                                                                |  9.3   | None — caught at compile time if done right               |
 | R2  | **Test suite stays green through a cross-tenant leak.** The one tickets integration spec asserts `total`, never that a foreign row is absent from `items`.                               | `prisma-ticket.repository.int.spec.ts:76`                                            | **High** | **High** | tickets                        | Write the two-organization isolation test **first**, before any column exists, and watch it fail. **Partly done (`e2e37dc`)** — tickets asserts row identity, but the scope it proves is the requester; no organization column exists yet. |  9.2   | None                                                      |
 | R3  | **`AssignTicketUseCase` is missed.** It never calls `canView`, so an org check added inside `canView` does not reach it.                                                                 | `use-cases/ticket-lifecycle.ts:79`                                                   | **High** | **High** | tickets                        | Enumerate use cases against the check, not the other way round. Add the assignee membership check at the same time.                                                                                                                        |  9.3   | None                                                      |
-| R4  | **audit_events backfill is not uniformly derivable.** Tenant identity lives inside opaque jsonb, and each contract names its subject differently (`ticketId`, `userId`, `suggestionId`). | `audit-service/prisma/schema.prisma:19`; contracts.ts                                | **High** |  Medium  | audit                          | Backfill per event type with an explicit map; anything unmatched gets the bootstrap organization and is **logged**, not guessed silently.                                                                                                  |  9.4   | Backfill is additive; the column can be dropped           |
+| R4  | **audit_events backfill is not uniformly derivable.** Tenant identity lives inside opaque jsonb, and each contract names its subject differently (`ticketId`, `userId`, `suggestionId`). | `audit-service/prisma/schema.prisma:19`; contracts.ts                                | **High** |  Medium  | audit                          | Backfill per event type with an explicit map; anything unmatched gets the bootstrap organization and is **logged**, not guessed silently. **Two rows per fact since phase 3** (`45b1b88`) — the map must key on `type`.                    |  9.4   | Backfill is additive; the column can be dropped           |
 | R5  | **analytics has no signature to thread a tenant into.** `total()`, `countByStatus()`, `countByPriority()` take zero arguments.                                                           | `prisma-analytics.repository.ts:60`                                                  | **High** |  Medium  | analytics                      | Change all five signatures in one commit. Partial change leaves a dashboard mixing scoped and unscoped numbers — worse than either.                                                                                                        |  9.4   | Revert is a single commit                                 |
 | R6  | **`isStaff` drifts across four definitions.** Updating `libs/security` misses tickets-service and users-service.                                                                         | `actor.ts:13`, `ticket.ts:70`, `user-profile.ts:35`, `[id]/page.tsx:81`              | **High** |  Medium  | tickets, users, web            | **Delete** `isStaff`/`isAdmin` rather than change their signature, so every duplicate becomes a compile error.                                                                                                                             |  9.3   | None                                                      |
 | R7  | **Stale membership claims after suspension**, ceiling one access-token TTL (900s).                                                                                                       | `env.ts:28-33`; `refresh-session.ts:44`                                              |  Medium  |   High   | auth, all                      | Accept bounded staleness; re-validate `mv` for high-consequence operations only (ADR 0014).                                                                                                                                                |  9.4   | n/a                                                       |
@@ -127,7 +127,9 @@ call site into a compile error, but that only works once the duplicate local
 `Actor` copies in tickets-service and users-service are deleted, which is phase
 5 (R6).
 
-### Phase 3 — event contracts v2 (9.3)
+### Phase 3 — event contracts v2 (9.3) — **done, with deviations**
+
+Shipped as `45b1b88`.
 
 `organizationId` required on the v2 envelope. Publish **both** v1 and v2
 during the compatibility window (ADR 0005 forbids mutating a contract in
@@ -135,6 +137,77 @@ place). Consumers keep reading v1.
 
 **Checkpoint:** both versions on the bus, nothing consuming v2 yet. Revert =
 stop publishing v2.
+
+**What "the v2 envelope" was taken to mean.** That sentence conflates two
+independent decisions — how a contract is versioned, and where the tenant sits
+— and on its own it reads like mutating the shared envelope in place. Three
+other sentences in this plan rule that reading out: the checkpoint wants both
+versions on the bus, consumers keep reading v1, and phase 8 stops publishing v1
+once every consumer reads v2. None of those means anything unless the two
+streams are separately addressable. So the version stays in the type string, as
+ADR 0005 requires: five new contracts, `ticket.created.v2`,
+`ticket.status-changed.v2`, `ticket.assigned.v2`, `ticket.comment-added.v2` and
+`ai.suggestion.created.v2`. The routing key is the type verbatim, and `.` is the
+word separator in a topic exchange, so `ticket.created.v1` does not match
+`ticket.created.v2`. Each v2 shares the v1 payload schema object rather than
+restating it, so the payloads are identical by construction and not by
+discipline; a test asserts the two contracts point at the same object.
+
+**The tenant is on the envelope, not in the payloads.** Every contract names its
+subject differently (`ticketId`, `userId`, `suggestionId`), and audit-service
+decodes events it holds no schema for — a payload field would be invisible to
+exactly the consumer that needs it most, which is the same shape of problem R4
+records about backfilling `audit_events`. On the envelope it sits in one place
+for every contract, and the firehose reads it without knowing any of them. It
+also had to go on `eventEnvelopeSchema` itself: zod strips unknown keys, so an
+unmodelled field would be dropped silently at every consumer. `PublishOptions`
+carries it and `buildEnvelope` spreads it conditionally, exactly as
+`correlationId` does — absent rather than `undefined` when there is none.
+
+**Deviation: there is no `user.registered.v2`, and there cannot be one.**
+Registration is anonymous, and the membership that would supply a tenant is
+created by consuming that very event — organizations-service looks the bootstrap
+slug up on the consumer side. A required tenant there is structurally
+unsatisfiable, not merely awkward. What replaces it is the membership lifecycle
+events organizations-service owns, which phase 6 adds.
+
+**Deviation: "required" holds on the publish path, not on the shared schema.**
+The field is optional on `eventEnvelopeSchema` and on `EventEnvelope`, next to
+`correlationId`, and `buildEnvelope` validates payloads and never envelopes, so
+nothing in `libs/messaging` enforces it. The guard is explicit at each
+publishing adapter: v1 goes out unconditionally and unchanged, v2 only when the
+caller organization is known; otherwise the adapter logs a warning naming the
+contract and the subject id, and skips the v2. That follows from phase 2 failing
+open — a token minted during an organizations-service outage carries no tenant,
+and neither does one for a user whose membership has not been backfilled.
+Publishing a tenant-free v2 would put on the bus exactly the message phase 6 is
+meant to reject. The two publishes are independent best-effort calls carrying
+the same `correlationId`; one failing does not suppress the other.
+
+**Consequence: audit-service now records two rows per logical fact.** No
+consumer changed — the nine binding keys across users-, organizations-,
+notification- and analytics-service are exact literals with no wildcards, so
+they receive nothing new. The one wildcard binding in the repository is
+`audit-service.event-log` on `#`, and it receives both versions. For the whole
+compatibility window — this phase until phase 8 stops publishing v1 — the audit
+trail holds two rows for every fact. The id-keyed dedupe cannot collapse them:
+they are two envelopes with two ids. They are told apart by the `type` column
+and related only by the shared `correlationId`, so anything counting audit rows
+per logical fact double-counts across the window. An integration test pins this
+as intended behaviour. The checkpoint's "nothing consuming v2" holds only in the
+sense that nothing reads the tenant yet; the firehose already receives it, and
+phase 4's backfill (R4) meets those doubled rows.
+
+**Debt for phase 4: the organization on a ticket event is the caller's, not the
+ticket's.** A ticket carries no organization column until phase 4, so there is
+nothing else to read from. The two cannot differ today, because a caller only
+reaches tickets they may already see, but nothing enforces that. Phase 4 has to
+reconcile them once the column exists.
+
+Verified locally only: `libs/messaging` gained 39 unit and 5 integration tests,
+new adapter specs in tickets-service and ai-service pin the dual publish and the
+skip-and-warn, and the full gate is green. The branch is not pushed, so no CI
+run has confirmed it.
 
 ### Phase 4 — nullable columns and backfill (9.3)
 

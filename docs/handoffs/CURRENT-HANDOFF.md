@@ -1,17 +1,63 @@
 # Current handoff
 
 **Date:** 2026-07-30
-**Sprint:** 9.2 — Tenant foundation (closed)
+**Sprint:** 9.3 — Event contracts v2 (phase 3 complete)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `main` at `4cb62a2` — fast-forwarded from
-`feat/s9-2-tenant-foundation` (no merge commit, no rewritten history) and
-pushed. Working tree clean, and **remote CI is green**, including the ninth
-integration suite on its first remote run.
+**Branch:** `feat/s9-3-event-contracts-v2`, **unmerged and unpushed**. `main`
+is at `eaaf053` with remote CI green; Sprint 9.2 is merged and behind us.
+Working tree clean, full gate and all nine integration suites green locally.
 
-Read `docs/progress/SPRINT-009.2.md` first; it explains every decision below
-and why each one was made. This file is the operational summary.
+Read `docs/progress/SPRINT-009.3.md` first, then `SPRINT-009.2.md`. This file
+is the operational summary of both.
 
-## Sprint 9.2 — closed
+## Sprint 9.3 — phase 3, event contracts v2
+
+Every domain event except `user.registered` now goes out twice: v1 unchanged,
+and a v2 whose **envelope** carries `organizationId`. Nothing consumes a v2.
+No queue binds one. No schema and no column changed anywhere.
+
+**The plan's wording for this phase was wrong and cost real time.** It said
+"`organizationId` required on the v2 envelope", which conflates two separate
+questions — how a consumer tells old from new, and where the tenant sits.
+Both are now settled and written down in the plan itself so nobody
+re-litigates them from the same sentence. Version is in the contract name, as
+ADR 0005 always required. The tenant is on the envelope, next to
+`correlationId`, because every contract names its subject differently and the
+audit trail decodes events it has no schema for.
+
+ADR 0005 gained the envelope-evolution rule it never had: envelope fields are
+added optional and never renamed or removed, and requiredness lives on the
+publish path rather than on a schema that still has to accept v1.
+
+### Three things about phase 3 that will surprise you
+
+**There is no `user.registered.v2`, and there cannot be one.** Registration is
+anonymous, and the membership that would supply a tenant is created by
+_consuming_ that very event. A required field there would never be satisfied.
+It stays tenant-free until organizations-service publishes membership
+lifecycle events. Audit's tenant column for those rows comes from R4's
+per-type map, permanently.
+
+**A v2 is skipped, not faked, when the caller has no organization**, and the
+skip is logged with the contract and subject id. This is routine, not an edge
+case: resolution fails open, so a token minted during an organizations-service
+outage carries no tenant. **The skip count is the metric that says whether
+phase 6 can start rejecting.** Watch it.
+
+**The audit trail now records two rows per fact.** The firehose binds `#` so
+it gets both versions, and the id-keyed dedupe cannot collapse two envelopes.
+This runs until phase 8 stops publishing v1. Both publishes share a
+`correlationId`, which is the only thing that groups them. Anything counting
+audit rows per logical fact double-counts across the window.
+
+### Debt phase 3 hands to phase 4
+
+The organization on a ticket event is the **caller's**, not the **ticket's**.
+`Ticket` has no organization column yet, so there is nothing else it could be.
+They cannot differ today and nothing enforces that. Reconcile it when the
+column lands.
+
+## Sprint 9.2 — closed and merged
 
 Phases 0, 1 and 2 of `docs/architecture/tenancy-migration-plan.md`.
 
@@ -163,7 +209,13 @@ covered by `next build`), `test` (15 projects), `build` (15 projects).
 All nine integration suites against real PostgreSQL and RabbitMQ: messaging,
 auth, tickets, users, audit, notification, analytics, ai, organizations.
 
-Beyond the suites, verified by hand with both services running:
+Phase 3 additions, against the real broker: both versions of one fact reach a
+firehose subscriber with distinct envelope ids, a shared `correlationId` and
+the organization on the v2 only; a v2 is **not** routed to a queue bound to
+v1, proven with a v1 sentinel as the fence rather than a timeout, and the
+dead-letter queue stays empty; the audit trail records the pair as two rows.
+
+Beyond the suites, verified by hand with both services running (Sprint 9.2):
 
 - Register → `user.registered.v1` → membership created → login returned a
   token carrying `org`, `perms: []`, `mv: 1`; refresh carried the same.
@@ -239,7 +291,7 @@ Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect main
+git branch --show-current      # expect feat/s9-3-event-contracts-v2
 git log --oneline -5
 git status --short             # expect clean
 docker compose up -d
@@ -248,18 +300,21 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Sprint 9.2 is closed and merged: `main` is at `4cb62a2`, pushed, and remote
-> CI is green including the ninth integration suite. Phases 0, 1 and 2 of the
-> tenancy migration plan are done — organizations-service exists on port 3010
-> with a bootstrap organization, and the access token carries `org`, `perms`
-> and `mv` which every service ignores. Continue with phase 3: versioning the
-> event contracts so the envelope carries an organization, publishing both v1
-> and v2 during the compatibility window (ADR 0005 forbids mutating a contract
-> in place). That is the ordering constraint the whole plan hangs off — audit,
-> notification and analytics learn everything from the bus and have nothing to
-> scope by until the envelope carries a tenant. Read the Sprint 9.2 section of
-> this handoff first, particularly that membership resolution currently fails
-> open and must not stay that way.
+> Phase 3 is done on `feat/s9-3-event-contracts-v2` — unmerged and unpushed,
+> tree clean, gate and all nine integration suites green locally. Five v2
+> contracts publish alongside their v1, carrying the organization on the
+> envelope; nothing consumes one. Decide first whether to merge and push,
+> since this branch has not run in CI. Then continue with phase 4: add
+> `organization_id` nullable to the ten organization-owned tables and backfill
+> every existing row to the bootstrap organization, with audit_events done per
+> event type against an explicit map and misses logged rather than guessed
+> (R4). Phase 4's verification queries are part of the plan, not an
+> afterthought: row counts identical before and after, zero nulls remaining,
+> no row pointing at an organization that does not exist, and ticket →
+> comments → history agreeing on the organization. Read the Sprint 9.3 section
+> of this handoff first — particularly that a ticket event currently carries
+> the caller's organization rather than the ticket's, which phase 4 has to
+> reconcile, and that membership resolution still fails open.
 
 ## Repository isolation
 

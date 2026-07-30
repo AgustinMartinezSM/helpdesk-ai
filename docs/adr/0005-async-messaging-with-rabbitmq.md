@@ -84,3 +84,43 @@ manual replay.
   in `libs/messaging` vs the tickets domain): the contract is the public
   agreement and must not import a service's internals; drift is caught by
   producer-side validation in tests.
+
+## Amendment — Sprint 9.3: how the envelope evolves
+
+This ADR settled how a **contract** evolves and said nothing about how the
+**envelope** does. That gap surfaced when the tenancy migration needed every
+event to carry an organization, and it is worth closing here rather than
+leaving the next person to infer a rule from one commit.
+
+The distinction that matters: a payload belongs to one contract, an envelope
+belongs to every event. So they cannot evolve the same way.
+
+**Envelope fields are added optional, and never renamed or removed.** One
+`eventEnvelopeSchema` validates every message on the wire, including the v1
+messages a compatibility window keeps alive, so a required new field would
+reject the entire existing stream at every consumer at once — the opposite of
+what versioning is for. Two fields have been added this way: `correlationId`
+in Sprint 9.2 and `organizationId` in 9.3.
+
+**A field is envelope-shaped when it describes the delivery rather than the
+subject.** Both of these do: which request caused the event, and which tenant
+it belongs to. Neither is part of any one contract's meaning, and both are
+needed by consumers that hold no contract at all — the audit trail decodes
+every event with envelope-only validation, so anything it must read has to be
+somewhere it can find without knowing what the event is. Every contract names
+its subject differently (`ticketId`, `userId`, `suggestionId`); the envelope
+is the only place that is the same for all of them.
+
+**Requiredness lives on the path, not on the schema.** A v2 contract must
+always be published with an organization, but the schema cannot say so while
+it also has to accept v1. The check therefore sits at each publishing adapter,
+which is also the only place that still knows _why_ a tenant is missing and
+can log it. `buildEnvelope` validates the payload and never the envelope, so
+nothing in the library will catch a producer that forgets — that is a real
+sharp edge and the reason the check is written out at every call site instead
+of being assumed.
+
+None of this weakens the rule above. Changing a payload shape still means a
+new contract and a compatibility window; `ticket.created.v2` exists precisely
+because the alternative — mutating the stream every consumer already reads —
+is what this ADR forbids.
