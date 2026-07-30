@@ -113,6 +113,14 @@ Negative / accepted:
   read access to every ticket for a service that only needs one ticket
   at a time, and it must be introduced together with the audit and
   rotation story it deserves.
+
+  Still rejected here, but no longer hypothetical elsewhere: Sprint 9.2
+  introduced one for `auth-service` → `organizations-service`, because
+  minting a token is the one call with no caller token to forward. The
+  rejection above stands for `ai-service`, which always has one. The audit
+  and rotation story that sentence asks for is still not built, and
+  SECURITY.md says so.
+
 - **`ticket.created.v2` / `ticket.comment-added.v2` carrying text**:
   rejected for now — it copies sensitive content into another database,
   requires dual publishing until every consumer migrates, and buys a

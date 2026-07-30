@@ -1,9 +1,10 @@
 # Observability
 
-Status as of Sprint 1 (2026-07-27). Implemented: structured JSON logging and request
-correlation via `libs/observability` (`@helpdesk-ai/observability`), used by `apps/web-bff`
-and `apps/api-gateway`. Everything else in this domain (metrics, dashboards, log
-aggregation, distributed tracing) is planned and explicitly not built yet.
+Status as of Sprint 9.2 (2026-07-30). Implemented: structured JSON logging and request
+correlation via `libs/observability` (`@helpdesk-ai/observability`), used by all ten
+Nest apps, and the request trace id carried onto every published event. Everything else
+in this domain (metrics, dashboards, log aggregation, distributed tracing) is planned
+and explicitly not built yet.
 
 ## Structured logging (Implemented)
 
@@ -63,6 +64,22 @@ log lines, which is what makes a single request's logs greppable within one serv
 Behavior is covered by unit tests (middleware) and by supertest integration tests
 against a real Nest app instance that verify the header echo.
 
+## Correlation on published events (Implemented)
+
+Since Sprint 9.2 (commit `3a913f0`) all three publishers — auth-service,
+tickets-service and ai-service — pass the request's trace id as the envelope's
+`correlationId`, so it reaches the broker with every event. Before that change
+every envelope carried none, and a row written by a consumer could not be joined
+back to the request that caused it; audit-service persists the value on the audit
+row, which is what makes that join possible.
+
+The id travels on the envelope, never in the payload: it says which request
+produced the event, which is a fact about the request rather than about the
+ticket or the user. It is threaded explicitly, as an optional last argument on
+the use cases that publish, rather than through an ambient request-scoped store.
+Optional at every step, deliberately — a missing trace must never stop a domain
+event from being published.
+
 ## Request correlation is not distributed tracing
 
 The correlation ids above are exactly that: ids attached to logs. This is not
@@ -74,18 +91,26 @@ there are:
   head- or tail-based sampling decision.
 - No W3C Trace Context — `x-trace-id` is a plain UUID header, not a `traceparent`
   header, and carries no vendor flags or parent span id.
-- No cross-service context propagation — nothing forwards trace context through
-  HTTP calls to downstream services or through RabbitMQ message headers, because no
-  downstream services or event flows exist yet.
+- No uniform context propagation — the ids do travel, but each hop carries them
+  by hand. web-bff copies `x-request-id` and `x-trace-id` onto its calls to the
+  api-gateway, the gateway proxies headers untouched to the seven services it
+  routes, ai-service forwards them on its direct call to tickets-service, and the
+  trace id is stamped onto published events (section above). auth-service does not
+  send them on its direct call to organizations-service, and nothing makes a new
+  call site carry them — there is no propagator, only a convention.
+- No way to follow one id across services — logs go to stdout per process and
+  nothing aggregates them, so a trace id spanning three services means reading
+  three services' output separately.
 
 Real distributed tracing (spans, sampling policy, W3C `traceparent`, propagation
-through both HTTP and RabbitMQ headers) is planned and will be designed separately
-once more than one service participates in a request. The correlation middleware is
-sized for what exists today and will be revisited by that design, not extended ad hoc.
+through both HTTP and RabbitMQ headers) is planned and will be designed separately.
+Several services now participate in a single request, which is what makes that
+design worth doing rather than premature. The correlation middleware is sized for
+what exists today and will be revisited by that design, not extended ad hoc.
 
 ## Fail-fast configuration logging (Implemented)
 
-Both Nest apps validate `process.env` with `validateEnv` from
+All ten Nest apps validate `process.env` with `validateEnv` from
 `@helpdesk-ai/configuration` before `NestFactory.create` runs. On invalid
 configuration the process prints one `EnvValidationError` listing every offending
 variable — not just the first — and exits with code 1. This is verified behavior.

@@ -41,6 +41,13 @@
 # or, against a non-local database, set the two connection URLs first:
 #
 #   AUTH_DB_URL=... ORGANIZATIONS_DB_URL=... sh backfill-bootstrap-memberships.sh
+#
+# The defaults below use port 5432 because they are written for the docker
+# exec path, where they resolve INSIDE the container. Running this from the
+# host with the defaults would hit the machine's own PostgreSQL 16 on 5432,
+# which compose.yaml, README.md and docs/architecture/local-development.md all
+# say must not be touched. From the host, the project's database is on 5433 —
+# pass both URLs explicitly with that port.
 set -e
 
 AUTH_DB_URL="${AUTH_DB_URL:-postgresql://auth_service:helpdesk_local_only_auth@localhost:5432/helpdesk_auth}"

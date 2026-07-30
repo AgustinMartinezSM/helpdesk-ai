@@ -1,12 +1,19 @@
 # Tenancy — target state
 
-Status: **Approved 2026-07-30, not implemented.** This document describes
-where the domain is going and why; the current system is described in
+Status: **Approved 2026-07-30, first phases implemented.** This document
+describes where the domain is going and why; the current system is described in
 `tenancy-current-state.md`.
 
 Every structural decision below is recorded in an ADR (0012–0017), all now
-Accepted. Approved does not mean built: nothing here exists in the codebase
-yet, and `tenancy-migration-plan.md` is the sequence that builds it.
+Accepted. Approved does not mean built. What exists after Sprint 9.2 is
+organizations-service, its `organizations` and `memberships` tables, and the
+`org`, `perms` and `mv` claims on the access token — which every service
+receives and none reads. Everything else here is still a target: the rest of
+the organizational graph (branches, departments, stations, service desks,
+teams, queues), role templates as seeded rows with their permissions, the
+`organization_id` column on organization-owned data, and every visibility rule
+below. `tenancy-migration-plan.md` is the sequence that builds it and records
+which phases have run.
 
 ## The shape
 
@@ -17,7 +24,7 @@ graph TD
     RT["refresh_tokens"]
   end
 
-  subgraph orgs["organizations-service · helpdesk_organizations · NEW"]
+  subgraph orgs["organizations-service · helpdesk_organizations"]
     O["organizations"]
     M["memberships<br/>user × org × role template"]
     B["branches"]

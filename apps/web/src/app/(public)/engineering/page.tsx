@@ -17,7 +17,7 @@ import styles from './page.module.css';
 export const metadata: Metadata = {
   title: 'Engineering',
   description:
-    'The architecture behind HelpDesk AI: an Nx monorepo with nine applications and four libraries, event-driven services, and decisions documented in ADRs.',
+    'The architecture behind HelpDesk AI: an Nx monorepo with eleven applications and four libraries, event-driven services, and decisions documented in ADRs.',
 };
 
 const APPLICATIONS = [
@@ -65,6 +65,16 @@ const APPLICATIONS = [
     name: 'analytics-service',
     kind: 'NestJS + Prisma',
     role: 'Per-ticket metric snapshots for staff summaries',
+  },
+  {
+    name: 'ai-service',
+    kind: 'NestJS + Prisma',
+    role: 'Summaries, classification, priority and reply drafts behind a provider port',
+  },
+  {
+    name: 'organizations-service',
+    kind: 'NestJS + Prisma',
+    role: 'Organizations and memberships — read only by auth-service, no product surface yet',
   },
 ];
 
@@ -151,7 +161,7 @@ const DECISIONS = [
 ];
 
 const DELIVERY = [
-  'One gate for everything: lint, test, build and typecheck across all thirteen projects',
+  'One gate for everything: lint, test and build across all fifteen projects, and typecheck across the fourteen that have one',
   'Fast unit suites per project, plus integration suites that run against real PostgreSQL and RabbitMQ',
   'Conventional commits enforced by commitlint; formatting and lint fixes applied on every commit',
   'A GitHub Actions workflow provisions throwaway databases per integration target',
@@ -168,7 +178,7 @@ export default function EngineeringPage() {
             Built like a platform, documented like one
           </h1>
           <p className={styles.lead}>
-            Nine applications and four libraries in one Nx workspace — an
+            Eleven applications and four libraries in one Nx workspace — an
             event-driven system where every important decision has a written
             rationale. This page is the honest tour.
           </p>
@@ -284,11 +294,12 @@ export default function EngineeringPage() {
           ))}
         </ul>
         <p className={styles.honestNote}>
-          Honest status: the pipeline runs on GitHub Actions and passed on its
-          first remote execution — format, lint, unit tests and build across all
-          thirteen projects, then seven integration suites against real
-          PostgreSQL and RabbitMQ service containers. What is still missing is a
-          deployment: nothing is hosted yet.
+          Honest status: the pipeline runs on GitHub Actions, and its last
+          remote run was green — format, lint, unit tests and build across
+          fourteen projects, then eight integration suites against real
+          PostgreSQL and RabbitMQ service containers. A ninth service and a
+          ninth suite have landed since and have only been run locally so far.
+          What is still missing is a deployment: nothing is hosted yet.
         </p>
         <div className={styles.actions}>
           {siteConfig.githubUrl ? (

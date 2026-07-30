@@ -35,7 +35,9 @@ Session shape:
 }
 ```
 
-The refresh token is shown exactly once; store it securely. The access token carries `sub`, `email`, `roles`, `iss` and expiry.
+The refresh token is shown exactly once; store it securely. The access token carries `sub`, `email`, `roles`, `iss` and expiry, plus three tenant claims: `org`, the active organization id; `perms`, the permission keys resolved for that user in that organization; and `mv`, the membership version, which lets a reader notice a stale tenant snapshot.
+
+`perms` is empty in every token today — role templates are still plain strings, and the rows mapping a template to permission keys arrive with the permission evaluator in a later phase. Until then an empty set means a call site that starts checking permissions denies, which is the safe direction. The three claims are omitted entirely, not set to `null`, when no membership resolves: when the user belongs to no organization, and when organizations-service was unreachable while the token was minted. `roles` stays alongside `perms` as a compatibility claim until every call site reads `perms`. No service reads the tenant claims yet.
 
 ### POST /auth/refresh
 

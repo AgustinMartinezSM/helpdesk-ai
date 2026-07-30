@@ -16,7 +16,7 @@ review, and nothing is presented as working unless it is.
 
 ## Current status
 
-Sprints 1–9.0 complete. Ten applications and four libraries in an Nx
+Sprints 1–9.2 complete. Eleven applications and four libraries in an Nx
 monorepo, an event-driven platform on RabbitMQ, an accessible product UI
 and a complete public product experience.
 
@@ -33,6 +33,7 @@ and a complete public product experience.
 | `apps/notification-service` — in-app notifications (port 3007)                                     | Implemented         |
 | `apps/analytics-service` — dashboard projections, staff-only (port 3008)                           | Implemented         |
 | `apps/ai-service` — staff-only AI suggestions, provider-agnostic (port 3009)                       | Implemented         |
+| `apps/organizations-service` — organizations and memberships, internal-only (port 3010)            | Implemented         |
 | `libs/messaging` — versioned event contracts, RabbitMQ topology, DLQs                              | Implemented         |
 | `libs/security` — JWT guard, actor model, role helpers                                             | Implemented         |
 | `libs/configuration` — zod-based fail-fast env validation                                          | Implemented         |
@@ -48,14 +49,19 @@ and a complete public product experience.
 | Self-service signup, assignee picker, attachments                                                  | Planned             |
 | Transactional outbox for event publishing                                                          | Deferred (ADR 0006) |
 | Distributed tracing, gateway rate limiting                                                         | Deferred            |
-| CI on GitHub Actions: gate + 8 integration suites, green on first remote run                       | Implemented         |
+| CI on GitHub Actions: gate + 9 integration suites; the ninth has not run remotely yet              | Implemented         |
 
 Architecture: `web → web-bff → api-gateway → {auth, tickets, users, ai}`
 over HTTP for commands, with domain events on RabbitMQ consumed by
-`{audit, notification, analytics}`. Each service owns its own PostgreSQL
-database. One exception is documented rather than hidden: `ai-service`
-reads a ticket from `tickets-service` over HTTP, forwarding the caller's
-own token, because the event contracts carry no ticket text (ADR 0011).
+`{audit, notification, analytics, organizations}`. Each service owns its
+own PostgreSQL database. Two service-to-service HTTP calls are documented
+rather than hidden: `ai-service` reads a ticket from `tickets-service`,
+forwarding the caller's own token, because the event contracts carry no
+ticket text (ADR 0011); and `auth-service` asks `organizations-service`
+for a membership while it mints a token, the one moment when there is no
+caller token to forward. Neither call goes through the gateway, and
+`organizations-service` is absent from its routing table on purpose — a
+browser has no path to it.
 
 ## Prerequisites
 
@@ -89,11 +95,25 @@ pnpm dev:gateway      # api-gateway   -> http://localhost:3002
 pnpm dev:auth         # auth-service  -> http://localhost:3003
 pnpm nx serve @helpdesk-ai/tickets-service   # -> http://localhost:3004
 pnpm nx serve @helpdesk-ai/users-service     # -> http://localhost:3005
+pnpm nx serve @helpdesk-ai/organizations-service   # -> http://localhost:3010
 ```
 
 `JWT_ACCESS_SECRET` has no default on purpose: auth-service refuses to
-boot without one. Swagger UI is available per service at `/docs` outside
-production — see [docs/api/auth-service.md](docs/api/auth-service.md).
+boot without one. `organizations-service` is optional today: with it
+stopped, or with no `INTERNAL_SERVICE_TOKEN` set on auth-service, login
+and refresh still succeed — the access token is simply minted without its
+organization claims and a warning is logged. Nothing in the platform
+reads those claims yet. Swagger UI is available per service at `/docs`
+outside production — see
+[docs/api/auth-service.md](docs/api/auth-service.md).
+
+Users created before organizations existed have no membership.
+`infrastructure/postgres/operations/backfill-bootstrap-memberships.sh` gives
+them one in the bootstrap organization: it reads `helpdesk_auth`, writes
+`helpdesk_organizations`, is idempotent, and is run by an operator rather
+than by a service. It is also the recovery path if a registration event is
+lost to a broker outage — unlike every other store here, memberships cannot
+be rebuilt from the event log.
 
 Health checks live at `/health` and `/health/ready` on every Nest app.
 Readiness never claims checks it does not run.
@@ -122,7 +142,8 @@ helpdesk-ai/
 │   ├── audit-service/         # owns helpdesk_audit (3006)
 │   ├── notification-service/  # owns helpdesk_notifications (3007)
 │   ├── analytics-service/     # owns helpdesk_analytics (3008)
-│   └── ai-service/            # owns helpdesk_ai (3009)
+│   ├── ai-service/            # owns helpdesk_ai (3009)
+│   └── organizations-service/ # owns helpdesk_organizations (3010)
 ├── libs/
 │   ├── messaging/             # event contracts, RabbitMQ topology, DLQs
 │   ├── security/              # JWT guard, actor, role helpers
@@ -133,6 +154,10 @@ helpdesk-ai/
 │   ├── adr/                   # architecture decision records
 │   ├── api/                   # service API documentation
 │   └── progress/              # sprint logs
+├── infrastructure/
+│   └── postgres/
+│       ├── init/              # roles and databases, first volume init only
+│       └── operations/        # operator scripts (membership backfill)
 ├── compose.yaml               # local PostgreSQL, Redis, RabbitMQ
 └── .github/workflows/         # CI pipeline
 ```
@@ -172,14 +197,24 @@ Prettier on staged files).
 
 ## Documentation
 
-- `docs/architecture/` — system context, service boundaries, messaging,
-  data ownership, observability, local development,
+- `docs/architecture/` —
+  [product vision](docs/architecture/product-vision.md), system context,
+  service boundaries, messaging, data ownership, observability, local
+  development,
   [frontend design system](docs/architecture/frontend-design-system.md),
-  [frontend routes](docs/architecture/frontend-public-routes.md)
+  [frontend routes](docs/architecture/frontend-public-routes.md), and the
+  tenancy set: [current state](docs/architecture/tenancy-current-state.md),
+  [target state](docs/architecture/tenancy-target-state.md),
+  [threat model](docs/architecture/tenancy-threat-model.md),
+  [migration plan](docs/architecture/tenancy-migration-plan.md)
 - `docs/adr/` — architecture decision records (monorepo, BFF vs gateway,
-  database ownership, messaging, deferred outbox, public/authenticated
-  split, contact delivery, product status representation, AI provider
-  abstraction, AI ticket context access)
+  database ownership, persistence tooling, messaging, deferred outbox,
+  public/authenticated split, contact delivery, product status
+  representation, AI provider abstraction, AI ticket context access, and the
+  six tenancy decisions: tenant isolation model, organization and membership
+  ownership, active organization context, permission model, branch and
+  operational station model, authentication identifiers versus profile
+  attributes)
 - `docs/progress/` — sprint logs
 - `CONTRIBUTING.md` — workflow, branching, commit conventions
 - `SECURITY.md` — security posture and reporting

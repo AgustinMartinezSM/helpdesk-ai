@@ -242,7 +242,7 @@ export default function LandingPage() {
         tone="technical"
         eyebrow="Architecture"
         title="An event-driven platform, end to end"
-        lead="Nine applications and four libraries in an Nx monorepo — each service owns its data and reacts to events."
+        lead="Eleven applications and four libraries in an Nx monorepo — each service owns its data and reacts to events."
       >
         <Reveal>
           <ArchitectureDiagram />

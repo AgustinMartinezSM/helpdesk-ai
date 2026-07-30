@@ -1,327 +1,237 @@
 # Current handoff
 
 **Date:** 2026-07-30
-**Sprint:** 9.1 — Product domain and tenancy audit (closed)
+**Sprint:** 9.2 — Tenant foundation (closed)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `main` at `e0f4c61` — Sprints 9.0 and 9.1 merged, pushed, remote
-CI green
+**Branch:** `feat/s9-2-tenant-foundation` at `c0d24cc` plus the documentation
+commit — **four commits, unmerged and unpushed.** `origin/main` is still at
+`14728cd`. Working tree clean, full gate and all nine integration suites green
+locally.
 
-## Sprint 9.1 — closed
+Read `docs/progress/SPRINT-009.2.md` first; it explains every decision below
+and why each one was made. This file is the operational summary.
 
-An audit sprint: **no product code changed**, no schema touched, no migration
-written. `docs/s9-1-product-domain-audit` fast-forwarded onto `main` as four
-commits (`a3765aa`, `76f132b`, `4af2eac`, `e0f4c61`), no merge commit.
+## Sprint 9.2 — closed
 
-It produced four architecture documents and six ADRs, **all now Accepted**
-(0012 tenant isolation · 0013 organization and membership ownership · 0014
-active organization context · 0015 permission model · 0016 branch and
-operational station model · 0017 authentication identifiers vs profile
-attributes). Accepted means the decisions are settled — **nothing is built**.
+Phases 0, 1 and 2 of `docs/architecture/tenancy-migration-plan.md`.
 
-The findings that matter most for whoever implements this:
+| Commit    | Message                                                                         |
+| --------- | ------------------------------------------------------------------------------- |
+| `e2e37dc` | `test(tickets): assert scoped queries by row identity, not by count`            |
+| `3a913f0` | `feat(observability): carry the request trace id onto published events`         |
+| `0e835e0` | `feat(organizations): add organizations-service and the bootstrap organization` |
+| `c0d24cc` | `feat(auth): carry the active organization in the access token`                 |
 
-- **The gateway and BFF perform no authorization.** There is no chokepoint
-  where a tenant could be resolved once, and a browser-set organization
-  header would be forwarded verbatim. Tenancy therefore lives in the signed
-  token (ADR 0014).
-- **Six of seven tickets repository methods take a bare id**, and the one
-  scopable method has an optional filter that fails open.
-- **The current test suite would not catch a cross-tenant leak.** The single
-  tickets integration spec asserts totals, never that a foreign row is absent.
-  This is why the migration opens by writing the isolation test and watching
-  it fail.
-- **Two live bugs, unrelated to tenancy**: internal-note existence leaks to
-  requesters through unfiltered history, and ticket assignment validates
-  nothing about the assignee.
+The platform behaves exactly as it did before. There is now an organization
+nobody references, and three token claims nobody reads.
 
-Read `docs/progress/SPRINT-009.1.md` first; it links the rest.
+## What exists now that did not
 
-## Sprint 9.0 — closed earlier the same day
+**organizations-service**, port 3010, database `helpdesk_organizations`, role
+`organizations_service`. Two tables: `organizations` and `memberships`. One
+bootstrap organization, id `00000000-0000-4000-8000-000000000001`, slug
+`bootstrap`, created by its own migration.
 
-`feat/ai-service` fast-forwarded onto `main` (ten commits, no merge commit,
-no rewritten history) and was pushed. One forward fix followed after the
-first remote run failed.
+It consumes `user.registered.v1` on `organizations-service.user-registered`
+and publishes nothing. It exposes `/health`, `/health/ready` and one internal
+endpoint, `GET /internal/memberships/:userId/active`.
 
-Four commits were created on `feat/ai-service` this sprint, on top of
-`c6cc37b docs: record sprint 8 and the AI security posture`:
+**It is deliberately absent from the api-gateway.** Do not add a route for it
+without a reason; browsers currently have no path to it at all.
 
-| Commit    | Message                                                                      |
-| --------- | ---------------------------------------------------------------------------- |
-| `b2f245b` | `ci: add typecheck to the quality gate`                                      |
-| `b90eac6` | `feat(ai): add Gemini provider integration`                                  |
-| `155b9c0` | `docs(product): document the API-ready AI capabilities and Sprint 8 closure` |
-| `4b0a3c0` | `fix(ai): harden provider error redaction`                                   |
+**It declares no `JWT_ACCESS_SECRET`**, unlike every other service, because it
+verifies no access tokens.
 
-Then, on `main` after the merge:
+**The access token carries `org`, `perms` and `mv`.** Every service receives
+them and ignores them. `perms` is an empty array.
 
-| Commit    | Message                                      |
-| --------- | -------------------------------------------- |
-| `6d2a94c` | `fix(ai): track ai-service assets directory` |
+## Things that will bite you if you do not know them
 
-`feat/ai-service` still exists and has not been deleted.
+**Resolution fails open.** ADR 0014 says login fails when
+organizations-service is unavailable. It does not — the token is minted
+without the three claims and auth-service logs
+`minting a token without tenant claims: ...`. This is deliberate and
+documented in ADR 0014 and the sprint report. **It must become fail-closed in
+the phase where writes start setting the organization from the claim.** If you
+are that phase, this is your job.
 
-## Work completed
+**Memberships are not a projection.** They cannot be rebuilt from the event
+log. This is the first data in the platform with that property, and it is why
+the consumer creates a row if absent and never overwrites one. Do not
+"simplify" it into an upsert.
 
-- **Google Gemini connected** behind the existing `AiProvider` port
-  (ADR 0010), via the Interactions API with plain `fetch` — no SDK, no new
-  dependency. `local` remains the default and the provider CI runs on.
-- **`pnpm typecheck` added to the CI gate**, together with the broken
-  type-only export it caught. `suggestions.controller.ts` imported
-  `SuggestionOutput` from `domain/suggestion.ts`, which only imported it;
-  that passed `lint`, `test` and `build` at HEAD.
-- **The four AI capabilities moved from `in-development` to `api-ready`**
-  on the public site, and `api-ready` itself was widened to mean "built,
-  reachable, and not turned on" (ADR 0009).
-- **Every document falsified by connecting a provider was corrected** —
-  SECURITY.md, ADR 0009/0010/0011, README.md, four architecture notes and
-  the Sprint 8 report, which had recommended `available` and was wrong.
-- The incidental `apps/web/next-env.d.ts` change was reverted; it was
-  `next dev` churn, not an intentional configuration change.
+**Existing users are backfilled by an operator script**, not by code:
+`infrastructure/postgres/operations/backfill-bootstrap-memberships.sh`. It
+reads `helpdesk_auth` and writes `helpdesk_organizations`, which a migration
+may do and a service may not. It is idempotent, and it is also the only
+recovery path if a `user.registered.v1` is lost to a broker outage. Run it
+after adding users by any route other than `POST /auth/register`.
+
+**The role-template mapping is written twice** — in the script and in
+`apps/organizations-service/src/domain/membership.ts`. If one changes, both
+change, in the same commit, or a user reconciled by hand and a user projected
+from an event land on different templates.
+
+**`INTERNAL_SERVICE_TOKEN` has no default and is optional in auth-service.**
+Unset means auth-service does not attempt resolution at all and mints tokens
+without tenant claims. If tenant claims are unexpectedly missing, check this
+first — it fails quietly by design, with one warning at bootstrap.
+
+**Adding a service still means editing `ci.yml` twice**, in two independent
+places: the role and database creation, and the `test-integration`
+invocation. Forgetting the second one fails nothing — the suite simply never
+runs remotely. `CONTRIBUTING.md` now carries the checklist.
 
 ## Work incomplete / deliberately deferred
 
-- **Usage ceilings, key rotation, rate limiting.** Named in SECURITY.md as
-  unbuilt. These are the work standing between `api-ready` and
-  `available`; do not promote the status before they exist.
-- **Per-task model selection.** One model serves all four tasks.
-- **`docs/roadmap/PRODUCT-ROADMAP.md`** does not exist. Creating it means
-  publishing a forward plan — a product decision, not a documentation
-  chore. It needs its own approval.
-- **The provider-notice failure path.** If `GET /ai/provider` fails, the
-  panel renders an error and _no_ provider notice, which drops the
-  conservative "No language model is connected" disclosure instead of
-  defaulting to it. Predates this sprint; found while tracing the runtime
-  messaging.
-- **Duplicate detection** stays `planned` — it needs embeddings and
-  similarity search.
+- **R9's shared fixture module was not written.** Phase 0 asked for one that
+  creates two organizations and scopes teardown. What exists is
+  `apps/tickets-service/src/testing/fixtures.ts`, which is one service's
+  fixtures and creates no organizations. There is nothing to scope teardown by
+  until the tables have `organization_id`, so this belongs to the backfill
+  phase — but it must exist before any suite becomes two-tenant, because every
+  integration suite still calls an unfiltered `deleteMany()`.
+- **`mv` is emitted and never checked.** Nothing re-validates a membership
+  version. ADR 0014's re-validation idea also has an unresolved tension with
+  its own rule that downstream services never call organizations-service
+  synchronously. Settle that before any operation relies on `mv`.
+- **The internal credential has no rotation and no audit trail.** One shared
+  secret in two `.env` files. ADR 0011 named both as the story a service
+  credential deserves; SECURITY.md says they are not built.
+- **No organization selector and no token exchange.** Resolution picks the
+  oldest active membership in an active organization. That is deterministic,
+  which is what matters while there is one organization; it is not a product
+  rule.
+- **No membership lifecycle** — invite, activate, suspend, deactivate — and
+  therefore no membership events. Both are phase 6.
+- **Role templates are plain strings.** ADR 0015 wants seeded rows with
+  permission mappings. Note before building them: ADR 0015 lists eight
+  templates in lowercase prose and `tenancy-target-state.md` lists nine in
+  another convention including a platform-scoped one, and the approved
+  permission matrix uses a scope qualifier on twelve cells that has no
+  representation in a flat string set. That has to be resolved before any row
+  is seeded.
+- The Sprint 9.0 items are unchanged: usage ceilings, key rotation and rate
+  limiting still stand between the AI capabilities and `available`;
+  `docs/roadmap/PRODUCT-ROADMAP.md` still does not exist and creating it is a
+  product decision; the provider-notice failure path still drops the
+  conservative disclosure instead of defaulting to it.
 
-## Decisions made
+## Decisions made this sprint
 
-- Gemini over other providers: free tier makes spend predictable, and
-  `response_format.schema` takes standard JSON Schema that maps onto the
-  existing per-task output schemas.
-- Interactions API over `{model}:generateContent`, whose `responseSchema`
-  accepts only an OpenAPI subset and would have needed a translation layer.
-- `api-ready` over `available`: the panel exists, but nothing answers
-  without an operator-supplied key and nothing is deployed.
-- `api-ready` widened rather than adding a fifth status value.
-- The `PROJECT_STATUS` "In development" column is omitted when empty
-  instead of rendering a heading over nothing.
+- Membership resolution is a synchronous call at mint time (ADR 0014 already
+  decided this); it fails open until the claims decide something.
+- Existing users are reconciled by an operator script, not by an auto-
+  provisioning path inside authentication.
+- `perms` is emitted empty rather than filled with invented permissions.
+- A session belongs to a person, not to a workspace. `refresh_tokens` gained
+  no column. This closes the question ADR 0014 left open.
+- The bootstrap organization is seeded by a migration, because
+  `prisma migrate deploy` is the only provisioning path that runs both locally
+  and in CI.
+- The service credential is a dedicated secret, not `JWT_ACCESS_SECRET`, and
+  it has no default.
+- organizations-service is not routed by the api-gateway.
 
 ## Decisions pending
 
-- Whether `docs/roadmap/PRODUCT-ROADMAP.md` should exist, and what it may
-  publish.
-- Whether the provider-notice failure path is worth its own fix.
-- Whether to delete `feat/ai-service` now that remote CI is green.
-
-## CI maintenance items
-
-Not blocking, not part of any Sprint 9.0 change, and deliberately not
-bundled into an unrelated fix:
-
-- **`pnpm/action-setup@v4` targets Node.js 20**, which GitHub has
-  deprecated; the runner forces it onto Node 24 and emits an annotation on
-  every run. It is a warning today. Upgrade it on its own, when a workflow
-  maintenance pass is the actual task — not folded into a product change.
-
-## Files changed this sprint
-
-**`ci: add typecheck to the quality gate`** — `.github/workflows/ci.yml`,
-`apps/ai-service/src/domain/suggestion.ts`.
-
-**`feat(ai): add Gemini provider integration`** —
-`apps/ai-service/.env.example`, `src/config/env.ts`, `src/config/env.spec.ts`
-(new), `src/infrastructure/providers/provider.factory.ts`,
-`src/infrastructure/providers/gemini.provider.ts` (new),
-`src/infrastructure/providers/gemini.provider.spec.ts` (new).
-
-**`fix(ai): harden provider error redaction`** —
-`apps/ai-service/src/domain/redaction.ts` (new),
-`src/domain/redaction.spec.ts` (new), `src/domain/errors.ts`,
-`src/app/app.module.ts`, `src/application/use-cases/generate-suggestion.ts`
-and its spec, `src/infrastructure/providers/gemini.provider.ts` and its
-spec, plus `SECURITY.md`, `docs/progress/SPRINT-009.0.md` and this file.
-
-**`docs(product): …`** — `README.md`, `SECURITY.md`,
-`apps/web/src/lib/product-status.ts`, `src/components/ai-suggestions.tsx`,
-`src/components/public/hero-visual.tsx`, `src/app/(public)/page.tsx`,
-`src/app/(public)/how-it-works/page.tsx`, `specs/landing.spec.tsx`,
-`specs/how-it-works.spec.tsx`, `docs/adr/0009`, `0010`, `0011`,
-`docs/architecture/{system-context,service-boundaries,local-development,frontend-design-system}.md`,
-`docs/progress/SPRINT-008.md`, `docs/progress/SPRINT-009.0.md` (new), and
-this handoff (new).
+- When exactly resolution becomes fail-closed, and what login returns then.
+- How `mv` re-validation works without giving downstream services a
+  synchronous dependency on organizations-service.
+- The role-template vocabulary and the scope-qualifier representation, before
+  any template row is seeded.
+- Whether to delete `feat/ai-service`, still open from Sprint 9.0.
 
 ## Migrations
 
-None. No schema change in this sprint.
+Two, both in organizations-service, both applied locally and in the test
+database:
+
+- `20260730160817_init` — `organizations` and `memberships`.
+- `20260730161500_bootstrap_organization` — inserts the bootstrap
+  organization. `ON CONFLICT DO NOTHING`, so re-applying is safe.
+
+No other service's schema changed. No table anywhere gained an
+`organization_id` column; that is phase 4.
 
 ## Tests executed
 
-Full gate, all green on 2026-07-30:
+Full gate, green on 2026-07-30: `format:check`, `lint` (15 projects, 0 errors,
+9 pre-existing warnings), `typecheck` (14 projects — `apps/web` has none and is
+covered by `next build`), `test` (15 projects), `build` (15 projects).
 
-- `pnpm format:check`, `pnpm lint` (0 errors, 9 pre-existing warnings),
-  `pnpm typecheck` (13 projects), `pnpm test` (14 projects),
-  `pnpm build` (14 projects).
-- All 8 integration suites against real PostgreSQL and RabbitMQ:
-  messaging, auth, tickets, users, audit, notification, analytics, ai.
-- `ai-service` unit specs 52 → 95. `apps/web` 117, with 5 rewritten.
-- Secret scan clean across tracked content and the full git history.
-- **Remote GitHub Actions green** on `6d2a94c`: lint (14 projects),
-  typecheck (13), test (14), build (14) and all 8 integration suites
-  against real PostgreSQL and RabbitMQ service containers.
+All nine integration suites against real PostgreSQL and RabbitMQ: messaging,
+auth, tickets, users, audit, notification, analytics, ai, organizations.
 
-The run before it failed on `@helpdesk-ai/ai-service:build` because
-`apps/ai-service/src/assets` was an empty, untracked directory. Local
-verification cannot catch that class of break — the directory exists on
-this machine. When a build target references a path, check that git
-actually tracks it.
+Beyond the suites, verified by hand with both services running:
 
-`apps/web` has no `typecheck` target — it is covered by `next build`
-only. Worth knowing before trusting `pnpm typecheck` as total coverage.
+- Register → `user.registered.v1` → membership created → login returned a
+  token carrying `org`, `perms: []`, `mv: 1`; refresh carried the same.
+- With organizations-service **stopped**: login and refresh both returned 200,
+  tokens carried no tenant claims, and the warning appeared in the log.
+- The event published during that outage was held by the durable queue and
+  became a membership on restart — 13 users, 13 memberships.
+- The backfill mapped 11 pre-existing users to 11 memberships (2
+  `organization_admin`, 9 `requester`); a second run changed nothing, and
+  there are zero duplicate `(organization_id, user_id)` pairs.
+
+**Not verified remotely.** The last remote GitHub Actions run was on
+`6d2a94c`, with 14 projects and 8 integration suites. This branch is unpushed,
+so the ninth suite and the fifteenth project have never run in CI. Do not
+describe them as remotely green anywhere — the public engineering page was
+corrected for exactly this.
 
 ## Services required to run this locally
 
-`docker compose up -d` (PostgreSQL 5433, RabbitMQ 5672, Redis), then
-auth-service, tickets-service, ai-service, api-gateway, web-bff and web.
-`ai-service` needs a running `tickets-service` to read ticket context.
+`docker compose up -d` (PostgreSQL 5433, RabbitMQ 5672, Redis), then the
+services you need. organizations-service is required only for tokens to carry
+tenant claims; **login works without it**, which is the fail-open behaviour
+above.
+
+`ai-service` still needs a running `tickets-service` to read ticket context.
 
 ## Environment variable names (no values)
 
-`apps/ai-service/.env`: `NODE_ENV`, `PORT`, `LOG_LEVEL`, `DATABASE_URL`,
-`RABBITMQ_URL`, `JWT_ACCESS_SECRET`, `TICKETS_SERVICE_URL`, `AI_PROVIDER`,
-`GEMINI_API_KEY`, `GEMINI_MODEL`.
+`apps/organizations-service/.env`: `NODE_ENV`, `PORT`, `LOG_LEVEL`,
+`DATABASE_URL`, `RABBITMQ_URL`, `INTERNAL_SERVICE_TOKEN`.
 
-`GEMINI_API_KEY` is required only when `AI_PROVIDER=gemini`. The real
-`.env` is git-ignored (`.gitignore:26`) and must never be staged.
+`apps/auth-service/.env` gained: `ORGANIZATIONS_SERVICE_URL`,
+`INTERNAL_SERVICE_TOKEN` — which must be byte-identical to
+organizations-service's.
+
+`apps/ai-service/.env` is unchanged: `NODE_ENV`, `PORT`, `LOG_LEVEL`,
+`DATABASE_URL`, `RABBITMQ_URL`, `JWT_ACCESS_SECRET`, `TICKETS_SERVICE_URL`,
+`AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL`.
+
+Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
 
 ## Known risks
 
-- **The Gemini endpoint and model id rest on a smoke test from
-  2026-07-30**, not on a check performed since. If a call starts failing,
-  re-read the Interactions API docs before assuming a code fault.
-- **Spend is now real.** Nothing throttles the gateway or BFF, so an
-  authenticated staff account is a spending path. On the free tier,
-  exhausting quota takes the feature down and surfaces as a 503.
-- **Ticket text leaves the machine** when `AI_PROVIDER=gemini`. Internal
-  notes never do.
-- `apps/web/next-env.d.ts` flips between `.next/types/` and
-  `.next/dev/types/` depending on whether `next dev` or `next build` ran
-  last. The tracked version is the `next build` one. Do not commit the
-  churn, and do not gitignore it either.
-- Redaction is now a single boundary in `domain/redaction.ts`, applied in
-  the `AiDomainError` base constructor. If you add an error type, it is
-  covered automatically; if you add a new exit for error text that does
-  **not** go through a domain error, it is not — route it through
-  `redactSecrets` or `describeExternalError`.
-- The pattern rules are deliberately narrow enough to keep ordinary
-  diagnostics readable. A credential in a shape they do not recognize,
-  from a provider whose key was never registered, would still pass. The
-  registration in `AppModule.forRoot` is what covers the configured one.
-
-## Sprint 9.2 — in progress on `feat/s9-2-tenant-foundation`
-
-Two commits, unmerged, unpushed. Working tree clean, full gate and all 8
-integration suites green.
-
-### Done
-
-**`e2e37dc` — phase 0.** The suite can now detect the failure mode the
-migration risks. Verified by mutation rather than asserted: dropping the
-scope from `findMany` while leaving it on `count` keeps every total correct,
-and **the old spec passed 4/4 against a repository returning another
-requester's rows**. The new assertions fail 3/7 on that same code. Both
-mutations were reverted and the repository is byte-identical to HEAD.
-
-List tests now compare sorted ids; the status-filter test plants a foreign
-row carrying the status the filter selects; the comment test distinguishes
-"the public one" from "one of them". One test pins the fail-open shape of
-`list` so that making the scope required has to be a deliberate rewrite.
-`apps/tickets-service/src/testing/fixtures.ts` is the single place
-`organizationId` lands when it becomes required.
-
-**`3a913f0` — trace ids on events.** All three publishers now pass
-`correlationId`; every envelope previously reached the broker with null, so
-an audit row could not be joined back to its request. Threading is explicit
-(an optional last parameter on four ticket use cases and one auth use case),
-following ai-service's existing precedent rather than introducing
-AsyncLocalStorage.
-
-I estimated this as "cheap" in the migration plan and that was wrong — it
-touched 13 files across three services. Worth doing, but it is not a free
-rider on phase 0.
-
-### Not done — phases 1 and 2
-
-organizations-service does not exist. Nothing else from the plan has started.
-No schema anywhere has changed, which is the correct state to pause in.
-
-**A design finding that changes what phase 1 can deliver.** The plan says
-"memberships for every existing user". organizations-service cannot read
-auth-service's `users` table (ADR 0003), and **auth-service exposes no
-user-listing endpoint** — a gap `docs/architecture/data-ownership.md` already
-records. So phase 1 splits:
-
-- organizations-service consumes `user.registered.v1` and creates a
-  membership in the bootstrap organization for each newly registered user,
-  mirroring how users-service builds its projection;
-- **existing** users need a documented operational backfill, not an automatic
-  one.
-
-Decide that before building, because it determines whether phase 1 is "done"
-with new users covered or blocks on a backfill mechanism.
-
-### Proposed phase-1 schema
-
-Organizations and memberships only. Branches, departments, teams and queues
-are phase 7 (Sprint 9.5+) and must not be built here.
-
-- `organizations` — id, slug, name, status, created_at, updated_at
-- `memberships` — id, organization_id, user_id, role_template, status,
-  created_at, updated_at, unique (organization_id, user_id)
-
-Membership status: invited, active, suspended, deactivated. `role_template`
-is a string key for now; the template→permissions table lands with the
-permission evaluator, not here. ADR 0015 wants templates as seeded rows — a
-string column is the honest first increment, not a contradiction, but say so
-in the sprint report.
-
-### Provisioning touchpoints, when the service is built
-
-Not fully enumerated — the discovery pass covering them failed and needs
-re-running. Known from the audit:
-
-- `infrastructure/postgres/init/01-service-databases.sh` — role + live and
-  `_test` database.
-- `.github/workflows/ci.yml` — the same list again, by hand, because service
-  containers cannot mount the init script (risk R10). Plus the
-  integration-test list.
-- `apps/api-gateway` — proxy block in `main.ts`, entry in `config/env.ts`,
-  `.env.example`.
-- Root `tsconfig.json` project references, and `docs/architecture/data-ownership.md`,
-  `local-development.md` and the README status table, which all enumerate
-  services.
-
-Port 3010, database `helpdesk_organizations`, role `organizations_service`.
-Nx has no `project.json` in this repo — targets live under the `nx` key of
-each service's `package.json`, and `lint` is inferred from
-`eslint.config.mjs` rather than declared.
-
-### Still do not
-
-Add `organization_id` to any table (phase 4), version the event contracts
-(phase 3), touch analytics or audit (they cannot be scoped until the envelope
-carries a tenant), or change `canView`.
-
-The sprint should end with a platform that behaves **exactly** as it does
-today, plus an organization nobody references yet. If anything user-visible
-changes, it has done too much.
+- **The local database was provisioned by hand.** The init script only runs on
+  first initialization of an empty volume, so `organizations_service`,
+  `helpdesk_organizations` and `helpdesk_organizations_test` were created with
+  `psql` inside the container. The script was edited too, so a clean checkout
+  is correct — but this machine's volume and the script have diverged before
+  and will again. Do not delete the volume to "fix" that; it holds every local
+  database.
+- **The Gemini endpoint and model id still rest on a smoke test from
+  2026-07-30.** Unchanged from Sprint 9.0.
+- **Ticket text still leaves the machine** when `AI_PROVIDER=gemini`, and
+  nothing throttles the gateway or BFF, so an authenticated staff account is
+  still a spending path.
+- `apps/web/next-env.d.ts` still flips between `.next/types/` and
+  `.next/dev/types/` depending on whether `next dev` or `next build` ran last.
+  The tracked version is the `next build` one. Do not commit the churn, and do
+  not gitignore it.
+- **`pnpm/action-setup@v4` targets Node.js 20**, which GitHub has deprecated.
+  Still a warning, still worth its own maintenance pass rather than being
+  folded into a product change.
 
 ## Resume commands
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect main
+git branch --show-current      # expect feat/s9-2-tenant-foundation
 git log --oneline -5
 git status --short             # expect clean
 docker compose up -d
@@ -330,15 +240,17 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Sprint 9.2 is part-done on `feat/s9-2-tenant-foundation` (two commits,
-> unmerged, tree clean, gate and all 8 integration suites green). Phase 0 and
-> the trace-id work are complete. Continue with phases 1 and 2: create
-> organizations-service on port 3010 owning `helpdesk_organizations`, a
-> bootstrap organization, and the `org`/`perms`/`mv` token claims that
-> downstream services receive and ignore. Read the Sprint 9.2 section of this
-> handoff first — particularly the finding that auth-service exposes no
-> user-listing endpoint, which changes what "memberships for every existing
-> user" can mean.
+> Sprint 9.2 is closed on `feat/s9-2-tenant-foundation` (four commits plus
+> docs, unmerged, unpushed, tree clean, gate and all nine integration suites
+> green locally). Phases 0, 1 and 2 of the tenancy migration plan are done:
+> organizations-service exists on port 3010 with a bootstrap organization, and
+> the access token carries `org`, `perms` and `mv` which every service
+> ignores. Decide first whether to merge and push this branch, since the ninth
+> integration suite and the fifteenth project have never run in CI. Then
+> continue with phase 3 — versioning the event contracts so the envelope
+> carries an organization — which is the ordering constraint the whole plan
+> hangs off. Read the Sprint 9.2 section of this handoff first, particularly
+> that membership resolution currently fails open and must not stay that way.
 
 ## Repository isolation
 

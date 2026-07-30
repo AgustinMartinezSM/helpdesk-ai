@@ -151,6 +151,29 @@ Negative / accepted:
 - Cross-service reporting ("every ticket in org X") needs the organization id
   denormalized into each service, which ADR 0012 already requires.
 
+## What exists so far
+
+Sprint 9.2 created the service and two of the tables listed above:
+`organizations` and `memberships`. Branches, departments, operational
+stations, service desks, teams, queues, role templates and permission
+mappings are not built, and `role_template` is a plain string column until
+the templates become seeded rows with the evaluator that reads them.
+
+One consequence of this ADR showed up immediately and is worth recording.
+Because memberships are a source of truth rather than a projection, the
+consumer that creates them from `user.registered.v1` had to be written to
+leave an existing row alone rather than upsert over it — the pattern every
+other consumer in the platform uses. A replayed event overwriting a
+projection is harmless; a replayed event overwriting a membership would undo
+a role change someone made on purpose.
+
+The users who already existed cannot be reached by that consumer at all, for
+exactly the reason this ADR chose a separate service: organizations-service
+cannot read `helpdesk_auth`. They are reconciled by an operator script
+instead — `infrastructure/postgres/operations/backfill-bootstrap-memberships.sh`
+— which reads one database and writes another, a thing a migration may do and
+a service may not.
+
 ## Related
 
 ADR 0003 (no cross-service foreign keys) is the binding constraint. ADR 0012

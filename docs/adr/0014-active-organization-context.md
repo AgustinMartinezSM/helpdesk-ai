@@ -117,6 +117,49 @@ semantics change. If a session is per-person and the organization is chosen
 per access token, it does not. I lean towards the second — a session belongs
 to a human, not to a workspace — but it needs deciding before implementation.
 
+**Settled during implementation (Sprint 9.2): a session belongs to a
+person.** `refresh_tokens` keeps its user-only key and gained no column. What
+decided it was reuse detection rather than the conceptual argument: when a
+rotated-out token comes back, `RefreshSessionUseCase` revokes every session
+that user has. A per-organization session would force that revocation to
+decide whether a token stolen from one workspace should kill the others, and
+the safe answer is yes — which is what a per-person session already does,
+without a column to reason about.
+
+## What implementation changed, and what it did not
+
+Sprint 9.2 built the claims. Three things are worth recording here, because
+the code now differs from what this ADR describes, and a reader should not
+have to discover that by reading it.
+
+**Resolution fails open, and must not stay that way.** This ADR says login
+fails when organizations-service is unavailable. The implementation mints the
+token without `org`, `perms` and `mv` instead, and logs a warning. The reason
+is sequencing: no service reads the claims yet, so failing closed would have
+made a service nobody depends on a single point of failure for every login,
+in exchange for protecting nothing. That trade reverses the moment write
+paths start setting the organization from the claim — at which point a token
+with no tenant context is a token that must not be issued. The warning exists
+so a resolution that keeps failing is visible before then, rather than
+discovered when it becomes fatal.
+
+**`perms` is empty.** The claim is present and carries an empty array,
+because role templates are still plain strings and the template-to-permission
+rows ADR 0015 requires arrive with the evaluator. An empty set is the honest
+value: a call site that starts checking permissions denies, which is the safe
+direction to be wrong in. Filling it with invented permissions to make the
+claim look finished would not be.
+
+**The claims are omitted, not null, when nothing resolves.** A user who
+belongs to no organization is an ordinary state during the migration — every
+account predating organizations-service is in it until the backfill runs — so
+a verifier reads "absent" as "no tenant context" without having to decide
+what a null organization means.
+
+**Not built:** the token exchange. This ADR describes switching organizations
+as a mint with a validated request, and there is no endpoint for it. Nothing
+in the platform can select an organization today, because there is only one.
+
 ## What this does not solve
 
 A claim tells a service which organization the caller is acting in. It does
@@ -148,7 +191,9 @@ Negative / accepted:
   owner's is not; if it becomes unreasonable, the fallback is a role template
   id plus server-side expansion, at the cost of a lookup.
 - auth-service gains a synchronous dependency on organizations-service at
-  mint time, and login fails if it is unavailable.
+  mint time, and login fails if it is unavailable — intended as the end
+  state. The implementation fails open instead, for the reason given above,
+  until the claims decide something.
 
 ## Related
 

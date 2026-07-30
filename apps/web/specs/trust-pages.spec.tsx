@@ -161,7 +161,7 @@ describe('Engineering page', () => {
         screen.getByRole('heading', { level: 3, name: decision }),
       ).toBeTruthy();
     }
-    // All nine applications are listed.
+    // All eleven applications are listed.
     for (const app of [
       'web',
       'web-bff',
@@ -172,18 +172,30 @@ describe('Engineering page', () => {
       'audit-service',
       'notification-service',
       'analytics-service',
+      'ai-service',
+      'organizations-service',
     ]) {
       expect(screen.getByText(app)).toBeTruthy();
     }
-    // The CI story stays honest in both directions: it now really has run
-    // on a remote, and the page must not go back to claiming otherwise —
-    // nor start claiming a deployment that still does not exist.
-    expect(
-      screen.getByText(/passed on its first remote execution/),
-    ).toBeTruthy();
+    // organizations-service exists and is listed, but nothing in the product
+    // uses it yet — the page must never sell tenancy as a capability.
+    expect(document.body.textContent).not.toMatch(
+      /multi-?tenan|tenant isolation|per-organization/i,
+    );
+    // The CI story stays honest in both directions. It really has run on a
+    // remote, so the page must not go back to claiming otherwise — and it
+    // must not claim a deployment that still does not exist.
+    expect(screen.getByText(/last remote run was green/)).toBeTruthy();
     expect(screen.getByText(/nothing is hosted yet/)).toBeTruthy();
     expect(document.body.textContent).not.toMatch(
       /repository is still local-only|never run on a remote/,
+    );
+    // The remote run covered fourteen projects and eight suites. The ninth
+    // service landed afterwards on an unpushed branch, so the page must say
+    // what actually ran rather than what the gate now covers locally.
+    expect(document.body.textContent).toMatch(/only been run locally/);
+    expect(document.body.textContent).not.toMatch(
+      /remote execution — format, lint, unit tests and build across all\s+fifteen/,
     );
   });
 });

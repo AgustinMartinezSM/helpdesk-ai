@@ -3,8 +3,9 @@
 Status: Sprint 1 snapshot, kept as the original target picture. It is now
 out of date in the direction of progress: authentication, tickets, the
 event-driven services and (since Sprint 8) `ai-service` all exist. The
-**README status table** is the current answer; the Sprint 8 note at the end
-records what changed about the AI boxes specifically.
+**README status table** is the current answer; the sprint notes at the end
+record what changed about the AI boxes and, in Sprint 9.2, about where
+tenancy sits.
 
 ## Actors
 
@@ -66,8 +67,8 @@ Planned external systems:
 
 Target notes (all Planned):
 
-- Ten applications total; three exist today (`web`, `web-bff`, `api-gateway`).
-- One logical database per service in the single Postgres instance (`helpdesk_auth`, `helpdesk_users`, `helpdesk_tickets`, `helpdesk_audit`, `helpdesk_analytics`), each with its own credentials and migrations. No cross-service foreign keys, ever.
+- Eleven applications total, and all eleven exist today (`web`, `web-bff`, `api-gateway`, `auth-service`, `users-service`, `tickets-service`, `ai-service`, `notification-service`, `audit-service`, `analytics-service`, `organizations-service`). The Sprint 1 note counted ten, of which three existed.
+- One logical database per service in the single Postgres instance (`helpdesk_auth`, `helpdesk_users`, `helpdesk_tickets`, `helpdesk_audit`, `helpdesk_notifications`, `helpdesk_analytics`, `helpdesk_ai`, `helpdesk_organizations`), each with its own credentials and migrations. No cross-service foreign keys, ever.
 - Event name candidates: `UserCreated`, `TicketCreated`, `TicketAssigned`, `AIAnalysisRequested`, `NotificationSent`.
 - External systems (AI provider, email delivery) will sit behind service-owned abstractions so providers can be swapped without touching domain code.
 
@@ -86,8 +87,25 @@ Target notes (all Planned):
   no ticket text (ADR 0011). The only AI event is
   `ai.suggestion.created.v1`, published after the fact, metadata only.
 
+### Sprint 9.2 update: organizations-service sits outside the fan-out
+
+- An eleventh application exists: `organizations-service` (port 3010,
+  `helpdesk_organizations`), owner of organizations and memberships
+  (ADR 0013). It is not one of the boxes under `api-gateway` above, and it
+  is deliberately absent from the gateway's routing table — the browser path
+  does not reach it at all.
+- The one arrow into it comes from `auth-service`, directly, server to
+  server, and only while an access token is being minted; the call carries a
+  shared secret in `x-internal-service-token`. That is the only synchronous
+  dependency the tenancy work added anywhere. Every other service reads the
+  active organization as a claim in the token it already verifies
+  (ADR 0014), so none of them gained an edge to `organizations-service` —
+  which is the whole point of putting tenancy in the token.
+- On the event side it is a consumer only: `user.registered.v1`, on its own
+  queue. It publishes nothing.
+
 ## Boundaries
 
 - The browser talks only to `web` and (via `web`'s frontend code) to `web-bff`. It never reaches `api-gateway` or any future backend service directly.
-- `api-gateway` is the single entry point for all future domain services.
+- `api-gateway` is the single entry point for external clients into the domain services. Internal, service-to-service calls go direct instead of becoming gateway hops (ADR 0011): `ai-service` → `tickets-service`, and `auth-service` → `organizations-service` at token-mint time. `organizations-service` has no gateway route at all.
 - Local infrastructure (Postgres 5433, Redis 6379, RabbitMQ 5672/15672) is reachable only from the developer machine; credentials are non-default, local-only examples overridable via a git-ignored `.env`.

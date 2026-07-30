@@ -25,7 +25,7 @@ feature/HD-014-ticket-list-endpoint
 
 - Keep branches short-lived: one work item per branch, merged (or discarded) quickly. Do not accumulate unrelated changes.
 
-Note: the repository currently has no remote, so there is no push/PR flow yet. Work is committed to feature branches locally. A PR-based flow will be added when the repo gets a remote; until then, the branch and commit conventions below still apply.
+The remote is https://github.com/AgustinMartinezSM/helpdesk-ai. Push the feature branch and open a pull request against `main`; CI runs on every pull request and on every push to `main`, so the branch is verified on a fresh checkout before it lands.
 
 ## Commits
 
@@ -62,7 +62,7 @@ Fixes are applied to the staged files automatically. If ESLint reports unfixable
 
 - **pnpm only.** Do not use `npm` or `yarn` — they will produce inconsistent lockfiles and node_modules layouts.
 - When adding a dependency, explain its purpose in the commit/PR description. Prefer no dependency over a trivial one.
-- pnpm 11 blocks dependency lifecycle (build) scripts by default. If a new dependency needs its build script to run, add it to the `allowBuilds` allow-list in `pnpm-workspace.yaml` and state why. Currently allowed: `@parcel/watcher`, `@swc/core`, `nx`, `sharp`, `unrs-resolver`.
+- pnpm 11 blocks dependency lifecycle (build) scripts by default. If a new dependency needs its build script to run, add it to the `allowBuilds` allow-list in `pnpm-workspace.yaml` and state why. Currently allowed: `@parcel/watcher`, `@prisma/client`, `@prisma/engines`, `@swc/core`, `argon2`, `nx`, `prisma`, `sharp`, `unrs-resolver`.
 
 ## TypeScript project references
 
@@ -97,7 +97,34 @@ pnpm typecheck
 pnpm build
 ```
 
-CI (`.github/workflows/ci.yml`) runs `format:check`, `lint`, `test`, and `build` on `pnpm install --frozen-lockfile`. It has not executed yet (no remote), but treat it as the definition of green: all four must pass locally before you consider a branch done.
+CI (`.github/workflows/ci.yml`) runs `format:check`, `lint`, `typecheck`, `test` and `build` on `pnpm install --frozen-lockfile`, then provisions the service roles and test databases and runs the nine integration suites against real PostgreSQL and RabbitMQ service containers. Treat it as the definition of green: all five gate commands must pass locally before you consider a branch done, plus the integration suites for anything you touched (`pnpm infra:up` first). Green locally and green on a fresh checkout are still separate claims — CI has caught a build that only fails when the tree is cloned rather than reused.
+
+## Adding a service
+
+A new service has to be registered in several places that share no source, so
+nothing derives one from another and a miss is usually silent rather than loud.
+Work through this list and say in the PR description which entries you touched.
+
+- **`infrastructure/postgres/init/01-service-databases.sh`** — the role plus its
+  `helpdesk_<name>` and `helpdesk_<name>_test` databases. The postgres image
+  runs this only on a first initialization of an empty volume, so applying a
+  change locally means `pnpm infra:down`, removing the postgres data volume, and
+  `pnpm infra:up` again.
+- **`.github/workflows/ci.yml`, in two independent places.** The service
+  containers cannot mount the init script, so the _Provision service test
+  databases_ step repeats the role and `_test` database by hand; the _Integration
+  tests_ step then needs its own `test-integration` line. Forgetting the first
+  fails the run. Forgetting the second does not fail anything — the suite is
+  simply never executed, and CI stays green while covering less than you think.
+  This duplication is R10 in `docs/architecture/tenancy-migration-plan.md`.
+- **`compose.yaml` and the root `.env.example`** — the
+  `HELPDESK_<NAME>_DB_PASSWORD` override, in both.
+- **Root `tsconfig.json`** — the project reference. `pnpm nx sync` writes it;
+  commit the result.
+- **`apps/<name>/src/assets/.gitkeep`** — commit it even though the directory is
+  empty. The webpack config declares `assets: ['./src/assets']`, git does not
+  track empty directories, and the missing file passed locally but broke
+  `ai-service`'s build on a fresh CI checkout in Sprint 9.0.
 
 ## Local infrastructure
 
