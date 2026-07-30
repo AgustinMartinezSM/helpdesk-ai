@@ -9,6 +9,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
+import { AiSuggestions } from '../../../../components/ai-suggestions';
 import { useAuth } from '../../../../components/auth-context';
 import { Button, ButtonLink } from '../../../../components/ui/button';
 import { Card } from '../../../../components/ui/card';
@@ -218,6 +219,15 @@ export default function TicketDetailPage() {
                 Confirm fix and close
               </Button>
             </div>
+          ) : null}
+
+          {/* Staff only: the API refuses everyone else, and a requester has
+              no use for drafts written for the technician. */}
+          {isStaff && session ? (
+            <AiSuggestions
+              ticketId={params.id}
+              accessToken={session.accessToken}
+            />
           ) : null}
 
           <section className={styles.section} aria-label="Comments">

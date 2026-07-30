@@ -1,0 +1,167 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.lead {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* The provider notice is informational, not a warning: it uses the neutral
+   sunken surface rather than a danger color, because "no model connected" is
+   an honest state of the product, not an error. */
+.notice {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.notice code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+/* A list for semantics (four peer tasks), not for bullets. */
+.tasks {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+}
+
+.task {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.taskHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.taskTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.taskHint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-top: 0.125rem;
+}
+
+.taskBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pending {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.taskError {
+  font-size: 0.875rem;
+  color: var(--danger);
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.text {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-left: 1.125rem;
+  list-style: disc;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.pill {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.confidence {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rationale {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* A draft is quoted text, not the product's own voice: the left rule and the
+   sunken surface keep it visually separate from anything already sent. */
+.draft {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 0.625rem 0.75rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  background: var(--surface-2);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}

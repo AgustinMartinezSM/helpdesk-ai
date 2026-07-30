@@ -16,9 +16,9 @@ export interface CorrelationHeaders {
 const UPSTREAM_TIMEOUT_MS = 5_000;
 
 /**
- * Thin HTTP client for the auth routes exposed by the api-gateway. Uses
- * Node's built-in fetch; correlation headers from the incoming browser
- * request are forwarded so one traceId spans web -> bff -> gateway -> auth.
+ * Thin HTTP client for the routes exposed by the api-gateway. Uses Node's
+ * built-in fetch; correlation headers from the incoming browser request are
+ * forwarded so one traceId spans web -> bff -> gateway -> service.
  *
  * Network failures are surfaced as status 502 so the controller treats an
  * unreachable platform like any other upstream error.
@@ -65,12 +65,14 @@ export class GatewayClient {
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       });
     } catch {
+      // The message must fit every route this client serves — sessions,
+      // tickets and AI suggestions all reach the platform through here.
       return {
         status: 502,
         body: {
           statusCode: 502,
           error: 'Bad Gateway',
-          message: 'Authentication is temporarily unavailable',
+          message: 'The platform is temporarily unavailable',
         },
       };
     }

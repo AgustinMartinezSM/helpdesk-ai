@@ -2,6 +2,7 @@
 import type { DynamicModule } from '@nestjs/common';
 import { ObservabilityModule } from '@helpdesk-ai/observability';
 import { APP_ENV, SERVICE_NAME, type WebBffEnv } from '../config/env';
+import { AiController } from './ai/ai.controller';
 import { HealthController } from './health/health.controller';
 import { GATEWAY_CLIENT, GatewayClient } from './gateway.client';
 import { SessionController } from './session/session.controller';
@@ -29,7 +30,12 @@ export class AppModule {
           logLevel: env.LOG_LEVEL,
         }),
       ],
-      controllers: [HealthController, SessionController, TicketsController],
+      controllers: [
+        HealthController,
+        SessionController,
+        TicketsController,
+        AiController,
+      ],
       providers: [
         { provide: APP_ENV, useValue: env },
         {
