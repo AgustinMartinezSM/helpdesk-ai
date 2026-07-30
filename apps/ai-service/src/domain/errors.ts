@@ -1,6 +1,23 @@
+import { redactSecrets } from './redaction';
+
+/**
+ * Base of every error this service reports.
+ *
+ * The message is redacted here, in the one constructor all of them call,
+ * because of where it ends up: `AiDomainErrorFilter` returns it verbatim in
+ * the HTTP body, the logger serializes it, and `stack` embeds it. Sanitizing
+ * at each of those exits would mean every new exit has to remember; doing it
+ * on the way in means none of them do, and no subclass or future call site
+ * can construct an unsanitized one.
+ *
+ * A `cause` is deliberately never attached. It would carry the raw upstream
+ * object straight past this boundary and into the log serializer — the detail
+ * worth keeping is already folded into the message by
+ * `describeExternalError`.
+ */
 export abstract class AiDomainError extends Error {
   protected constructor(message: string) {
-    super(message);
+    super(redactSecrets(message));
     this.name = new.target.name;
   }
 }

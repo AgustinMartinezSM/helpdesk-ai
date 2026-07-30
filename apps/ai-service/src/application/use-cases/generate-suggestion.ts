@@ -6,6 +6,7 @@ import {
   ProviderOutputError,
   ProviderUnavailableError,
 } from '../../domain/errors';
+import { describeExternalError } from '../../domain/redaction';
 import type {
   Suggestion,
   SuggestionTask,
@@ -143,9 +144,15 @@ export class GenerateSuggestionUseCase {
       if (error instanceof AiDomainError) {
         throw error;
       }
+      // Anything else came straight from a transport that knows nothing about
+      // this domain, so its message, its `cause` chain and any object it threw
+      // are untrusted text. `describeExternalError` flattens and redacts them;
+      // the error constructor redacts again. Neither is redundant: this one
+      // reaches into nested causes the constructor would never see, and that
+      // one covers call sites that forget this exists.
       throw new ProviderUnavailableError(
         this.provider.id,
-        error instanceof Error ? error.message : String(error),
+        describeExternalError(error),
       );
     }
   }

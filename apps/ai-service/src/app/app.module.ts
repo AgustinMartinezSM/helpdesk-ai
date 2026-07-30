@@ -26,6 +26,7 @@ import {
   ListSuggestionsUseCase,
 } from '../application/use-cases/suggestion-queries';
 import { APP_ENV, SERVICE_NAME, type AiServiceEnv } from '../config/env';
+import { registerSecret } from '../domain/redaction';
 import { HttpTicketSource } from '../infrastructure/http/http-ticket-source';
 import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-event-publisher';
 import { PrismaSuggestionRepository } from '../infrastructure/prisma/prisma-suggestion.repository';
@@ -45,6 +46,14 @@ import { SuggestionsController } from './suggestions/suggestions.controller';
 @Module({})
 export class AppModule {
   static forRoot(env: AiServiceEnv): DynamicModule {
+    // Before anything can fail: from here on, every domain error built
+    // anywhere in the service has the configured key stripped out of its
+    // message, including on paths that never touch the provider adapter
+    // (`domain/redaction.ts`). Every entry point — main and the integration
+    // tests — goes through this method, so there is no second place to
+    // remember.
+    registerSecret(env.GEMINI_API_KEY);
+
     return {
       module: AppModule,
       imports: [

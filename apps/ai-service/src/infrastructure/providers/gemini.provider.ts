@@ -7,6 +7,7 @@ import {
   ProviderOutputError,
   ProviderUnavailableError,
 } from '../../domain/errors';
+import { describeExternalError, redactSecrets } from '../../domain/redaction';
 import {
   SUGGESTION_CATEGORIES,
   TICKET_PRIORITIES,
@@ -39,13 +40,13 @@ import { OUTPUT_LIMITS } from '../../domain/suggestion-outputs';
  *   in proxy logs and error reports; `x-goog-api-key` does not.
  * - **The key never reaches a message, log or thrown error.** Every error
  *   detail derived from the transport or from the upstream body goes
- *   through `redact` first; the rest are fixed literals. This matters
- *   because the domain error filter returns `exception.message` verbatim
- *   to the caller, so an unredacted string reaches a browser. If you ever
- *   interpolate an upstream string into one of those literals, redact it
- *   too. The success path is deliberately not redacted — the answer and
- *   the model name are the values this class exists to return, and the
- *   key is never in the prompt or request body for an upstream to echo.
+ *   through `redact` first; the rest are fixed literals. `AiDomainError`
+ *   redacts again on construction, so forgetting here degrades the result
+ *   rather than leaking — the exact-value layer is what only this class can
+ *   contribute (`domain/redaction.ts`). The success path is deliberately
+ *   not redacted: the answer and the model name are the values this class
+ *   exists to return, and the key is never in the prompt or request body
+ *   for an upstream to echo back.
  * - **One attempt per call.** A retry doubles the spend and the latency of a
  *   request someone is waiting on, and retry policy is a platform-wide
  *   decision rather than this adapter's to make.
@@ -218,9 +219,12 @@ export class GeminiProvider implements AiProvider {
         signal: AbortSignal.timeout(limits.timeoutMs),
       });
     } catch (error) {
+      // A transport failure is where the request comes back at you: undici
+      // puts the interesting part in `cause`, and an echoed request carries
+      // the header that holds the key.
       throw new ProviderUnavailableError(
         this.id,
-        this.redact(error instanceof Error ? error.message : String(error)),
+        this.redact(describeExternalError(error)),
       );
     }
 
@@ -272,10 +276,14 @@ export class GeminiProvider implements AiProvider {
     };
   }
 
-  /** Last line of defense: a key must never travel inside an error. Callers
-   * pass anything that originated outside this process through here. */
+  /**
+   * Exact-value redaction, which only this class can do: it is the one place
+   * that holds the key. The shared rules run too, so a credential that is
+   * shaped like one but is not ours — an echoed `authorization` header, a
+   * second provider's token — is caught here as well.
+   */
   private redact(detail: string): string {
-    return detail.split(this.apiKey).join('[redacted]');
+    return redactSecrets(detail, [this.apiKey]);
   }
 }
 

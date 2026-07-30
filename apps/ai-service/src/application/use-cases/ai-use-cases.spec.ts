@@ -255,6 +255,36 @@ describe('GenerateSuggestionUseCase', () => {
     expect(suggestions.rows).toHaveLength(0);
   });
 
+  it('sanitizes a raw provider crash while re-wrapping it', async () => {
+    // The gap this closes: an adapter that throws something which is not a
+    // domain error has its message re-wrapped here, one layer above the
+    // adapter's own redaction. A transport error that echoes the request it
+    // tried to send would otherwise travel straight to the HTTP client.
+    const { generate, provider, suggestions } = harness();
+    const leaked = 'test-key-0000-not-a-real-credential';
+    provider.failure = new Error('fetch failed', {
+      cause: new Error(
+        `request headers {"x-goog-api-key":"${leaked}"} to https://example.test`,
+      ),
+    });
+
+    const failure = await generate
+      .execute(staff, {
+        ticketId: TICKET_ID,
+        task: 'summary',
+        accessToken: 'token',
+      })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProviderUnavailableError);
+    expect((failure as Error).message).not.toContain(leaked);
+    expect((failure as Error).message).toContain('[redacted]');
+    // The nested cause is still reported — redaction removes the credential,
+    // not the diagnosis.
+    expect((failure as Error).message).toContain('fetch failed');
+    expect(suggestions.rows).toHaveLength(0);
+  });
+
   it('lets a domain error raised by an adapter through untouched', async () => {
     const { generate, provider } = harness();
     provider.failure = new ProviderUnavailableError('scripted', 'rate limited');

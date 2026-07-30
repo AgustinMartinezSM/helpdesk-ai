@@ -314,6 +314,61 @@ describe('GeminiProvider', () => {
     }
   });
 
+  it('keeps the key out of every failure shape an upstream can produce', async () => {
+    // One test per way the credential can come back at us. They are listed
+    // together because the guarantee is "no path leaks", not "this path does
+    // not leak" — a new branch in run() should have to join this table.
+    const cases: Array<[name: string, harness: Harness]> = [
+      [
+        'a transport error echoing the request configuration',
+        harness(() => {
+          throw new Error('fetch failed', {
+            cause: new Error(
+              `sent {"headers":{"x-goog-api-key":"${TEST_KEY}"},"url":"https://example.test"}`,
+            ),
+          });
+        }),
+      ],
+      [
+        'a 4xx quoting the credential back',
+        harness(() =>
+          jsonResponse(
+            { error: { message: `API key not valid: ${TEST_KEY}` } },
+            400,
+          ),
+        ),
+      ],
+      [
+        'a 5xx quoting the credential back',
+        harness(() =>
+          jsonResponse(
+            {
+              error: {
+                message: `internal error handling authorization: Bearer ${TEST_KEY}`,
+              },
+            },
+            503,
+          ),
+        ),
+      ],
+      [
+        'a thrown object rather than an Error',
+        harness(() => {
+          throw { headers: { 'x-goog-api-key': TEST_KEY } };
+        }),
+      ],
+    ];
+
+    for (const [, { provider }] of cases) {
+      const failure = await provider
+        .run({ task: 'summary', context: context(), limits: LIMITS })
+        .catch((error: unknown) => error);
+
+      expect((failure as Error).message).not.toContain(TEST_KEY);
+      expect((failure as Error).message).toContain('[redacted]');
+    }
+  });
+
   it('keeps its response schemas in step with the domain schemas', () => {
     // Drift guard: the JSON Schema sent to Gemini and the zod schema that
     // validates the answer must agree, or the model is asked for one shape

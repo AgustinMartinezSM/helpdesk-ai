@@ -3,18 +3,19 @@
 **Date:** 2026-07-30
 **Sprint:** 9.0 — Close Sprint 8 and connect a model provider
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `feat/ai-service` (9 commits ahead of `main`, never pushed)
+**Branch:** `feat/ai-service` (10 commits ahead of `main`, never pushed)
 
 ## Git state
 
-Three commits were created on `feat/ai-service` this sprint, on top of
+Four commits were created on `feat/ai-service` this sprint, on top of
 `c6cc37b docs: record sprint 8 and the AI security posture`:
 
 | Commit    | Message                                                                      |
 | --------- | ---------------------------------------------------------------------------- |
 | `b2f245b` | `ci: add typecheck to the quality gate`                                      |
 | `b90eac6` | `feat(ai): add Gemini provider integration`                                  |
-| _(this)_  | `docs(product): document the API-ready AI capabilities and Sprint 8 closure` |
+| `155b9c0` | `docs(product): document the API-ready AI capabilities and Sprint 8 closure` |
+| _(this)_  | `fix(ai): harden provider error redaction`                                   |
 
 `main` is unchanged and still equal to `origin/main`. Nothing has been
 merged or pushed; both are waiting on explicit approval.
@@ -86,6 +87,13 @@ merged or pushed; both are waiting on explicit approval.
 `src/infrastructure/providers/gemini.provider.ts` (new),
 `src/infrastructure/providers/gemini.provider.spec.ts` (new).
 
+**`fix(ai): harden provider error redaction`** —
+`apps/ai-service/src/domain/redaction.ts` (new),
+`src/domain/redaction.spec.ts` (new), `src/domain/errors.ts`,
+`src/app/app.module.ts`, `src/application/use-cases/generate-suggestion.ts`
+and its spec, `src/infrastructure/providers/gemini.provider.ts` and its
+spec, plus `SECURITY.md`, `docs/progress/SPRINT-009.0.md` and this file.
+
 **`docs(product): …`** — `README.md`, `SECURITY.md`,
 `apps/web/src/lib/product-status.ts`, `src/components/ai-suggestions.tsx`,
 `src/components/public/hero-visual.tsx`, `src/app/(public)/page.tsx`,
@@ -103,12 +111,12 @@ None. No schema change in this sprint.
 
 Full gate, all green on 2026-07-30:
 
-- `pnpm format:check`, `pnpm lint` (0 errors, 8 pre-existing warnings),
+- `pnpm format:check`, `pnpm lint` (0 errors, 9 pre-existing warnings),
   `pnpm typecheck` (13 projects), `pnpm test` (14 projects),
   `pnpm build` (14 projects).
 - All 8 integration suites against real PostgreSQL and RabbitMQ:
   messaging, auth, tickets, users, audit, notification, analytics, ai.
-- `ai-service` unit specs 52 → 71. `apps/web` 117, with 5 rewritten.
+- `ai-service` unit specs 52 → 95. `apps/web` 117, with 5 rewritten.
 - Secret scan clean across tracked content and the full git history.
 
 `apps/web` has no `typecheck` target — it is covered by `next build`
@@ -143,16 +151,15 @@ auth-service, tickets-service, ai-service, api-gateway, web-bff and web.
   `.next/dev/types/` depending on whether `next dev` or `next build` ran
   last. The tracked version is the `next build` one. Do not commit the
   churn, and do not gitignore it either.
-- `apps/ai-service/src/application/use-cases/generate-suggestion.ts`
-  wraps any non-domain provider error and the filter returns its message
-  verbatim to the caller. Redaction happens one layer below, inside the
-  adapter, so the guarantee rests on each adapter's discipline and no
-  test asserts containment at the use-case boundary. A future provider
-  that leaks a raw error would reach the browser.
-- `redact()` masks the exact key string only. An upstream that echoed a
-  percent-encoded or case-altered rendering would pass through. Google's
-  invalid-key response does not echo the key, so this is defense in
-  depth rather than a live gap.
+- Redaction is now a single boundary in `domain/redaction.ts`, applied in
+  the `AiDomainError` base constructor. If you add an error type, it is
+  covered automatically; if you add a new exit for error text that does
+  **not** go through a domain error, it is not — route it through
+  `redactSecrets` or `describeExternalError`.
+- The pattern rules are deliberately narrow enough to keep ordinary
+  diagnostics readable. A credential in a shape they do not recognize,
+  from a provider whose key was never registered, would still pass. The
+  registration in `AppModule.forRoot` is what covers the configured one.
 
 ## Exact next action
 

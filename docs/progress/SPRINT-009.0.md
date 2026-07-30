@@ -79,10 +79,14 @@ search, and nothing about this sprint moved it.
 
 - The key travels as an `x-goog-api-key` header, never in a URL — query
   strings end up in proxy logs and error reports.
-- Every string that originates outside the process goes through `redact`
-  before it can reach a message, log or thrown error. Two specs cover the
-  plausible leak paths: a transport error echoing the request, and an
-  upstream body quoting the key back.
+- Every error message this service reports is redacted at one boundary,
+  the `AiDomainError` base constructor, so the HTTP body, the log
+  serializer and `stack` are covered by construction. See the hardening
+  section below for how that boundary came to exist.
+- Redirects are refused on the provider call: undici strips
+  `authorization` on a cross-origin redirect but forwards a custom
+  header, so following one would hand `x-goog-api-key` to the redirect
+  target.
 - The key is required only when `AI_PROVIDER=gemini`, and startup fails
   fast naming the variable when it is missing or empty.
 - **Ticket text now leaves the machine.** With `AI_PROVIDER=gemini` the
@@ -113,8 +117,8 @@ without the fix would have made the commit red.
 - Full gate green: `format:check`, `lint`, `typecheck`, `test`, `build`
   across all 14 projects, plus the 8 integration suites against real
   PostgreSQL and RabbitMQ.
-- `ai-service` unit specs went from 52 to 71 — 19 new across the Gemini
-  adapter and the environment schema.
+- `ai-service` unit specs went from 52 to 95 — 19 for the Gemini adapter
+  and the environment schema, then 24 more for the redaction boundary.
 - `apps/web` stayed at 117 with 5 specs rewritten: the landing and
   how-it-works suites were written in Sprint 8 to fail until the site
   matched reality, and they did fail, which is the outcome that made them
@@ -124,6 +128,50 @@ without the fix would have made the commit red.
   `web → bff → gateway → ai-service → tickets-service`. No real ticket
   data was used, and the free tier was the only thing spent.
 - No credential appears in tracked content or in the full git history.
+
+## Hardening increment: one redaction boundary
+
+The first pass redacted inside the Gemini adapter, which left two holes
+that a review caught before merge. `generate-suggestion.ts` re-wrapped any
+non-domain provider error one layer _above_ that redaction, and the error
+filter returns a message verbatim to the browser — so a transport error
+echoing its own request headers had a clear path out. And `redact()`
+matched the exact configured key only, so anything the adapter did not
+recognize passed through.
+
+Both are closed by moving redaction to one place: `domain/redaction.ts`,
+applied in the `AiDomainError` base constructor. Every error this service
+reports funnels through that constructor, so the HTTP body, the log
+serializer and `stack` are all covered by construction rather than by
+each exit remembering.
+
+Two layers run there, because neither is sufficient alone. Exact
+configured values catch a credential with no recognizable shape, but only
+where the key is known. Patterns — Google API keys, OAuth tokens,
+`x-goog-api-key`, `authorization`, `Bearer`, `GEMINI_API_KEY=`, and
+credential-bearing query strings — catch the paths that never hold the
+key, which is exactly the application-layer re-wrap that leaked.
+
+`describeExternalError` handles the other half: it walks the `cause`
+chain, where fetch implementations put the interesting part and where an
+echoed request carries its headers, serializes a thrown object instead of
+reporting `[object Object]`, drops stacks, and caps the length so an
+upstream body cannot become the message.
+
+The rule I kept coming back to while writing the patterns: redaction that
+destroys the diagnosis just moves the outage from the log to the person
+reading it. So the rules keep the label and replace only the value —
+`x-goog-api-key: [redacted]`, not `[redacted]` — and one test asserts that
+ordinary messages like `connect ETIMEDOUT` and a zod field error come
+through byte-identical.
+
+Registration happens in `AppModule.forRoot`, which every entry point
+including the integration tests goes through. It is module state rather
+than an injected dependency, and that is a real tradeoff: the boundary is
+a base-class constructor reachable from anywhere, and threading a redactor
+into every `throw` is the discipline this was meant to remove. The pattern
+layer works with nothing registered, so a missed registration degrades
+coverage instead of disabling redaction.
 
 ## Documentation changed, and what came out of it
 
