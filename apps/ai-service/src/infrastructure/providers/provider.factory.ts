@@ -1,5 +1,6 @@
 import type { AiProvider } from '../../application/ports/ai-provider';
 import type { AiServiceEnv } from '../../config/env';
+import { GeminiProvider } from './gemini.provider';
 import { LocalHeuristicProvider } from './local.provider';
 
 /**
@@ -23,6 +24,20 @@ export function createAiProvider(env: AiServiceEnv): AiProvider {
   switch (env.AI_PROVIDER) {
     case 'local':
       return new LocalHeuristicProvider();
+    case 'gemini': {
+      // Env validation already refuses this combination, so reaching here
+      // means the schema and this factory disagree — fail loudly rather than
+      // construct a provider that cannot authenticate.
+      if (!env.GEMINI_API_KEY) {
+        throw new Error(
+          'GEMINI_API_KEY is required when AI_PROVIDER is "gemini"',
+        );
+      }
+      return new GeminiProvider({
+        apiKey: env.GEMINI_API_KEY,
+        model: env.GEMINI_MODEL,
+      });
+    }
     default: {
       const unsupported: never = env.AI_PROVIDER;
       throw new Error(`unsupported AI_PROVIDER: ${String(unsupported)}`);
