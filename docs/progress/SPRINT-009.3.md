@@ -1,8 +1,8 @@
-# Sprint 9.3 — Event contracts v2
+# Sprint 9.3 — Event contracts v2 and tenant columns
 
-Status: **Phase 3 complete (2026-07-30), verified locally.** Nothing consumes
-a v2 event. No schema anywhere changed, no column was added, no consumer file
-was touched.
+Status: **Phases 3 and 4 complete (2026-07-30).** Nothing consumes a v2 event
+and nothing reads an `organization_id`. Phase 3 changed no schema; phase 4
+changed eight tables and no behaviour.
 
 Goal: put an organization on the wire, so the three services that learn
 everything from the bus will have something to scope by. This is the ordering
@@ -179,13 +179,102 @@ commit, no rewritten history — and pushed. GitHub Actions run `30582924271`
 was green on its first attempt, with the same counts the local gate reported
 and all nine integration suites against real service containers.
 
+## Phase 4 — the columns exist
+
+Eight tables across five services gained a nullable `organization_id`, and
+every row that existed was assigned the bootstrap organization. Nothing reads
+it: no domain type, no repository mapper and no API response mentions the
+column, which is what makes the checkpoint something you can check rather than
+something you assert.
+
+### Eight tables, not the ten the plan listed
+
+`user_profiles` and `user_snapshots` are projected from `user.registered` —
+the contract phase 3 established has no v2 and cannot have one, because the
+membership that would supply a tenant is created by consuming that very event.
+
+So the column would have had no source. The choice was between hardcoding the
+bootstrap organization inside two consumers, which is a constant somebody has
+to remember to remove, and letting new rows accumulate nulls with no date on
+which anything fills them. Waiting for the membership lifecycle events in
+phase 6 is better than both, and both tables are rebuildable projections, so
+arriving late costs nothing.
+
+There is a modelling reason underneath the practical one. A single
+`organization_id` on `user_profiles` asserts that a person belongs to one
+organization. That is precisely what ADR 0013 avoided when it made membership
+its own table rather than a column on a user.
+
+### The checkpoint overstates itself, and it matters for phase 7
+
+The plan says phase 4 ends with the columns "fully populated". That is true at
+the instant of the backfill and stops being true immediately: consumers do not
+set the column until phase 6, so every row written in between is null.
+
+That is a consequence of the plan's own ordering rather than a mistake in it.
+But it means phase 7 has to **re-run the backfill**, not merely re-run the
+verification, before it can add `NOT NULL`. I would rather write that down now
+than have phase 7 discover it as a failing constraint.
+
+### Where the backfill lives, and why it differs from the last one
+
+In the migrations, not in an operator script. The membership backfill had to
+be a script because it read one database and wrote another; here every
+`UPDATE` stays inside the service's own database, and `prisma migrate deploy`
+is the only provisioning step that runs both locally and in CI.
+
+Each statement is scoped to `WHERE organization_id IS NULL`, so re-running is
+a no-op and cannot overwrite a value a later phase set on purpose.
+
+The bootstrap organization's id appears as a literal in five migrations. It
+cannot be looked up — organizations live in another service's database — and
+that is exactly why it was created as a fixed, obviously synthetic uuid rather
+than a random one back in phase 1.
+
+### audit_events
+
+Every historical row got the bootstrap organization, and R4's per-event-type
+map was not applied, because there was nothing for it to disambiguate: every
+row predates the existence of a second organization. The map becomes necessary
+when the trail spans more than one — and by then the tenant arrives on the v2
+envelope anyway, so the map may never be the mechanism at all.
+
+Persisting the envelope value is a consumer change, so it waits for phase 6.
+Until then new audit rows are null.
+
+This backfill is also the only `UPDATE` that table will ever take. The trail is
+append-only to the application; a migration is not the application.
+
+### The verification found nothing, after I fixed the verification
+
+`infrastructure/postgres/operations/verify-tenant-columns.sh` runs the plan's
+four checks plus a fifth. Row counts against a pre-migration snapshot:
+identical. Rows still untenanted: zero in all eight tables. Ids that do not
+resolve against `helpdesk_organizations`: none. Ticket agreeing with its
+comments and history: yes. Everything on the bootstrap organization: yes.
+
+The ticket-agreement check was wrong twice before it was right, and the first
+run flagged a ticket that was perfectly fine. A `LEFT JOIN` reports a ticket
+with no comments as a disagreement, because `NULL IS DISTINCT FROM <uuid>` is
+true — and joining both child tables in one query multiplies them into a
+cartesian product that inflates every count.
+
+What caught it was that the checks disagreed with each other: check 2 said
+zero nulls and check 5 said everything was on the bootstrap organization,
+which left no way for check 4's row to be real. A single check would have been
+believed. Both mistakes are commented in the script.
+
 ## Debts this phase creates
 
 - **The organization on a ticket event is the caller's, not the ticket's.**
-  `Ticket` has no organization column until phase 4. They cannot differ today
-  because a caller only reaches tickets they may see, but nothing enforces
-  that, and the two become separable the moment the column exists. Phase 4
-  has to reconcile it.
+  Phase 4 gave `Ticket` its column, so the two are now separable — but nothing
+  compares them, because the write paths do not set the column yet. The
+  reconciliation moves to phase 6, where writes start taking the organization
+  from the actor's claim and a mismatch becomes something that can be
+  detected and refused.
+- **Every row written between phase 4 and phase 6 has a null organization.**
+  Phase 7 must re-run the backfill before adding `NOT NULL`, not merely re-run
+  the verification.
 - **Two publishes double the loss surface.** Publishing is best-effort with no
   outbox, so v1-lands-v2-lost is now a reachable state and produces asymmetric
   audit rows. Both calls are independently caught, which is correct; the
@@ -195,11 +284,14 @@ and all nine integration suites against real service containers.
 
 ## What this phase deliberately did not do
 
-No consumer reads a v2. No queue binds one. No `organization_id` column on any
-table — that is phase 4, and it is what turns the caller-versus-subject
-distinction above from theoretical into something that can actually be wrong.
+No consumer reads a v2 and no queue binds one. Nothing reads an
+`organization_id`: not a domain type, not a repository mapper, not an API
+response. No write path sets one. No `NOT NULL`, no composite index — those
+are the enforcement phase, and it is the first step that cannot be undone by
+reverting code.
+
 No change to `canView`, no deletion of the duplicate `Actor` copies, no
-membership lifecycle.
+membership lifecycle, no assignee validation.
 
 `isStaff` is still defined four times.
 

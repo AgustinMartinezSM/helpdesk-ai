@@ -2,8 +2,9 @@
 
 Status: **Approved 2026-07-30.** Phases map to sprints 9.2–9.4 in the
 delivery plan; the threat ids are from `tenancy-threat-model.md`. Phases 0, 1
-and 2 ran in Sprint 9.2 and phase 3 in Sprint 9.3, each with deviations
-recorded in its own entry below. Phases 4–8 are unchanged and unstarted.
+and 2 ran in Sprint 9.2, and phases 3 and 4 in Sprint 9.3, each with
+deviations recorded in its own entry below. Phases 5–8 are unchanged and
+unstarted.
 
 ## The ordering constraint that drives everything
 
@@ -209,7 +210,9 @@ specs in tickets-service and ai-service pin the dual publish and the
 skip-and-warn, and the full gate is green — locally and on a remote runner,
 green on the first attempt.
 
-### Phase 4 — nullable columns and backfill (9.3)
+### Phase 4 — nullable columns and backfill (9.3) — **done, with deviations**
+
+Shipped as `19909ae`.
 
 Add `organization_id` nullable to all ten organization-owned tables. Backfill
 every existing row to the bootstrap organization. audit_events per event type
@@ -222,6 +225,55 @@ organization.
 
 **Checkpoint:** columns exist and are fully populated but nothing reads them.
 Revert = drop the columns.
+
+**Eight tables, not ten.** `tickets`, `ticket_comments`, `ticket_history`,
+`suggestions`, `ticket_snapshots`, `ticket_refs`, `notifications` and
+`audit_events` got the column. `user_profiles` and `user_snapshots` did not.
+
+Both are projected from `user.registered`, which phase 3 established has no
+v2 and cannot have one: the membership that would supply a tenant is created
+by consuming that very event. So the column would have had no source, and the
+choice was between hardcoding the bootstrap organization inside two consumers
+or letting new rows accumulate nulls with no date on which anything fills
+them. They wait for the membership lifecycle events in phase 6, which are
+their only honest source. Both are rebuildable projections, so arriving late
+costs nothing.
+
+There is a modelling reason too. A single `organization_id` on `user_profiles`
+asserts that a person belongs to one organization, which is the thing ADR 0013
+avoided by making membership its own table.
+
+**"Fully populated" is true at the instant of the backfill, and not after.**
+Consumers do not set the column until phase 6, so every row written between
+these two phases is null. That is a consequence of the plan's own ordering
+rather than a mistake in it, but it means **phase 7 must re-run the backfill
+before adding `NOT NULL`**, not merely re-run the verification.
+
+**audit_events got the bootstrap organization for every historical row**, with
+no per-event-type map applied. R4 asks for one, and there was nothing for it
+to disambiguate: every row predates the existence of a second organization.
+The map becomes necessary when the trail spans more than one, and by then the
+tenant arrives on the v2 envelope anyway. Persisting that is a consumer
+change, so it belongs to phase 6; until then new audit rows are null.
+
+**The backfill is in the migrations, not in an operator script.** That differs
+from the membership backfill for a reason: each `UPDATE` here stays inside the
+service's own database, and `prisma migrate deploy` is the only provisioning
+step that runs both locally and in CI. Every statement is scoped to
+`WHERE organization_id IS NULL`, so re-running is a no-op and cannot overwrite
+a value a later phase set deliberately.
+
+**The verification is a script**,
+`infrastructure/postgres/operations/verify-tenant-columns.sh`, run with
+`--snapshot` before migrating and without it after. It covers all four checks
+above plus a fifth — that everything landed on the bootstrap organization,
+which is what this phase expects and a later one will not.
+
+Worth recording because it nearly produced a false clean: the ticket-agreement
+check was wrong twice. A `LEFT JOIN` reports a ticket with no comments as a
+disagreement, because `NULL IS DISTINCT FROM <uuid>` is true; and joining both
+child tables in one query multiplies them into a cartesian product. The first
+run flagged a ticket that was fine. Both mistakes are commented in the script.
 
 ### Phase 5 — read paths (9.3)
 

@@ -1,11 +1,11 @@
 # Current handoff
 
 **Date:** 2026-07-30
-**Sprint:** 9.3 — Event contracts v2 (phase 3 complete)
+**Sprint:** 9.3 — Event contracts v2 and tenant columns (phases 3 and 4)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `main` at `cd033ab` — fast-forwarded from
-`feat/s9-3-event-contracts-v2` (no merge commit, no rewritten history) and
-pushed. Working tree clean, and **remote CI is green** on the first attempt.
+**Branch:** `feat/s9-4-tenant-columns`, **unmerged and unpushed**. `main` is at
+`0843b9b` with remote CI green through phase 3. Working tree clean, full gate
+and all nine integration suites green locally.
 
 Read `docs/progress/SPRINT-009.3.md` first, then `SPRINT-009.2.md`. This file
 is the operational summary of both.
@@ -50,12 +50,51 @@ This runs until phase 8 stops publishing v1. Both publishes share a
 `correlationId`, which is the only thing that groups them. Anything counting
 audit rows per logical fact double-counts across the window.
 
-### Debt phase 3 hands to phase 4
+## Phase 4 — the columns exist and nothing reads them
+
+Eight tables across five services gained a nullable `organization_id`, and
+every row that existed was backfilled to the bootstrap organization. No domain
+type, no repository mapper and no API response mentions the column.
+
+### Three things to know before phase 5 or 7
+
+**`user_profiles` and `user_snapshots` deliberately have no column.** They are
+projected from `user.registered`, which carries no tenant and cannot — the
+membership that would supply one is created by consuming that very event. They
+wait for membership lifecycle events in phase 6. Do not "finish the job" by
+adding the column without giving it a source first.
+
+**Every row written between now and phase 6 has a null organization**, because
+no write path sets it yet. **Phase 7 must re-run the backfill before adding
+`NOT NULL`** — re-running only the verification will pass on stale data and
+then the constraint will fail.
+
+**A rebuild now leaves rows untenanted.** Replaying a projection restores its
+rows but not the tenant, which is not in the source it replays from until
+consumers read v2. Any rebuild has to be followed by the backfill. This is
+recorded in `data-ownership.md` next to the rebuild paths themselves.
+
+### Verification
+
+`infrastructure/postgres/operations/verify-tenant-columns.sh`, run with
+`--snapshot` before migrating and without it after. Five checks: counts
+against the snapshot, no untenanted rows, every id resolves against
+`helpdesk_organizations`, a ticket agrees with its comments and history, and
+everything is on the bootstrap organization.
+
+Worth knowing that its fourth check was wrong twice before it was right — a
+`LEFT JOIN` reports a ticket with no comments as a disagreement, and joining
+both child tables at once makes a cartesian product. What caught it was the
+checks contradicting each other, not the check itself. If you extend this
+script, keep the checks overlapping.
+
+### Debt phase 3 handed to phase 4, now moved to phase 6
 
 The organization on a ticket event is the **caller's**, not the **ticket's**.
-`Ticket` has no organization column yet, so there is nothing else it could be.
-They cannot differ today and nothing enforces that. Reconcile it when the
-column lands.
+The column now exists, so the two are separable — but nothing compares them,
+because no write path sets the column. The reconciliation belongs to phase 6,
+where writes take the organization from the actor's claim and a mismatch
+becomes something that can be detected and refused.
 
 ## Sprint 9.2 — closed and merged
 
@@ -190,15 +229,34 @@ runs remotely. `CONTRIBUTING.md` now carries the checklist.
 
 ## Migrations
 
-Two, both in organizations-service, both applied locally and in the test
-database:
+Seven, all applied locally and in the test databases.
+
+organizations-service (Sprint 9.2):
 
 - `20260730160817_init` — `organizations` and `memberships`.
 - `20260730161500_bootstrap_organization` — inserts the bootstrap
   organization. `ON CONFLICT DO NOTHING`, so re-applying is safe.
 
-No other service's schema changed. No table anywhere gained an
-`organization_id` column; that is phase 4.
+Phase 4, one per service, each adding the column **and** backfilling in the
+same file, every `UPDATE` scoped to `WHERE organization_id IS NULL` so
+re-running is a no-op:
+
+- `tickets-service/…_add_organization_id` — `tickets`, `ticket_comments`,
+  `ticket_history`.
+- `ai-service/…_add_organization_id` — `suggestions`.
+- `analytics-service/…_add_organization_id` — `ticket_snapshots`.
+- `notification-service/…_add_organization_id` — `ticket_refs`,
+  `notifications`.
+- `audit-service/…_add_organization_id` — `audit_events`.
+
+The bootstrap organization's id is a literal in all five. It cannot be looked
+up — organizations live in another database — which is why it was created as a
+fixed, obviously synthetic uuid rather than a random one.
+
+`users`, `refresh_tokens`, `user_profiles` and `user_snapshots` have no
+organization column, each for its own reason: the first two are global
+identity (ADR 0017, and a session belongs to a person), the last two have no
+tenant source until membership events exist.
 
 ## Tests executed
 
@@ -291,7 +349,7 @@ Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect main
+git branch --show-current      # expect feat/s9-4-tenant-columns
 git log --oneline -5
 git status --short             # expect clean
 docker compose up -d
@@ -300,19 +358,22 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Phase 3 is done and merged: `main` is at `cd033ab`, pushed, and remote CI
-> is green. Five v2 contracts publish alongside their v1, carrying the
-> organization on the envelope; nothing consumes one. Continue with phase 4: add
-> `organization_id` nullable to the ten organization-owned tables and backfill
-> every existing row to the bootstrap organization, with audit_events done per
-> event type against an explicit map and misses logged rather than guessed
-> (R4). Phase 4's verification queries are part of the plan, not an
-> afterthought: row counts identical before and after, zero nulls remaining,
-> no row pointing at an organization that does not exist, and ticket →
-> comments → history agreeing on the organization. Read the Sprint 9.3 section
-> of this handoff first — particularly that a ticket event currently carries
-> the caller's organization rather than the ticket's, which phase 4 has to
-> reconcile, and that membership resolution still fails open.
+> Phases 3 and 4 are done on `feat/s9-4-tenant-columns` — unmerged and
+> unpushed, tree clean, gate and all nine integration suites green locally.
+> Five v2 contracts carry the organization on the envelope and nothing
+> consumes them; eight tables have a backfilled `organization_id` and nothing
+> reads it. Decide first whether to merge and push, since phase 4 has not run
+> in CI. Then continue with phase 5, the read paths: make the repository
+> scope a **required** argument so a missing one is a compile error, delete
+> `isStaff`/`isAdmin` rather than changing their signature — including the
+> duplicate `Actor` copies in tickets-service and users-service, which have to
+> go in the same change or they drift — and enumerate the use cases against
+> the check so `AssignTicketUseCase` is not missed, since it is the one path
+> that never calls `canView`. The phase 0 isolation tests must pass at the
+> end. Read the Sprint 9.3 section of this handoff first, particularly that
+> rows written from now until phase 6 have a null organization, that
+> `user_profiles` and `user_snapshots` have no column on purpose, and that
+> membership resolution still fails open.
 
 ## Repository isolation
 

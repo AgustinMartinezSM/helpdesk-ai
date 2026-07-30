@@ -66,6 +66,30 @@ never existed), so "rebuild from events" is never the answer:
 | `suggestions`                         | ai-service            | Not a projection — records of what a model answered. Append-only, NOT rebuildable: regenerating asks a provider again and gets a different answer (ADR 0010)                           |
 | `organizations` / `memberships`       | organizations-service | Not a projection — nothing else holds this data. NOT rebuildable; `infrastructure/postgres/operations/backfill-bootstrap-memberships.sh` reconciles it from `helpdesk_auth` (ADR 0013) |
 
+### The tenant column, and what a rebuild has to do about it
+
+Sprint 9.3 added a nullable `organization_id` to eight of the tables above —
+`tickets`, `ticket_comments`, `ticket_history`, `suggestions`,
+`ticket_snapshots`, `ticket_refs`, `notifications` and `audit_events` — and
+backfilled every existing row to the bootstrap organization. It is an opaque
+id with no foreign key, because organizations live in another database
+(ADR 0003), and
+`infrastructure/postgres/operations/verify-tenant-columns.sh` is what checks
+that every one of them still resolves.
+
+`user_profiles` and `user_snapshots` deliberately did **not** get the column.
+They are projected from `user.registered`, which carries no tenant and cannot
+— the membership that would supply one is created by consuming that very
+event — so the column would have had no source. They wait for membership
+lifecycle events.
+
+This changes what a rebuild owes. Replaying or refetching a projection
+restores its rows, but the tenant is not in the source it replays from until
+the consumers read the v2 envelope. **Until then, a rebuild must be followed
+by the backfill**, or the rebuilt rows come back untenanted — which is
+invisible today, because nothing reads the column, and stops being invisible
+in the phase that makes it required.
+
 `organizations` and `memberships` are the first data here that is neither a
 projection nor a record of something that already happened. Every other store
 above is one or the other: it has its source of truth elsewhere
