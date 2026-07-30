@@ -13,6 +13,20 @@ export const EVENT_PUBLISHER = Symbol('EVENT_PUBLISHER');
  */
 export interface EventCorrelation {
   readonly traceId?: string;
+  /**
+   * Tenant the acting caller belongs to, stamped on the v2 envelope.
+   *
+   * Optional for the same reason `traceId` is: a missing one must never stop
+   * a domain event from being published. What it does stop is the v2 copy —
+   * a v2 event without a tenant is the thing the whole migration exists to
+   * make impossible, so the adapter skips it and says so.
+   *
+   * This is the caller's organization, not the ticket's. They cannot differ
+   * today because a caller only reaches tickets they may see, but nothing
+   * enforces that here, and the two become separable when tickets get their
+   * own organization column.
+   */
+  readonly organizationId?: string;
 }
 
 export interface TicketCreatedEvent extends EventCorrelation {

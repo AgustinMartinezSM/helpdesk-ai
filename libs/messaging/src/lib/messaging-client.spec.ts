@@ -1,4 +1,8 @@
-import { ticketCreatedV1, userRegisteredV1 } from './contracts.js';
+import {
+  ticketCreatedV1,
+  ticketCreatedV2,
+  userRegisteredV1,
+} from './contracts.js';
 import {
   buildEnvelope,
   decodeDelivery,
@@ -13,6 +17,8 @@ const ticketPayload = {
   status: 'open' as const,
   createdAt: '2026-07-28T12:00:00.000Z',
 };
+
+const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
 
 const contractsByType = new Map([[ticketCreatedV1.type, ticketCreatedV1]]);
 
@@ -41,6 +47,31 @@ describe('buildEnvelope (producer-side guarantees)', () => {
         priority: 'catastrophic' as never,
       }),
     ).toThrow();
+  });
+
+  it('stamps the organization on the envelope, not the payload', () => {
+    const envelope = buildEnvelope(ticketCreatedV2, ticketPayload, {
+      correlationId: 'req-123',
+      organizationId: ORGANIZATION_ID,
+    });
+
+    expect(envelope.organizationId).toBe(ORGANIZATION_ID);
+    expect(envelope.payload).toEqual(ticketPayload);
+    expect(envelope.payload).not.toHaveProperty('organizationId');
+  });
+
+  it('omits organizationId when the producer has none', () => {
+    // Absent, not undefined — same shape as correlationId, so a consumer
+    // reads "no tenant context" rather than "a tenant that is null".
+    const envelope = buildEnvelope(ticketCreatedV2, ticketPayload);
+    expect('organizationId' in envelope).toBe(false);
+  });
+
+  it('does not enforce a tenant on v2 — the caller must', () => {
+    // buildEnvelope validates the payload and never the envelope, so an
+    // org-less v2 would reach the bus silently. This pins that the guard
+    // has to live at the publishing adapter, where the reason is known.
+    expect(() => buildEnvelope(ticketCreatedV2, ticketPayload)).not.toThrow();
   });
 });
 
@@ -99,6 +130,22 @@ describe('decodeDelivery (consumer-side guarantees)', () => {
       reason: 'payload failed validation for "ticket.created.v1"',
     });
   });
+
+  it('rejects a v2 delivery when only v1 is bound', () => {
+    // The routing keys differ, so this should never be delivered in the
+    // first place. This pins what happens if one ever is — by a hand-made
+    // binding, a shovel, or a DLQ replay: it dead-letters rather than being
+    // decoded as if it were the version the consumer understands.
+    const envelope = buildEnvelope(ticketCreatedV2, ticketPayload, {
+      organizationId: ORGANIZATION_ID,
+    });
+    const decoded = decodeDelivery(deliveryOf(envelope), contractsByType);
+
+    expect(decoded).toEqual({
+      ok: false,
+      reason: 'no contract bound for type "ticket.created.v2"',
+    });
+  });
 });
 
 describe('decodeRawDelivery (firehose consumers)', () => {
@@ -122,5 +169,23 @@ describe('decodeRawDelivery (firehose consumers)', () => {
     expect(
       decodeRawDelivery(Buffer.from(JSON.stringify({ hello: 'world' }))),
     ).toEqual({ ok: false, reason: 'envelope failed validation' });
+  });
+
+  it('preserves the organization id it does not understand the contract for', () => {
+    // This is the whole reason the tenant is on the envelope. The audit
+    // trail decodes every event through this function and has a schema for
+    // none of them; if the field were not on eventEnvelopeSchema, zod would
+    // strip it here and the tenant would never reach a database.
+    const envelope = {
+      id: '7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f',
+      type: 'some.future.event.v9',
+      occurredAt: '2026-07-28T12:00:00.000Z',
+      correlationId: 'req-123',
+      organizationId: ORGANIZATION_ID,
+      payload: { anything: 'goes' },
+    };
+
+    const decoded = decodeRawDelivery(Buffer.from(JSON.stringify(envelope)));
+    expect(decoded).toEqual({ ok: true, event: envelope });
   });
 });

@@ -52,6 +52,7 @@ export class CreateTicketUseCase {
       priority: ticket.priority,
       status: ticket.status,
       traceId,
+      organizationId: actor.organizationId,
       createdAt: now,
     });
 

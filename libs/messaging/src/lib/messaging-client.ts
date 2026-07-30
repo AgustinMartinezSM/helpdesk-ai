@@ -38,6 +38,15 @@ export interface MessagingClientOptions {
 
 export interface PublishOptions {
   correlationId?: string;
+  /**
+   * Tenant this event belongs to, stamped on the envelope.
+   *
+   * A v2 contract must always be published with one. Nothing here enforces
+   * that — `buildEnvelope` validates the payload and never the envelope — so
+   * the check belongs at the call site, where the reason for a missing tenant
+   * is still known and can be logged.
+   */
+  organizationId?: string;
 }
 
 export interface EventSubscription<
@@ -90,6 +99,9 @@ export function buildEnvelope<TType extends string, TPayload>(
     type: contract.type,
     occurredAt: new Date().toISOString(),
     ...(options?.correlationId ? { correlationId: options.correlationId } : {}),
+    ...(options?.organizationId
+      ? { organizationId: options.organizationId }
+      : {}),
     payload: parsed,
   };
 }

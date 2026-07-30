@@ -18,6 +18,7 @@ import {
   MessagingClient,
   defineEvent,
   ticketCreatedV1,
+  ticketCreatedV2,
 } from '@helpdesk-ai/messaging';
 import { SystemClock } from '../../application/ports/audit-event.repository';
 import { RecordAuditEventUseCase } from '../../application/use-cases/record-audit-event';
@@ -32,6 +33,8 @@ if (!databaseUrl || !rabbitmqUrl) {
     'DATABASE_URL and RABBITMQ_URL must be set. Run via `nx run @helpdesk-ai/audit-service:test-integration` with the compose stack up.',
   );
 }
+
+const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
 
 // A contract that exists ONLY in this spec: to the consumer under test the
 // resulting event is an unknown type — exactly what the firehose is for.
@@ -119,6 +122,51 @@ describe('audit trail (real broker, real database)', () => {
     );
     expect(recorded.type).toBe('wormhole.opened.v9');
     expect(recorded.payload).toEqual({ sector: 7 });
+  });
+
+  it('records both versions of one fact as two rows, joined by the trace id', async () => {
+    const ticketId = randomUUID();
+    const traceId = `int-${randomUUID()}`;
+    const payload = {
+      ticketId,
+      requesterId: randomUUID(),
+      title: 'Audit int test',
+      priority: 'low' as const,
+      status: 'open' as const,
+      createdAt: '2026-07-30T12:00:00.000Z',
+    };
+
+    const v1 = await publisherClient.publish(ticketCreatedV1, payload, {
+      correlationId: traceId,
+    });
+    const v2 = await publisherClient.publish(ticketCreatedV2, payload, {
+      correlationId: traceId,
+      organizationId: ORGANIZATION_ID,
+    });
+
+    await waitFor(async () => {
+      const rows = await prisma.auditEvent.findMany({
+        where: { id: { in: [v1.id, v2.id] } },
+      });
+      return rows.length === 2 ? rows : null;
+    });
+
+    // This duplication is the accepted cost of the compatibility window, not
+    // a bug. The firehose binds '#', so it receives both versions; the two
+    // envelopes have different ids, so the id-keyed dedupe that collapses a
+    // redelivery cannot collapse these. Anything counting audit rows per
+    // logical fact double-counts until v1 stops being published.
+    const [rowV1, rowV2] = await Promise.all([
+      prisma.auditEvent.findUniqueOrThrow({ where: { id: v1.id } }),
+      prisma.auditEvent.findUniqueOrThrow({ where: { id: v2.id } }),
+    ]);
+
+    expect(rowV1.type).toBe('ticket.created.v1');
+    expect(rowV2.type).toBe('ticket.created.v2');
+    expect(rowV2.payload).toEqual(rowV1.payload);
+    // The trace id is the only handle that groups them back into one fact.
+    expect(rowV1.correlationId).toBe(traceId);
+    expect(rowV2.correlationId).toBe(traceId);
   });
 
   it('collapses recording the same envelope twice into one row (real ON CONFLICT)', async () => {

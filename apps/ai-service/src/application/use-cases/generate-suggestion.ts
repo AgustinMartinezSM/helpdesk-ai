@@ -127,6 +127,7 @@ export class GenerateSuggestionUseCase {
       // Already on the way in, because the ticket read forwards it too — so
       // the suggestion event and the ticket fetch it came from share a trace.
       traceId: input.correlation?.[TRACE_ID_HEADER],
+      organizationId: actor.organizationId,
     });
 
     return suggestion;

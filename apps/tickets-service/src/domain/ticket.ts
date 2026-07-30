@@ -61,10 +61,27 @@ export interface TicketHistoryEntry {
   readonly createdAt: Date;
 }
 
-/** Identity claims of the caller, taken from the verified access token. */
+/**
+ * Identity claims of the caller, taken from the verified access token.
+ *
+ * A duplicate of the shared one in `@helpdesk-ai/security`; deleting it is
+ * the read-path phase, and it has to go in the same change as the other
+ * copies or they drift.
+ */
 export interface Actor {
   readonly id: string;
   readonly roles: string[];
+  /**
+   * Tenant the caller is acting in. Optional because the token claim is:
+   * resolution fails open, so a token minted during an organizations-service
+   * outage carries none, as does one for a user with no membership.
+   *
+   * Nothing in this domain reads it yet. It exists so an event can say which
+   * organization caused it — and note that this is the *caller's* tenant, not
+   * the *ticket's*, which is a distinction that stops mattering only when
+   * tickets carry their own column.
+   */
+  readonly organizationId?: string;
 }
 
 export function isStaff(actor: Actor): boolean {

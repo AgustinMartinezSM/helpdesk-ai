@@ -1,7 +1,15 @@
 import {
   aiSuggestionCreatedV1,
+  aiSuggestionCreatedV2,
   eventEnvelopeSchema,
+  ticketAssignedV1,
+  ticketAssignedV2,
+  ticketCommentAddedV1,
+  ticketCommentAddedV2,
   ticketCreatedV1,
+  ticketCreatedV2,
+  ticketStatusChangedV1,
+  ticketStatusChangedV2,
   userRegisteredV1,
 } from './contracts.js';
 
@@ -19,6 +27,31 @@ const validTicketPayload = {
   priority: 'high',
   status: 'open',
   createdAt: '2026-07-28T12:00:00.000Z',
+};
+
+const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
+
+const validStatusChangedPayload = {
+  ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
+  actorId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+  fromStatus: 'open',
+  toStatus: 'in_progress',
+  changedAt: '2026-07-28T12:00:00.000Z',
+};
+
+const validAssignedPayload = {
+  ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
+  actorId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+  assigneeId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+  assignedAt: '2026-07-28T12:00:00.000Z',
+};
+
+const validCommentPayload = {
+  ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
+  commentId: '7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f',
+  authorId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+  internal: false,
+  addedAt: '2026-07-28T12:00:00.000Z',
 };
 
 const validSuggestionPayload = {
@@ -124,5 +157,84 @@ describe('event envelope', () => {
         occurredAt: 'yesterday',
       }).success,
     ).toBe(false);
+  });
+
+  it('carries an organization id through, and still accepts one without', () => {
+    // The field has to exist on this schema or zod strips it, and every
+    // consumer — including the audit trail, whose only validation IS this
+    // schema — would see a tenant-free envelope with nothing to explain it.
+    const scoped = eventEnvelopeSchema.safeParse({
+      ...validEnvelope,
+      type: 'ticket.created.v2',
+      organizationId: ORGANIZATION_ID,
+    });
+    expect(scoped.success).toBe(true);
+    expect(scoped.data?.organizationId).toBe(ORGANIZATION_ID);
+
+    // v1 envelopes have none, and must keep parsing. This is what "consumers
+    // keep reading v1" means at the schema level.
+    const unscoped = eventEnvelopeSchema.safeParse(validEnvelope);
+    expect(unscoped.success).toBe(true);
+    expect(unscoped.data?.organizationId).toBeUndefined();
+  });
+
+  it('rejects an organization id that is not a uuid', () => {
+    expect(
+      eventEnvelopeSchema.safeParse({
+        ...validEnvelope,
+        organizationId: 'bootstrap',
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('v2 contracts', () => {
+  const PAIRS = [
+    [ticketCreatedV1, ticketCreatedV2, validTicketPayload],
+    [ticketStatusChangedV1, ticketStatusChangedV2, validStatusChangedPayload],
+    [ticketAssignedV1, ticketAssignedV2, validAssignedPayload],
+    [ticketCommentAddedV1, ticketCommentAddedV2, validCommentPayload],
+    [aiSuggestionCreatedV1, aiSuggestionCreatedV2, validSuggestionPayload],
+  ] as const;
+
+  it.each(PAIRS)(
+    'names %#: v2 is the v1 type with the suffix bumped',
+    (v1, v2) => {
+      expect(v2.type).toBe(v1.type.replace(/\.v1$/, '.v2'));
+      expect(v2.type).not.toBe(v1.type);
+    },
+  );
+
+  it.each(PAIRS)(
+    'payload %#: v2 accepts exactly what v1 accepts',
+    (v1, v2, payload) => {
+      // Same schema object, so this cannot drift — the assertion exists to
+      // fail loudly if someone later copies the schema instead of sharing it.
+      expect(v2.payloadSchema).toBe(v1.payloadSchema);
+      expect(v2.payloadSchema.safeParse(payload)).toEqual(
+        v1.payloadSchema.safeParse(payload),
+      );
+    },
+  );
+
+  it('does not carry the tenant in the payload', () => {
+    // The tenant rides the envelope. A payload field would be invisible to
+    // any consumer that has no schema for the contract, and would be
+    // stripped here anyway.
+    const parsed = ticketCreatedV2.payloadSchema.safeParse({
+      ...validTicketPayload,
+      organizationId: ORGANIZATION_ID,
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).not.toHaveProperty('organizationId');
+  });
+
+  it('has no user.registered.v2', async () => {
+    // Registration is anonymous and the membership that would supply a
+    // tenant is created by consuming this very event, so a v2 could only
+    // ever carry an absent tenant. Documented in messaging.md.
+    const contracts = await import('./contracts.js');
+    expect(Object.keys(contracts)).not.toContain('userRegisteredV2');
+    expect(userRegisteredV1.type).toBe('user.registered.v1');
   });
 });

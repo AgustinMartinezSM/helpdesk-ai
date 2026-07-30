@@ -11,6 +11,13 @@ export interface SuggestionCreatedEvent {
   /** Trace id of the request that produced the suggestion, so an audit row
    * can be joined back to it. Never part of the payload. */
   readonly traceId?: string;
+  /**
+   * Tenant the requesting staff member belongs to, stamped on the v2
+   * envelope. Optional because the token claim is: resolution fails open, so
+   * a token minted during an organizations-service outage carries none. Its
+   * absence skips the v2 copy rather than stopping the event.
+   */
+  readonly organizationId?: string;
   suggestionId: string;
   ticketId: string;
   task: SuggestionTask;

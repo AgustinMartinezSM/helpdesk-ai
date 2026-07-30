@@ -68,6 +68,7 @@ export class AddCommentUseCase {
       internal,
       addedAt: now,
       traceId,
+      organizationId: actor.organizationId,
     });
 
     return comment;

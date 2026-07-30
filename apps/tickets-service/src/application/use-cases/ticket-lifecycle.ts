@@ -65,6 +65,7 @@ export class ChangeTicketStatusUseCase {
       toStatus: to,
       changedAt: now,
       traceId,
+      organizationId: actor.organizationId,
     });
 
     return updated;
@@ -110,6 +111,7 @@ export class AssignTicketUseCase {
       assigneeId,
       assignedAt: now,
       traceId,
+      organizationId: actor.organizationId,
     });
 
     return updated;

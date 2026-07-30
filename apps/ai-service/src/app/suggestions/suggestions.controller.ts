@@ -49,7 +49,14 @@ interface AuthenticatedRequest {
 const BEARER_PREFIX = 'Bearer ';
 
 function actorOf(req: AuthenticatedRequest): Actor {
-  return { id: req.user.sub, roles: req.user.roles };
+  return {
+    id: req.user.sub,
+    roles: req.user.roles,
+    // Undefined whenever the token was minted without a tenant. Taken from
+    // the payload the guard already verified — the same reason the bearer
+    // header below is re-read rather than decoded again.
+    organizationId: req.user.org,
+  };
 }
 
 /**
