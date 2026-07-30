@@ -10,7 +10,6 @@ import type { SuggestionOutput } from './suggestion-outputs';
  * policy someone has to remember.
  */
 
-/** The four things a provider can be asked for in this sprint. */
 export const SUGGESTION_TASKS = [
   'summary',
   'classification',
@@ -38,8 +37,9 @@ export const SUGGESTION_CATEGORIES = [
 ] as const;
 export type SuggestionCategory = (typeof SUGGESTION_CATEGORIES)[number];
 
-/** Mirrored from the ticket contract (ADR 0005): a priority suggestion must
- * speak the vocabulary the ticket domain actually accepts. */
+/** Mirrored from `apps/tickets-service/src/domain/ticket.ts`: a priority
+ * suggestion has to speak the vocabulary the ticket domain actually accepts,
+ * or the technician is offered a value they cannot apply. */
 export const TICKET_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
@@ -92,7 +92,6 @@ export interface Suggestion {
   readonly id: string;
   readonly ticketId: string;
   readonly task: SuggestionTask;
-  /** Validated output for `task` — see suggestion-outputs.ts. */
   readonly output: SuggestionOutput;
   readonly provider: string;
   readonly model: string;
@@ -106,3 +105,17 @@ export interface Suggestion {
 export function isSuggestionTask(value: string): value is SuggestionTask {
   return (SUGGESTION_TASKS as readonly string[]).includes(value);
 }
+
+// Callers read a suggestion and the shape of its output from this one module,
+// so these re-exports are load-bearing rather than convenience — the HTTP
+// controller imports SuggestionOutput from here. Nothing but `tsc` notices if
+// they disappear: swc strips types without checking them and webpack only
+// walks the entry graph, which is how a missing one survived lint, test and
+// build until `pnpm typecheck` joined the gate.
+export type {
+  ClassificationOutput,
+  PriorityOutput,
+  ReplyOutput,
+  SuggestionOutput,
+  SummaryOutput,
+} from './suggestion-outputs';

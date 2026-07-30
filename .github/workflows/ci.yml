@@ -63,6 +63,12 @@ jobs:
 
       - run: pnpm format:check
       - run: pnpm lint
+      # The jest transform (swc) strips types without checking them, and
+      # webpack builds the entry graph only — so a broken type-only export
+      # passed lint, test AND build. Project references are checked here
+      # explicitly, and this step is the only thing in the gate that catches
+      # that class of break.
+      - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
 
