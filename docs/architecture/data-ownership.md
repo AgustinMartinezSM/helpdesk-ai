@@ -1,6 +1,6 @@
 # Data Ownership
 
-Status: model adopted in Sprint 1; `helpdesk_auth` implemented in Sprint 2, `helpdesk_tickets` in Sprint 4, `helpdesk_users` in Sprint 6, `helpdesk_audit`, `helpdesk_notifications` and `helpdesk_analytics` in Sprint 7. `helpdesk_notifications` was added to the original plan when notification-service needed to own in-app notifications and its ticket-refs projection.
+Status: model adopted in Sprint 1; `helpdesk_auth` implemented in Sprint 2, `helpdesk_tickets` in Sprint 4, `helpdesk_users` in Sprint 6, `helpdesk_audit`, `helpdesk_notifications` and `helpdesk_analytics` in Sprint 7, `helpdesk_ai` in Sprint 8. `helpdesk_notifications` was added to the original plan when notification-service needed to own in-app notifications and its ticket-refs projection.
 
 ## Model
 
@@ -39,6 +39,7 @@ Inside that single instance, one logical database per service:
 | `helpdesk_audit`         | audit-service        | Implemented (plus `helpdesk_audit_test`) — Sprint 7         |
 | `helpdesk_notifications` | notification-service | Implemented (plus `helpdesk_notifications_test`) — Sprint 7 |
 | `helpdesk_analytics`     | analytics-service    | Implemented (plus `helpdesk_analytics_test`) — Sprint 7     |
+| `helpdesk_ai`            | ai-service           | Implemented (plus `helpdesk_ai_test`) — Sprint 8            |
 
 Each logical database gets its own credentials and its own migration history, so the isolation rules above are enforceable even though everything shares one container. `infrastructure/postgres/init` provisions roles and databases on first initialization of an empty volume; today it creates the `auth_service` role (owner of `helpdesk_auth` and `helpdesk_auth_test`). Migrations for `helpdesk_auth` live in `apps/auth-service/prisma/migrations` and run only under the `auth_service` role (Prisma, per ADR 0004). The `CREATEDB` grant on service roles is local-only — `prisma migrate dev` needs it for its shadow database; production roles must not have it.
 
@@ -54,13 +55,21 @@ Every local projection must name how it gets rebuilt if lost — RabbitMQ is
 not a log (consumed events are gone; best-effort publishing means some
 never existed), so "rebuild from events" is never the answer:
 
-| Projection                            | Owner                | Rebuild path                                                                                                   |
-| ------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `user_profiles`                       | users-service        | GAP: auth-service exposes no user listing yet; an admin listing endpoint is the documented prerequisite        |
-| `ticket_refs`                         | notification-service | tickets-service `GET /tickets` with a staff token (id + requesterId suffice)                                   |
-| `ticket_snapshots` / `user_snapshots` | analytics-service    | tickets-service `GET /tickets` (status/priority/createdAt); user count needs the same auth listing as above    |
-| `notifications`                       | notification-service | NON-REBUILDABLE BY DESIGN: derived state plus per-user readAt; accepted as ephemeral UX, not records           |
-| `audit_events`                        | audit-service        | Not a projection — the trail itself. Append-only; NOT readable by other services for THEIR rebuilds (ADR 0006) |
+| Projection                            | Owner                | Rebuild path                                                                                                                                                 |
+| ------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `user_profiles`                       | users-service        | GAP: auth-service exposes no user listing yet; an admin listing endpoint is the documented prerequisite                                                      |
+| `ticket_refs`                         | notification-service | tickets-service `GET /tickets` with a staff token (id + requesterId suffice)                                                                                 |
+| `ticket_snapshots` / `user_snapshots` | analytics-service    | tickets-service `GET /tickets` (status/priority/createdAt); user count needs the same auth listing as above                                                  |
+| `notifications`                       | notification-service | NON-REBUILDABLE BY DESIGN: derived state plus per-user readAt; accepted as ephemeral UX, not records                                                         |
+| `audit_events`                        | audit-service        | Not a projection — the trail itself. Append-only; NOT readable by other services for THEIR rebuilds (ADR 0006)                                               |
+| `suggestions`                         | ai-service           | Not a projection — records of what a model answered. Append-only, NOT rebuildable: regenerating asks a provider again and gets a different answer (ADR 0010) |
+
+`ai-service` deserves a note here because it is the one service that reads
+another service's data synchronously (ADR 0011): it fetches a ticket from
+`tickets-service` over HTTP, forwarding the caller's own access token, and
+stores **no ticket text** — only its own output plus a SHA-256 hash of the
+context that produced it. So `helpdesk_ai` holds no copy of anyone else's
+data of record, and the ownership rule above still holds without exception.
 
 Retention note: `helpdesk_audit` keeps event payloads (including
 registration emails) indefinitely and the application exposes no deletion.

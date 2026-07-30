@@ -1,6 +1,10 @@
 # Service Boundaries
 
-Status date: 2026-07-27 (end of Sprint 1).
+Status date: 2026-07-27 (end of Sprint 1), except the `ai-service` entry,
+updated in Sprint 8. The status labels below are a Sprint 1 snapshot and
+most of the "Planned" services now exist — the **README status table** is
+the current, maintained answer; this document is kept for the boundary
+rules, which have not changed.
 
 This document lists every application in the target architecture, what each one is responsible for, and the rules that keep those responsibilities from leaking across boundaries. Status labels are strict: **Implemented** means the code exists in this repository today; **Planned** means it does not exist yet in any form.
 
@@ -44,9 +48,16 @@ Owns user and agent profiles, teams, and org structure (`helpdesk_users` databas
 
 Owns the core support-request domain: tickets, statuses, assignments, comments, SLA state (`helpdesk_tickets` database). Publishes ticket lifecycle events (`TicketCreated`, `TicketAssigned`, ...). It requests AI enrichment via events rather than embedding AI logic.
 
-### ai-service — Planned
+### ai-service — Implemented (Sprint 8), model provider pending
 
-Owns all LLM-backed assistance: summarization, classification, priority suggestion, suggested replies, duplicate detection. Consumes events such as `AIAnalysisRequested` and returns/publishes results; it stores no ticket data of record and never writes to another service's database. None of these AI features are implemented anywhere yet.
+Owns all model-backed assistance. Implemented: summarization, classification, priority suggestion and reply drafts, staff-only, generated on request and stored append-only in `helpdesk_ai` (port 3009). Duplicate detection is still planned — it needs embeddings and similarity search.
+
+Two boundary decisions differ from the Sprint 1 sketch above, both deliberate:
+
+- **It reads a ticket synchronously**, from `tickets-service`, forwarding the caller's own access token — the event contracts carry no ticket text, and a service credential with standing read access to every ticket was the wrong price to pay for asynchrony (ADR 0011). It stores no ticket text, only its own output plus a hash of the context.
+- **The model provider sits behind a one-method port** (`AiProvider`), with output validated against per-task zod schemas before anything is stored (ADR 0010). A deterministic local provider ships today; connecting a paid provider is an adapter plus a config value, and it is an open product-owner decision.
+
+It never writes to another service's database, and it has no path that changes a ticket: every suggestion is advice a person acts on or ignores.
 
 ### notification-service — Planned
 

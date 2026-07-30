@@ -47,9 +47,15 @@ consumers validate envelope and payload before the handler runs.
 | `ticket.status-changed.v1` | tickets-service | notification, analytics, audit       |
 | `ticket.assigned.v1`       | tickets-service | notification, audit                  |
 | `ticket.comment-added.v1`  | tickets-service | notification, audit                  |
+| `ai.suggestion.created.v1` | ai-service      | audit (firehose only)                |
 
 (audit-service does not bind individual types: its `#` firehose captures
-every event on the exchange, present and future.)
+every event on the exchange, present and future — which is why
+`ai.suggestion.created.v1` needed no consumer work in Sprint 8.)
+
+`ai-service` publishes and consumes nothing: it owns no queue. Its work is
+request-driven (ADR 0011), so the event exists to record that a suggestion
+happened, not to trigger anything.
 
 Changing a payload shape = new `v2` contract published alongside `v1` until
 every consumer migrates. `v1` is never mutated.
@@ -57,7 +63,9 @@ every consumer migrates. `v1` is never mutated.
 **Content rule**: event payloads carry identifiers and metadata — NEVER
 credentials, tokens, secrets or user-authored free text (comment bodies,
 internal notes). Everything published lands verbatim in the audit trail
-and stays there; this rule is part of reviewing any new contract.
+and stays there; this rule is part of reviewing any new contract. The rule
+extends to model output: `ai.suggestion.created.v1` names the provider,
+model and task but carries no summary, rationale or draft.
 
 **Firehose rule**: `subscribeFirehose` (envelope-only validation, opaque
 payloads) exists exclusively for schema-on-read consumers — today only

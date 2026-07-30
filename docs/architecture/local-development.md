@@ -25,6 +25,7 @@ pnpm install --frozen-lockfile
 | web-bff (NestJS)          | 3001                     | `PORT` env. CORS restricted to `http://localhost:3000`.                                                                                                   |
 | api-gateway (NestJS)      | 3002                     | CORS intentionally not enabled — server-to-server only, browsers never call it.                                                                           |
 | auth-service (NestJS)     | 3003                     | Needs `apps/auth-service/.env` (JWT secret, DATABASE_URL) and the postgres container. Swagger UI at http://localhost:3003/docs outside production.        |
+| ai-service (NestJS)       | 3009                     | Needs `apps/ai-service/.env` (same JWT secret, DATABASE_URL, TICKETS_SERVICE_URL, `AI_PROVIDER=local`) plus a running tickets-service. Swagger at /docs.  |
 | PostgreSQL 18 (container) | 5433 -> 5432 (container) | Host port 5433 because this developer machine runs a native PostgreSQL 16 on 5432 that must not be touched. Connect to the container on `localhost:5433`. |
 | Redis 8 (container)       | 6379                     | `requirepass` enabled.                                                                                                                                    |
 | RabbitMQ 4.3 (container)  | 5672                     | AMQP.                                                                                                                                                     |

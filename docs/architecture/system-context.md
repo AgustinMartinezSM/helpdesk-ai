@@ -1,6 +1,10 @@
 # System Context
 
-Status: Sprint 1. Only the platform foundation exists. No authentication, no tickets, no domain features, no AI features. This document separates what runs today from the target the platform is being built toward.
+Status: Sprint 1 snapshot, kept as the original target picture. It is now
+out of date in the direction of progress: authentication, tickets, the
+event-driven services and (since Sprint 8) `ai-service` all exist. The
+**README status table** is the current answer; the Sprint 8 note at the end
+records what changed about the AI boxes specifically.
 
 ## Actors
 
@@ -66,6 +70,19 @@ Target notes (all Planned):
 - One logical database per service in the single Postgres instance (`helpdesk_auth`, `helpdesk_users`, `helpdesk_tickets`, `helpdesk_audit`, `helpdesk_analytics`), each with its own credentials and migrations. No cross-service foreign keys, ever.
 - Event name candidates: `UserCreated`, `TicketCreated`, `TicketAssigned`, `AIAnalysisRequested`, `NotificationSent`.
 - External systems (AI provider, email delivery) will sit behind service-owned abstractions so providers can be swapped without touching domain code.
+
+### Sprint 8 update to the AI boxes
+
+- `ai-service` exists (port 3009, `helpdesk_ai`) and the "behind an
+  abstraction" intent above held: the abstraction is a one-method
+  `AiProvider` port with schema-validated output (ADR 0010). **No external
+  AI provider is connected**, so the arrow to "AI provider" is still
+  aspirational; a deterministic local provider answers today.
+- `AIAnalysisRequested` was never introduced. Suggestions are requested
+  synchronously by staff, and `ai-service` reads the ticket from
+  `tickets-service` with the caller's token, because event contracts carry
+  no ticket text (ADR 0011). The only AI event is
+  `ai.suggestion.created.v1`, published after the fact, metadata only.
 
 ## Boundaries
 

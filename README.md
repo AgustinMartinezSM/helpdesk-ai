@@ -30,6 +30,7 @@ and a complete public product experience.
 | `apps/audit-service` — immutable event trail, admin-only (port 3006)                               | Implemented         |
 | `apps/notification-service` — in-app notifications (port 3007)                                     | Implemented         |
 | `apps/analytics-service` — dashboard projections, staff-only (port 3008)                           | Implemented         |
+| `apps/ai-service` — staff-only AI suggestions, provider-agnostic (port 3009)                       | Implemented         |
 | `libs/messaging` — versioned event contracts, RabbitMQ topology, DLQs                              | Implemented         |
 | `libs/security` — JWT guard, actor model, role helpers                                             | Implemented         |
 | `libs/configuration` — zod-based fail-fast env validation                                          | Implemented         |
@@ -38,16 +39,20 @@ and a complete public product experience.
 | Public product experience (landing, how-it-works, features, security, about, engineering, contact) | Implemented         |
 | Local infrastructure: PostgreSQL 18, Redis 8, RabbitMQ 4.3 (compose)                               | Implemented         |
 | Notifications and analytics **product UI** (APIs exist, UI pending)                                | Planned             |
-| AI service (summarization, classification, priority, replies, duplicates)                          | Planned             |
+| AI summaries, classification, priority and reply drafts (staff panel on a ticket)                  | In development      |
+| Model provider (abstraction done, provider choice open — ADR 0010)                                 | Pending decision    |
+| AI duplicate detection (needs embeddings and similarity search)                                    | Planned             |
 | Self-service signup, assignee picker, attachments                                                  | Planned             |
 | Transactional outbox for event publishing                                                          | Deferred (ADR 0006) |
 | Distributed tracing, gateway rate limiting                                                         | Deferred            |
-| CI on GitHub Actions: gate + 7 integration suites, green on first remote run                       | Implemented         |
+| CI on GitHub Actions: gate + 8 integration suites, green on first remote run                       | Implemented         |
 
-Architecture: `web → web-bff → api-gateway → {auth, tickets, users}`
+Architecture: `web → web-bff → api-gateway → {auth, tickets, users, ai}`
 over HTTP for commands, with domain events on RabbitMQ consumed by
 `{audit, notification, analytics}`. Each service owns its own PostgreSQL
-database.
+database. One exception is documented rather than hidden: `ai-service`
+reads a ticket from `tickets-service` over HTTP, forwarding the caller's
+own token, because the event contracts carry no ticket text (ADR 0011).
 
 ## Prerequisites
 
@@ -113,7 +118,8 @@ helpdesk-ai/
 │   ├── users-service/         # owns helpdesk_users (3005)
 │   ├── audit-service/         # owns helpdesk_audit (3006)
 │   ├── notification-service/  # owns helpdesk_notifications (3007)
-│   └── analytics-service/     # owns helpdesk_analytics (3008)
+│   ├── analytics-service/     # owns helpdesk_analytics (3008)
+│   └── ai-service/            # owns helpdesk_ai (3009)
 ├── libs/
 │   ├── messaging/             # event contracts, RabbitMQ topology, DLQs
 │   ├── security/              # JWT guard, actor, role helpers

@@ -37,7 +37,8 @@ Do not test vulnerabilities against anything other than a local development envi
 - **Log hygiene** (`libs/observability`): minimal serializers keep headers and bodies out of logs; redact list (`authorization`, `cookie`, `set-cookie`) as safety net. Structured JSON only.
 - **Fail-fast configuration validation** (`libs/configuration`): invalid configuration exits the process before the framework wires anything, reporting every offending variable.
 - **Authorization enforcement**: the roles claim is consumed by guards inside each service, not only by `/auth/me`. Ticket assignment is staff-only, analytics summaries are staff-only, the audit trail is admin-only, and requesters may close only their own resolved tickets. `libs/security` holds the shared actor model and role helpers.
-- **Database ownership**: every service connects to its own database with its own role (`helpdesk_auth`, `helpdesk_tickets`, `helpdesk_users`, `helpdesk_audit`, `helpdesk_notifications`, `helpdesk_analytics`); admin credentials are separate. No cross-service database access exists (ADR 0003).
+- **Database ownership**: every service connects to its own database with its own role (`helpdesk_auth`, `helpdesk_tickets`, `helpdesk_users`, `helpdesk_audit`, `helpdesk_notifications`, `helpdesk_analytics`, `helpdesk_ai`); admin credentials are separate. No cross-service database access exists (ADR 0003).
+- **AI data flow** (`ai-service`, ADR 0010 / ADR 0011): the service holds **no credential of its own** for the ticket store — it forwards the caller's access token, so it can never read a ticket the caller could not. Its endpoints are staff-only. **Internal notes are removed** before any context leaves the process, and the context is truncated to fixed limits. **No ticket text is persisted**: a stored suggestion keeps the model's output plus a SHA-256 hash of the context. Provider output is validated against a per-task schema before it is stored, so a remote model cannot decide what shape this platform's data takes. The published event carries metadata only, never content. With the local provider selected, no data leaves the machine at all.
 - **Dependency build-script allow-list**: pnpm 11 blocks lifecycle scripts by default; only an explicit allow-list may build (`@parcel/watcher`, `@prisma/client`, `@prisma/engines`, `@swc/core`, `argon2`, `nx`, `prisma`, `sharp`, `unrs-resolver`). The `@scarf/scarf` install telemetry is deliberately blocked.
 
 ## Planned Security Roadmap
@@ -48,7 +49,8 @@ None of the following is implemented. Do not assume any of it exists when assess
 - **Session management** (list/revoke own sessions).
 - **Upload validation** (file type, size, content checks) when file handling is introduced.
 - **Dependency audit in CI** (e.g. `pnpm audit`) — now that the workflow runs on a remote, this is an open task rather than a blocked one.
-- **Rate limiting** on the gateway and BFF, which throttle nothing today; only auth-service's credential endpoints are throttled.
+- **Rate limiting** on the gateway and BFF, which throttle nothing today; only auth-service's credential endpoints are throttled. This matters more now that `ai-service` exists: with a paid provider connected, an unthrottled staff account is a spending path as well as a load path.
+- **Provider credential handling** for a paid model provider: no key exists yet, so nothing about rotation, scoping or per-request budgets has been designed. It must be part of connecting one (ADR 0010).
 
 ## Scope Notes
 
