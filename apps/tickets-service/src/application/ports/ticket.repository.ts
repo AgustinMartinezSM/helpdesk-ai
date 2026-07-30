@@ -46,5 +46,14 @@ export interface TicketRepository {
     ticketId: string,
     includeInternal: boolean,
   ): Promise<TicketComment[]>;
-  historyFor(ticketId: string): Promise<TicketHistoryEntry[]>;
+  /**
+   * `includeInternal` mirrors `commentsFor` and is required for the same
+   * reason: an internal note writes a history entry of its own, so hiding
+   * the note body while returning the entry still tells a requester that
+   * staff wrote something private about their ticket, who wrote it and when.
+   */
+  historyFor(
+    ticketId: string,
+    includeInternal: boolean,
+  ): Promise<TicketHistoryEntry[]>;
 }

@@ -31,7 +31,7 @@ export class GetTicketUseCase {
     const staff = isStaff(actor);
     const [comments, history] = await Promise.all([
       this.tickets.commentsFor(ticketId, staff),
-      this.tickets.historyFor(ticketId),
+      this.tickets.historyFor(ticketId, staff),
     ]);
 
     return { ticket, comments, history };

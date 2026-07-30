@@ -46,7 +46,7 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
       assigneeId: null,
     });
 
-    const history = await repository.historyFor(ticket.id);
+    const history = await repository.historyFor(ticket.id, true);
     expect(history.map((h) => h.action)).toEqual(['created']);
   });
 
@@ -154,7 +154,7 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
     const found = await repository.findById(ticket.id);
     expect(found?.status).toBe('in_progress');
     expect(found?.assigneeId).not.toBeNull();
-    expect(await repository.historyFor(ticket.id)).toHaveLength(2);
+    expect(await repository.historyFor(ticket.id, true)).toHaveLength(2);
   });
 
   it('separates internal and public comments by identity, not by count', async () => {
@@ -177,5 +177,32 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
 
     const staffView = await repository.commentsFor(ticket.id, true);
     expect(idsOf(staffView)).toEqual(idsOf([publicReply, internalNote]));
+  });
+
+  it('hides the internal note from history without hiding the public one', async () => {
+    // Asserted by identity for the same reason as the comments above: the
+    // NOT clause has to exclude exactly the (comment_added, internal) pair.
+    // Getting it wrong drops every comment_added entry, or none, and a count
+    // of "one fewer than staff sees" cannot tell those two apart.
+    const ticket = aTicket();
+    await repository.create(ticket, aHistoryEntry(ticket));
+    await repository.addComment(
+      aComment(ticket, { body: 'public' }),
+      aHistoryEntry(ticket, { action: 'comment_added', detail: 'public' }),
+    );
+    await repository.addComment(
+      aComment(ticket, { body: 'internal', internal: true }),
+      aHistoryEntry(ticket, { action: 'comment_added', detail: 'internal' }),
+    );
+
+    const requesterView = await repository.historyFor(ticket.id, false);
+    expect(requesterView.map((h) => [h.action, h.detail])).toEqual([
+      ['created', null],
+      ['comment_added', 'public'],
+    ]);
+
+    const staffView = await repository.historyFor(ticket.id, true);
+    expect(staffView.map((h) => h.detail)).toContain('internal');
+    expect(staffView).toHaveLength(3);
   });
 });

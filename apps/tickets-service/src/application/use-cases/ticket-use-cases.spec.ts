@@ -160,12 +160,51 @@ describe('GetTicketUseCase', () => {
     const forRequester = await ctx.get.execute(REQUESTER, ticket.id);
     expect(forRequester.comments.map((c) => c.body)).toEqual(['public reply']);
 
+    // Hiding the body is not enough. The internal note also wrote a history
+    // entry, and returning it would tell the requester that staff wrote
+    // something private about their ticket, who wrote it and when.
+    expect(forRequester.history.map((h) => h.action)).toEqual([
+      'created',
+      'comment_added',
+    ]);
+    expect(forRequester.history.some((h) => h.detail === 'internal')).toBe(
+      false,
+    );
+
     const forAgent = await ctx.get.execute(AGENT, ticket.id);
     expect(forAgent.comments).toHaveLength(2);
     expect(forAgent.history.map((h) => h.action)).toEqual([
       'created',
       'comment_added',
       'comment_added',
+    ]);
+    // Staff still see the whole trail, including that the note happened.
+    expect(
+      forAgent.history.filter((h) => h.detail === 'internal'),
+    ).toHaveLength(1);
+  });
+
+  it('keeps every non-comment history entry visible to the requester', async () => {
+    // The filter must be narrow: a requester still needs to see that their
+    // ticket was created, assigned and moved. Only the internal-note entry
+    // disappears.
+    const ctx = buildContext();
+    const ticket = await ctx.create.execute(REQUESTER, {
+      title: 'T',
+      description: 'D',
+    });
+    await ctx.assign.execute(AGENT, ticket.id, AGENT.id);
+    await ctx.changeStatus.execute(AGENT, ticket.id, 'in_progress');
+    await ctx.comment.execute(AGENT, ticket.id, {
+      body: 'internal note',
+      internal: true,
+    });
+
+    const forRequester = await ctx.get.execute(REQUESTER, ticket.id);
+    expect(forRequester.history.map((h) => h.action)).toEqual([
+      'created',
+      'assigned',
+      'status_changed',
     ]);
   });
 });

@@ -69,8 +69,16 @@ export class InMemoryTicketRepository implements TicketRepository {
     );
   }
 
-  async historyFor(ticketId: string): Promise<TicketHistoryEntry[]> {
-    return this.history.filter((h) => h.ticketId === ticketId);
+  async historyFor(
+    ticketId: string,
+    includeInternal: boolean,
+  ): Promise<TicketHistoryEntry[]> {
+    return this.history.filter(
+      (h) =>
+        h.ticketId === ticketId &&
+        (includeInternal ||
+          !(h.action === 'comment_added' && h.detail === 'internal')),
+    );
   }
 }
 

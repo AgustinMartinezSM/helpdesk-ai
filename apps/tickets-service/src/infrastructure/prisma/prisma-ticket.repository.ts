@@ -104,9 +104,22 @@ export class PrismaTicketRepository implements TicketRepository {
     });
   }
 
-  async historyFor(ticketId: string): Promise<TicketHistoryEntry[]> {
+  async historyFor(
+    ticketId: string,
+    includeInternal: boolean,
+  ): Promise<TicketHistoryEntry[]> {
     const rows = await this.prisma.ticketHistoryEntry.findMany({
-      where: { ticketId },
+      where: {
+        ticketId,
+        // An internal note leaves a `comment_added` entry whose detail says
+        // `internal`. Returning it to a requester discloses that a private
+        // note exists, its author and its timestamp — everything except the
+        // words. Excluded rather than redacted: a redacted row still says
+        // something happened.
+        ...(includeInternal
+          ? {}
+          : { NOT: { action: 'comment_added', detail: 'internal' } }),
+      },
       orderBy: { createdAt: 'asc' },
     });
     return rows.map((row) => ({
