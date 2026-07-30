@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { Logger } from '@helpdesk-ai/observability';
+import { Logger, TRACE_ID_HEADER } from '@helpdesk-ai/observability';
 import {
   InvalidCredentialsError,
   RefreshTokenReuseError,
@@ -34,6 +34,20 @@ import { RegisterDto } from './dto/register.dto';
 const CREDENTIAL_LIMIT = { default: { limit: 5, ttl: 60_000 } };
 const REFRESH_LIMIT = { default: { limit: 20, ttl: 60_000 } };
 
+interface CorrelatedRequest {
+  headers: Record<string, string | string[] | undefined>;
+}
+
+/**
+ * The trace id of the request about to cause a domain event.
+ * `correlationMiddleware` guarantees the header on every inbound request, so
+ * the undefined branch only covers a caller that bypassed it.
+ */
+function traceIdOf(req: CorrelatedRequest): string | undefined {
+  const value = req.headers[TRACE_ID_HEADER];
+  return Array.isArray(value) ? value[0] : value;
+}
+
 @ApiTags('auth')
 @Controller('auth')
 @UseFilters(AuthDomainErrorFilter)
@@ -50,8 +64,11 @@ export class AuthController {
   @Post('register')
   @Throttle(CREDENTIAL_LIMIT)
   @ApiOperation({ summary: 'Create an account' })
-  async register(@Body() dto: RegisterDto): Promise<RegisterUserOutput> {
-    const result = await this.registerUser.execute(dto);
+  async register(
+    @Req() req: CorrelatedRequest,
+    @Body() dto: RegisterDto,
+  ): Promise<RegisterUserOutput> {
+    const result = await this.registerUser.execute(dto, traceIdOf(req));
     this.logger.log({ event: 'auth.user_registered', userId: result.id });
     return result;
   }

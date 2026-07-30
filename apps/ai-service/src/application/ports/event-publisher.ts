@@ -8,6 +8,9 @@ export const EVENT_PUBLISHER = Symbol('EVENT_PUBLISHER');
  * service's API with a token that authorizes it, exactly like the UI does.
  */
 export interface SuggestionCreatedEvent {
+  /** Trace id of the request that produced the suggestion, so an audit row
+   * can be joined back to it. Never part of the payload. */
+  readonly traceId?: string;
   suggestionId: string;
   ticketId: string;
   task: SuggestionTask;

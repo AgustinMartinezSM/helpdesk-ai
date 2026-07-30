@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { TRACE_ID_HEADER } from '@helpdesk-ai/observability';
 import type { Actor } from '../../domain/ticket';
 import { AddCommentUseCase } from '../../application/use-cases/add-comment';
 import { CreateTicketUseCase } from '../../application/use-cases/create-ticket';
@@ -35,10 +36,21 @@ import { TicketDomainErrorFilter } from './ticket-domain-error.filter';
 
 interface AuthenticatedRequest {
   user: AccessTokenPayload;
+  headers: Record<string, string | string[] | undefined>;
 }
 
 function actorOf(req: AuthenticatedRequest): Actor {
   return { id: req.user.sub, roles: req.user.roles };
+}
+
+/**
+ * The trace id of the request that is about to cause a domain event.
+ * `correlationMiddleware` guarantees the header exists on every inbound
+ * request, so the undefined branch only covers a caller that bypassed it.
+ */
+function traceIdOf(req: AuthenticatedRequest): string | undefined {
+  const value = req.headers[TRACE_ID_HEADER];
+  return Array.isArray(value) ? value[0] : value;
 }
 
 @ApiTags('tickets')
@@ -59,7 +71,7 @@ export class TicketsController {
   @Post()
   @ApiOperation({ summary: 'Open a ticket as the authenticated user' })
   create(@Req() req: AuthenticatedRequest, @Body() dto: CreateTicketDto) {
-    return this.createTicket.execute(actorOf(req), dto);
+    return this.createTicket.execute(actorOf(req), dto, traceIdOf(req));
   }
 
   @Get()
@@ -86,7 +98,12 @@ export class TicketsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeStatusDto,
   ) {
-    return this.changeStatus.execute(actorOf(req), id, dto.status);
+    return this.changeStatus.execute(
+      actorOf(req),
+      id,
+      dto.status,
+      traceIdOf(req),
+    );
   }
 
   @Patch(':id/assignee')
@@ -96,7 +113,12 @@ export class TicketsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AssignTicketDto,
   ) {
-    return this.assignTicket.execute(actorOf(req), id, dto.assigneeId);
+    return this.assignTicket.execute(
+      actorOf(req),
+      id,
+      dto.assigneeId,
+      traceIdOf(req),
+    );
   }
 
   @Post(':id/comments')
@@ -106,6 +128,6 @@ export class TicketsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddCommentDto,
   ) {
-    return this.addComment.execute(actorOf(req), id, dto);
+    return this.addComment.execute(actorOf(req), id, dto, traceIdOf(req));
   }
 }

@@ -24,12 +24,16 @@ export class RabbitMqEventPublisher implements EventPublisher {
 
   async publishUserRegistered(event: UserRegisteredEvent): Promise<void> {
     try {
-      await this.messaging.publish(userRegisteredV1, {
-        userId: event.userId,
-        email: event.email,
-        roles: event.roles,
-        registeredAt: event.registeredAt.toISOString(),
-      });
+      await this.messaging.publish(
+        userRegisteredV1,
+        {
+          userId: event.userId,
+          email: event.email,
+          roles: event.roles,
+          registeredAt: event.registeredAt.toISOString(),
+        },
+        event.traceId ? { correlationId: event.traceId } : undefined,
+      );
     } catch (error) {
       this.logger?.error(
         `failed to publish ${userRegisteredV1.type} for user ${event.userId}: ${

@@ -30,47 +30,63 @@ export class RabbitMqEventPublisher implements EventPublisher {
   ) {}
 
   async publishTicketCreated(event: TicketCreatedEvent): Promise<void> {
-    await this.safePublish(ticketCreatedV1, {
-      ticketId: event.ticketId,
-      requesterId: event.requesterId,
-      title: event.title,
-      priority: event.priority,
-      status: event.status,
-      createdAt: event.createdAt.toISOString(),
-    });
+    await this.safePublish(
+      ticketCreatedV1,
+      {
+        ticketId: event.ticketId,
+        requesterId: event.requesterId,
+        title: event.title,
+        priority: event.priority,
+        status: event.status,
+        createdAt: event.createdAt.toISOString(),
+      },
+      event.traceId,
+    );
   }
 
   async publishTicketStatusChanged(
     event: TicketStatusChangedEvent,
   ): Promise<void> {
-    await this.safePublish(ticketStatusChangedV1, {
-      ticketId: event.ticketId,
-      actorId: event.actorId,
-      fromStatus: event.fromStatus,
-      toStatus: event.toStatus,
-      changedAt: event.changedAt.toISOString(),
-    });
+    await this.safePublish(
+      ticketStatusChangedV1,
+      {
+        ticketId: event.ticketId,
+        actorId: event.actorId,
+        fromStatus: event.fromStatus,
+        toStatus: event.toStatus,
+        changedAt: event.changedAt.toISOString(),
+      },
+      event.traceId,
+    );
   }
 
   async publishTicketAssigned(event: TicketAssignedEvent): Promise<void> {
-    await this.safePublish(ticketAssignedV1, {
-      ticketId: event.ticketId,
-      actorId: event.actorId,
-      assigneeId: event.assigneeId,
-      assignedAt: event.assignedAt.toISOString(),
-    });
+    await this.safePublish(
+      ticketAssignedV1,
+      {
+        ticketId: event.ticketId,
+        actorId: event.actorId,
+        assigneeId: event.assigneeId,
+        assignedAt: event.assignedAt.toISOString(),
+      },
+      event.traceId,
+    );
   }
 
   async publishTicketCommentAdded(
     event: TicketCommentAddedEvent,
   ): Promise<void> {
-    await this.safePublish(ticketCommentAddedV1, {
-      ticketId: event.ticketId,
-      commentId: event.commentId,
-      authorId: event.authorId,
-      internal: event.internal,
-      addedAt: event.addedAt.toISOString(),
-    });
+    await this.safePublish(
+      ticketCommentAddedV1,
+      {
+        ticketId: event.ticketId,
+        commentId: event.commentId,
+        authorId: event.authorId,
+        internal: event.internal,
+        addedAt: event.addedAt.toISOString(),
+      },
+      event.traceId,
+    );
   }
 
   async onApplicationShutdown(): Promise<void> {
@@ -80,9 +96,17 @@ export class RabbitMqEventPublisher implements EventPublisher {
   private async safePublish<TType extends string, TPayload>(
     contract: EventContract<TType, TPayload>,
     payload: TPayload,
+    traceId?: string,
   ): Promise<void> {
     try {
-      await this.messaging.publish(contract, payload);
+      // The trace id rides on the envelope, not in the payload: it says which
+      // request caused the event, which is what lets an audit row be joined
+      // back to it. Omitted rather than faked when the caller had none.
+      await this.messaging.publish(
+        contract,
+        payload,
+        traceId ? { correlationId: traceId } : undefined,
+      );
     } catch (error) {
       this.logger?.error(
         `failed to publish ${contract.type}: ${

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isStaff, type Actor } from '@helpdesk-ai/security';
+import { TRACE_ID_HEADER } from '@helpdesk-ai/observability';
 import {
   AiDomainError,
   ForbiddenAiActionError,
@@ -123,6 +124,9 @@ export class GenerateSuggestionUseCase {
       model: suggestion.model,
       requestedBy: suggestion.requestedBy,
       createdAt: suggestion.createdAt,
+      // Already on the way in, because the ticket read forwards it too — so
+      // the suggestion event and the ticket fetch it came from share a trace.
+      traceId: input.correlation?.[TRACE_ID_HEADER],
     });
 
     return suggestion;

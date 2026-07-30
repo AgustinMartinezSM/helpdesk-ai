@@ -25,7 +25,10 @@ export class RegisterUserUseCase {
     private readonly events: EventPublisher,
   ) {}
 
-  async execute(input: RegisterUserInput): Promise<RegisterUserOutput> {
+  async execute(
+    input: RegisterUserInput,
+    traceId?: string,
+  ): Promise<RegisterUserOutput> {
     const email = normalizeEmail(input.email);
 
     // Fast path; the repository still enforces uniqueness transactionally,
@@ -51,6 +54,7 @@ export class RegisterUserUseCase {
       email: user.email,
       roles: [...user.roles],
       registeredAt: now,
+      traceId,
     });
 
     return { id: user.id, email: user.email, roles: [...user.roles] };

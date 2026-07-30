@@ -1,6 +1,12 @@
 export const EVENT_PUBLISHER = Symbol('EVENT_PUBLISHER');
 
+/**
+ * Request correlation carried alongside the event, never inside its
+ * payload: it says which request caused the event, which is what lets an
+ * audit row be joined back to it.
+ */
 export interface UserRegisteredEvent {
+  readonly traceId?: string;
   userId: string;
   email: string;
   roles: string[];

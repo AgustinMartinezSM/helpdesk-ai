@@ -28,6 +28,7 @@ export class AddCommentUseCase {
     actor: Actor,
     ticketId: string,
     input: AddCommentInput,
+    traceId?: string,
   ): Promise<TicketComment> {
     const ticket = await this.tickets.findById(ticketId);
     if (!ticket || !canView(actor, ticket)) {
@@ -66,6 +67,7 @@ export class AddCommentUseCase {
       authorId: actor.id,
       internal,
       addedAt: now,
+      traceId,
     });
 
     return comment;

@@ -17,7 +17,11 @@ export class CreateTicketUseCase {
     private readonly events: EventPublisher,
   ) {}
 
-  async execute(actor: Actor, input: CreateTicketInput): Promise<Ticket> {
+  async execute(
+    actor: Actor,
+    input: CreateTicketInput,
+    traceId?: string,
+  ): Promise<Ticket> {
     const now = this.clock.now();
     const ticket: Ticket = {
       id: randomUUID(),
@@ -47,6 +51,7 @@ export class CreateTicketUseCase {
       title: ticket.title,
       priority: ticket.priority,
       status: ticket.status,
+      traceId,
       createdAt: now,
     });
 

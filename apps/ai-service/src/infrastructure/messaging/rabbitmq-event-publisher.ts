@@ -27,15 +27,19 @@ export class RabbitMqEventPublisher implements EventPublisher {
 
   async publishSuggestionCreated(event: SuggestionCreatedEvent): Promise<void> {
     try {
-      await this.messaging.publish(aiSuggestionCreatedV1, {
-        suggestionId: event.suggestionId,
-        ticketId: event.ticketId,
-        task: event.task,
-        provider: event.provider,
-        model: event.model,
-        requestedBy: event.requestedBy,
-        createdAt: event.createdAt.toISOString(),
-      });
+      await this.messaging.publish(
+        aiSuggestionCreatedV1,
+        {
+          suggestionId: event.suggestionId,
+          ticketId: event.ticketId,
+          task: event.task,
+          provider: event.provider,
+          model: event.model,
+          requestedBy: event.requestedBy,
+          createdAt: event.createdAt.toISOString(),
+        },
+        event.traceId ? { correlationId: event.traceId } : undefined,
+      );
     } catch (error) {
       this.logger?.error(
         `failed to publish ${aiSuggestionCreatedV1.type}: ${

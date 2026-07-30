@@ -26,6 +26,7 @@ export class ChangeTicketStatusUseCase {
     actor: Actor,
     ticketId: string,
     to: TicketStatus,
+    traceId?: string,
   ): Promise<Ticket> {
     const ticket = await this.tickets.findById(ticketId);
     if (!ticket || !canView(actor, ticket)) {
@@ -63,6 +64,7 @@ export class ChangeTicketStatusUseCase {
       fromStatus: ticket.status,
       toStatus: to,
       changedAt: now,
+      traceId,
     });
 
     return updated;
@@ -80,6 +82,7 @@ export class AssignTicketUseCase {
     actor: Actor,
     ticketId: string,
     assigneeId: string | null,
+    traceId?: string,
   ): Promise<Ticket> {
     if (!isStaff(actor)) {
       throw new ForbiddenTicketActionError();
@@ -106,6 +109,7 @@ export class AssignTicketUseCase {
       actorId: actor.id,
       assigneeId,
       assignedAt: now,
+      traceId,
     });
 
     return updated;

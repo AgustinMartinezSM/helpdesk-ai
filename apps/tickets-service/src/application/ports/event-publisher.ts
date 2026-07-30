@@ -2,7 +2,20 @@ import type { TicketPriority, TicketStatus } from '../../domain/ticket';
 
 export const EVENT_PUBLISHER = Symbol('EVENT_PUBLISHER');
 
-export interface TicketCreatedEvent {
+/**
+ * Request correlation carried alongside an event, never inside its payload.
+ *
+ * Without it an audit row cannot be joined back to the request that caused
+ * it: the trail records the envelope, and until now every envelope reached
+ * the broker with a null correlationId. This is the id that closes that gap,
+ * so it is deliberately optional — a missing trace must never stop a domain
+ * event from being published.
+ */
+export interface EventCorrelation {
+  readonly traceId?: string;
+}
+
+export interface TicketCreatedEvent extends EventCorrelation {
   ticketId: string;
   requesterId: string;
   title: string;
@@ -11,7 +24,7 @@ export interface TicketCreatedEvent {
   createdAt: Date;
 }
 
-export interface TicketStatusChangedEvent {
+export interface TicketStatusChangedEvent extends EventCorrelation {
   ticketId: string;
   actorId: string;
   fromStatus: TicketStatus;
@@ -19,7 +32,7 @@ export interface TicketStatusChangedEvent {
   changedAt: Date;
 }
 
-export interface TicketAssignedEvent {
+export interface TicketAssignedEvent extends EventCorrelation {
   ticketId: string;
   actorId: string;
   /** Null means the ticket was unassigned. */
@@ -27,7 +40,7 @@ export interface TicketAssignedEvent {
   assignedAt: Date;
 }
 
-export interface TicketCommentAddedEvent {
+export interface TicketCommentAddedEvent extends EventCorrelation {
   ticketId: string;
   commentId: string;
   authorId: string;
