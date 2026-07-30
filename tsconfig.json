@@ -41,6 +41,9 @@
     },
     {
       "path": "./apps/analytics-service"
+    },
+    {
+      "path": "./apps/ai-service"
     }
   ],
   "compilerOptions": {}

@@ -1,0 +1,63 @@
+// Persistence model for ai-service (docs/architecture/data-ownership.md).
+//
+// The table is APPEND-ONLY: a suggestion records what a provider answered
+// at one moment, for one ticket, at the request of one person. Rewriting
+// it would erase the only evidence of what the model actually said, so the
+// repository exposes no update or delete path — regenerating appends a new
+// row and the newest row per (ticket, task) is the current suggestion.
+//
+// No ticket text is stored (ADR 0011): `contextHash` is a SHA-256 of the
+// exact context sent to the provider, which is enough to tell two
+// suggestions apart and to debug a bad answer, without copying another
+// service's data of record into this database.
+//
+// `output` is Json because each task has its own shape; it is validated
+// against that task's zod schema before it is written (ADR 0010), so the
+// column never holds something the domain cannot parse back.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Suggestion {
+  id String @id @db.Uuid
+
+  /// Ticket the suggestion is about. A plain identifier, never a foreign
+  /// key: tickets live in another service's database.
+  ticketId String @map("ticket_id") @db.Uuid
+
+  /// 'summary' | 'classification' | 'priority' | 'reply'.
+  task String
+
+  /// Validated provider output for this task.
+  output Json
+
+  /// Provider id ('local', ...) and its model id, stored so a suggestion
+  /// can always be attributed to what produced it.
+  provider String
+  model    String
+
+  /// SHA-256 of the context the provider saw.
+  contextHash String @map("context_hash")
+
+  /// Token usage as reported by the provider; null when it reports none.
+  inputTokens  Int? @map("input_tokens")
+  outputTokens Int? @map("output_tokens")
+
+  /// Wall-clock duration of the provider call, for cost and latency work.
+  latencyMs Int @map("latency_ms")
+
+  /// Staff user who asked for it (auth-service identifier).
+  requestedBy String @map("requested_by") @db.Uuid
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@index([ticketId, task, createdAt])
+  @@map("suggestions")
+}
