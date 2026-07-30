@@ -94,35 +94,40 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
     key: 'ai-assistance',
     title: 'AI assistance',
     description:
-      'AI as an assistant, never an authority: suggestions are reviewed by people, and every final action stays human.',
+      'AI as an assistant, never an authority: suggestions are reviewed by people, and every final action stays human. The service is live behind the gateway with a deterministic local provider; the model provider is a deliberate, still-open decision.',
     capabilities: [
       {
         name: 'Summarization',
         description:
           'Condense long ticket threads into a short, factual summary.',
-        status: 'planned',
+        status: 'in-development',
+        note: 'Runs today through a deterministic local provider — no language model is connected yet.',
       },
       {
         name: 'Classification',
         description: 'Suggest a category the moment a ticket arrives.',
-        status: 'planned',
+        status: 'in-development',
+        note: 'Suggests from a fixed category list. Applying it to the ticket is still manual, and no language model is connected yet.',
       },
       {
         name: 'Priority suggestion',
         description:
           'Estimate urgency from the request so triage starts pre-sorted.',
-        status: 'planned',
+        status: 'in-development',
+        note: 'Suggests a priority for a technician to accept or ignore; it never changes the ticket. No language model is connected yet.',
       },
       {
         name: 'Suggested replies',
         description:
           'Draft a first response for the technician to review, edit and send.',
-        status: 'planned',
+        status: 'in-development',
+        note: 'The draft is shown to staff only, and it is sent by a person or not at all. No language model is connected yet.',
       },
       {
         name: 'Duplicate detection',
         description: 'Surface similar open tickets before work is done twice.',
         status: 'planned',
+        note: 'Needs text embeddings and similarity search, which the platform does not have yet.',
       },
     ],
   },
@@ -281,16 +286,19 @@ export const PROJECT_STATUS: ProjectStatusGroup[] = [
       'Event-driven platform: audit, notifications and analytics services',
       'API gateway and web BFF with an httpOnly session cookie',
       'Design system, dark mode and accessible product UI',
+      'Public product experience — this site',
     ],
   },
   {
     title: 'In development',
-    items: ['Public product experience — this site (Sprint 7.6)'],
+    items: [
+      'AI service: summaries, classification, priorities and reply drafts (Sprint 8) — running on a local deterministic provider while the model provider is chosen',
+    ],
   },
   {
     title: 'Planned',
     items: [
-      'AI service: summaries, classification, priorities and suggested replies',
+      'Duplicate detection, which needs embeddings and similarity search',
       'Notifications and analytics product UI',
       'Self-service signup and assignee picker',
       'Transactional outbox for event publishing',

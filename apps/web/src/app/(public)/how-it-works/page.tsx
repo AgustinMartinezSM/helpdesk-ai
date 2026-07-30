@@ -237,7 +237,7 @@ export default function HowItWorksPage() {
                 <SparklesIcon size={14} />
                 What AI would suggest
               </p>
-              <StatusPill status="planned" />
+              <StatusPill status="in-development" />
             </div>
             <dl className={styles.aiRows}>
               {AI_SUGGESTIONS.map((row) => (
@@ -255,10 +255,12 @@ export default function HowItWorksPage() {
           responsible for the final decision.
         </p>
         <p className={styles.aiStatusNote}>
-          None of this is built yet. Summaries, classification, priority
-          suggestions, suggested replies and duplicate detection are all marked{' '}
-          <StatusPill status="planned" /> — the event stream they will read from
-          is what already runs.
+          Summaries, classification, priority suggestions and reply drafts are{' '}
+          <StatusPill status="in-development" />: the service that produces them
+          runs behind the gateway, and staff see them as a panel on the ticket.
+          What is not connected yet is a language model — today a deterministic
+          local provider answers, and the panel says so wherever its output
+          appears. Duplicate detection is still <StatusPill status="planned" />.
         </p>
       </Section>
 

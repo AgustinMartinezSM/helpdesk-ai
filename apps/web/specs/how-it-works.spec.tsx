@@ -114,7 +114,7 @@ describe('How it works — plain language first', () => {
 });
 
 describe('How it works — AI section stays honest', () => {
-  it('marks the AI suggestions as Planned, never as working behavior', () => {
+  it('qualifies the AI suggestions and says what is still missing', () => {
     render(<HowItWorksPage />);
 
     const aiSection = screen
@@ -126,8 +126,14 @@ describe('How it works — AI section stays honest', () => {
     expect(aiSection).not.toBeNull();
     const scoped = within(aiSection as HTMLElement);
 
+    // The four implemented tasks are in development, duplicate detection is
+    // not started, and the missing piece is named rather than glossed over.
+    expect(scoped.getAllByText('In development').length).toBeGreaterThan(0);
     expect(scoped.getAllByText('Planned').length).toBeGreaterThan(0);
-    expect(scoped.getByText(/None of this is built yet/i)).toBeTruthy();
+    expect(
+      scoped.getByText(/not connected yet is a language model/i),
+    ).toBeTruthy();
+    expect(scoped.queryByText('Available')).toBeNull();
     // No claim of autonomous resolution anywhere on the page.
     expect(document.body.textContent).not.toMatch(
       /automatically (resolves|closes|assigns)|without human|fully autonomous/i,

@@ -72,13 +72,14 @@
   color: var(--accent);
 }
 
-.aiPlanned {
+.aiStatus {
   margin-left: auto;
   padding: 0.0625rem 0.5rem;
   border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
   border-radius: var(--radius-pill);
   font-size: 0.6875rem;
   font-weight: 500;
+  white-space: nowrap;
   color: var(--text-muted);
 }
 

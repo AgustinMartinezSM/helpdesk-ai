@@ -72,7 +72,7 @@ const HINTS: Record<string, HelpiHint> = {
 /** Ticket detail lives at /tickets/<id>, so it needs a pattern. */
 const TICKET_DETAIL_HINT: HelpiHint = {
   message:
-    'Everything about this request stays here: replies, status, history.',
+    'Everything stays here: replies, status, history, and AI drafts for staff.',
 };
 
 /**

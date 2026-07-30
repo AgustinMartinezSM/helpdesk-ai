@@ -4,9 +4,13 @@ import styles from './hero-visual.module.css';
 
 /**
  * Product-scene composition built from the real design system — a ticket
- * card, the planned AI-analysis panel and an audit line. Decorative:
- * everything it shows is stated in the surrounding hero copy, so the
- * whole scene is hidden from assistive technologies.
+ * card, the AI-analysis panel and an audit line. Decorative: everything it
+ * shows is stated in the surrounding hero copy, so the whole scene is hidden
+ * from assistive technologies.
+ *
+ * The AI values are an illustration, not a captured answer, so the panel
+ * carries its own status label (see ADR 0009): the capability exists and is
+ * in development, with no language model connected yet.
  */
 export function HeroVisual() {
   return (
@@ -29,7 +33,7 @@ export function HeroVisual() {
           <p className={styles.aiPanelTitle}>
             <SparklesIcon size={14} />
             AI analysis
-            <span className={styles.aiPlanned}>Planned</span>
+            <span className={styles.aiStatus}>In development</span>
           </p>
           <dl className={styles.aiRows}>
             <div className={styles.aiRow}>

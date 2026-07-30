@@ -29,18 +29,45 @@ describe('Landing page', () => {
     expect(body).toContain('there is no hosted demo yet');
   });
 
-  it('marks the simulated AI output in the hero as Planned', () => {
+  it('qualifies the simulated AI output in the hero', () => {
     render(<LandingPage />);
 
-    // The hero mock shows category/priority/summary suggestions that do not
-    // exist yet; the panel must carry its own qualifier, since the scene is
-    // hidden from assistive tech and cannot rely on surrounding copy.
+    // The hero mock shows illustrative category/priority/summary values, not
+    // a captured answer; the panel must carry its own qualifier, since the
+    // scene is hidden from assistive tech and cannot rely on surrounding copy.
     const aiPanel = screen.getByText('AI analysis').closest('p');
     expect(aiPanel).not.toBeNull();
-    expect(within(aiPanel as HTMLElement).getByText('Planned')).toBeTruthy();
+    expect(
+      within(aiPanel as HTMLElement).getByText('In development'),
+    ).toBeTruthy();
   });
 
   it('never presents AI capabilities as available', () => {
+    render(<LandingPage />);
+
+    // The four capabilities the AI service implements are in development —
+    // the API exists, the model provider does not. Duplicate detection has
+    // not been started at all. Neither may ever read as "Available".
+    const expectations: Array<[name: string, label: string]> = [
+      ['Summarization', 'In development'],
+      ['Classification', 'In development'],
+      ['Priority suggestion', 'In development'],
+      ['Suggested replies', 'In development'],
+      ['Duplicate detection', 'Planned'],
+    ];
+
+    for (const [aiCapability, label] of expectations) {
+      const card = screen
+        .getByRole('heading', { level: 3, name: aiCapability })
+        .closest('article');
+      expect(card).not.toBeNull();
+      const scoped = within(card as HTMLElement);
+      expect(scoped.getByText(label)).toBeTruthy();
+      expect(scoped.queryByText('Available')).toBeNull();
+    }
+  });
+
+  it('says on every in-development AI card that no model is connected', () => {
     render(<LandingPage />);
 
     for (const aiCapability of [
@@ -48,13 +75,15 @@ describe('Landing page', () => {
       'Classification',
       'Priority suggestion',
       'Suggested replies',
-      'Duplicate detection',
     ]) {
       const card = screen
         .getByRole('heading', { level: 3, name: aiCapability })
         .closest('article');
-      expect(card).not.toBeNull();
-      expect(within(card as HTMLElement).getByText('Planned')).toBeTruthy();
+      expect(
+        within(card as HTMLElement).getByText(
+          /no language model is connected yet/i,
+        ),
+      ).toBeTruthy();
     }
   });
 

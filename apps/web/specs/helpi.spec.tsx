@@ -59,7 +59,9 @@ describe('Helpi hints are honest guidance, not a chatbot', () => {
         .filter((capability) => capability.status === 'planned')
         .map((capability) => capability.name.toLowerCase()),
     );
-    expect(planned).toContain('summarization');
+    // Sanity check on the fixture itself: if nothing is planned any more,
+    // this test would pass while checking nothing.
+    expect(planned).toContain('duplicate detection');
 
     const messages = PUBLIC_ROUTES.map((r) => hintFor(r)?.message ?? '')
       .join(' ')

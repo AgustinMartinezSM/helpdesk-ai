@@ -192,7 +192,7 @@ export default function LandingPage() {
       <Section
         eyebrow="How it works"
         title="From request to resolution, with people in charge"
-        lead="A ticket flows through validation, events and — soon — AI analysis. The final action is always a human decision."
+        lead="A ticket flows through validation, events and — now in development — AI analysis. The final action is always a human decision."
       >
         <ol className={styles.workflowGrid} role="list">
           {WORKFLOW_PREVIEW.map((entry, index) => (
