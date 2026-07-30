@@ -219,32 +219,99 @@ auth-service, tickets-service, ai-service, api-gateway, web-bff and web.
   from a provider whose key was never registered, would still pass. The
   registration in `AppModule.forRoot` is what covers the configured one.
 
-## Exact next action
+## Sprint 9.2 — in progress on `feat/s9-2-tenant-foundation`
 
-Sprints 9.0 and 9.1 are closed and nothing is in flight. The next step is
-**Sprint 9.2 — phases 0 to 2 of `docs/architecture/tenancy-migration-plan.md`**,
-on its own branch from current `main`.
+Two commits, unmerged, unpushed. Working tree clean, full gate and all 8
+integration suites green.
 
-Do, in order:
+### Done
 
-1. Write the two-organization isolation tests and **watch them fail**. The
-   suite cannot currently detect the failure mode this migration risks, so
-   seeing them red first is the only way to trust them later.
-2. Build the shared fixture module. There is none; every integration suite
-   truncates its tables, so a two-tenant test would delete the other tenant's
-   rows.
-3. Create organizations-service and `helpdesk_organizations` — remembering the
-   role list lives in **two** places (`01-service-databases.sh` and `ci.yml`)
-   with no shared source.
-4. One bootstrap organization, memberships for every existing user.
-5. `org`, `perms`, `mv` claims on the token; extend `Actor`. Downstream
-   services receive them and **ignore** them.
-6. Pass `correlationId` in the three publishers — independent of tenancy,
-   cheap, and it makes every later investigation possible.
+**`e2e37dc` — phase 0.** The suite can now detect the failure mode the
+migration risks. Verified by mutation rather than asserted: dropping the
+scope from `findMany` while leaving it on `count` keeps every total correct,
+and **the old spec passed 4/4 against a repository returning another
+requester's rows**. The new assertions fail 3/7 on that same code. Both
+mutations were reverted and the repository is byte-identical to HEAD.
 
-Do **not**: add `organization_id` to any table (phase 4), version the event
-contracts (phase 3), touch analytics or audit (they cannot be scoped until
-the envelope carries a tenant), or change `canView`.
+List tests now compare sorted ids; the status-filter test plants a foreign
+row carrying the status the filter selects; the comment test distinguishes
+"the public one" from "one of them". One test pins the fail-open shape of
+`list` so that making the scope required has to be a deliberate rewrite.
+`apps/tickets-service/src/testing/fixtures.ts` is the single place
+`organizationId` lands when it becomes required.
+
+**`3a913f0` — trace ids on events.** All three publishers now pass
+`correlationId`; every envelope previously reached the broker with null, so
+an audit row could not be joined back to its request. Threading is explicit
+(an optional last parameter on four ticket use cases and one auth use case),
+following ai-service's existing precedent rather than introducing
+AsyncLocalStorage.
+
+I estimated this as "cheap" in the migration plan and that was wrong — it
+touched 13 files across three services. Worth doing, but it is not a free
+rider on phase 0.
+
+### Not done — phases 1 and 2
+
+organizations-service does not exist. Nothing else from the plan has started.
+No schema anywhere has changed, which is the correct state to pause in.
+
+**A design finding that changes what phase 1 can deliver.** The plan says
+"memberships for every existing user". organizations-service cannot read
+auth-service's `users` table (ADR 0003), and **auth-service exposes no
+user-listing endpoint** — a gap `docs/architecture/data-ownership.md` already
+records. So phase 1 splits:
+
+- organizations-service consumes `user.registered.v1` and creates a
+  membership in the bootstrap organization for each newly registered user,
+  mirroring how users-service builds its projection;
+- **existing** users need a documented operational backfill, not an automatic
+  one.
+
+Decide that before building, because it determines whether phase 1 is "done"
+with new users covered or blocks on a backfill mechanism.
+
+### Proposed phase-1 schema
+
+Organizations and memberships only. Branches, departments, teams and queues
+are phase 7 (Sprint 9.5+) and must not be built here.
+
+- `organizations` — id, slug, name, status, created_at, updated_at
+- `memberships` — id, organization_id, user_id, role_template, status,
+  created_at, updated_at, unique (organization_id, user_id)
+
+Membership status: invited, active, suspended, deactivated. `role_template`
+is a string key for now; the template→permissions table lands with the
+permission evaluator, not here. ADR 0015 wants templates as seeded rows — a
+string column is the honest first increment, not a contradiction, but say so
+in the sprint report.
+
+### Provisioning touchpoints, when the service is built
+
+Not fully enumerated — the discovery pass covering them failed and needs
+re-running. Known from the audit:
+
+- `infrastructure/postgres/init/01-service-databases.sh` — role + live and
+  `_test` database.
+- `.github/workflows/ci.yml` — the same list again, by hand, because service
+  containers cannot mount the init script (risk R10). Plus the
+  integration-test list.
+- `apps/api-gateway` — proxy block in `main.ts`, entry in `config/env.ts`,
+  `.env.example`.
+- Root `tsconfig.json` project references, and `docs/architecture/data-ownership.md`,
+  `local-development.md` and the README status table, which all enumerate
+  services.
+
+Port 3010, database `helpdesk_organizations`, role `organizations_service`.
+Nx has no `project.json` in this repo — targets live under the `nx` key of
+each service's `package.json`, and `lint` is inferred from
+`eslint.config.mjs` rather than declared.
+
+### Still do not
+
+Add `organization_id` to any table (phase 4), version the event contracts
+(phase 3), touch analytics or audit (they cannot be scoped until the envelope
+carries a tenant), or change `canView`.
 
 The sprint should end with a platform that behaves **exactly** as it does
 today, plus an organization nobody references yet. If anything user-visible
@@ -263,13 +330,15 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Sprints 9.0 and 9.1 are closed on `main` with remote CI green. The tenancy
-> audit is done and ADRs 0012–0017 are Accepted. Start Sprint 9.2 on a branch
-> off current `main`, implementing phases 0–2 of
-> `docs/architecture/tenancy-migration-plan.md` only. Read
-> `docs/progress/SPRINT-009.1.md` first — particularly the finding that the
-> current test suite cannot detect a cross-tenant leak, which is why phase 0
-> writes a failing test before anything else.
+> Sprint 9.2 is part-done on `feat/s9-2-tenant-foundation` (two commits,
+> unmerged, tree clean, gate and all 8 integration suites green). Phase 0 and
+> the trace-id work are complete. Continue with phases 1 and 2: create
+> organizations-service on port 3010 owning `helpdesk_organizations`, a
+> bootstrap organization, and the `org`/`perms`/`mv` token claims that
+> downstream services receive and ignore. Read the Sprint 9.2 section of this
+> handoff first — particularly the finding that auth-service exposes no
+> user-listing endpoint, which changes what "memberships for every existing
+> user" can mean.
 
 ## Repository isolation
 
