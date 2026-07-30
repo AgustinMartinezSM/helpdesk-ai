@@ -1,8 +1,9 @@
 # Sprint 8 — AI service (provider-agnostic)
 
-Status: COMPLETE (2026-07-29), **except the model provider choice, which is
-an open product-owner decision**. Everything the choice needs is in place;
-see "Connecting a paid provider" at the end.
+Status: COMPLETE (2026-07-29). The one thing it deliberately left open —
+the model provider choice — was closed in Sprint 9.0 by connecting Google
+Gemini; see `SPRINT-009.0.md` and the "Connecting a paid provider (done in
+Sprint 9.0)" section below.
 
 Goal: make AI assistance a real part of the platform — a service that
 owns it, an API behind the gateway, and a staff-only panel in the ticket
@@ -120,10 +121,17 @@ Every item of the plan below shipped. Notable details:
    PostgreSQL and RabbitMQ, and an end-to-end smoke run with the
    services up.
 
-## Connecting a paid provider (the step after this sprint)
+## Connecting a paid provider (done in Sprint 9.0)
 
-Everything below is the complete list of what the product owner's
-decision unblocks. No provider SDK is installed until the choice is made.
+Everything below was the complete list of what the product owner's
+decision unblocked. It was followed in Sprint 9.0 with Google Gemini, and
+the list held up — with one correction to step 7, noted inline.
+
+The line "No provider SDK is installed until the choice is made" stayed
+true in a way worth recording: the adapter uses plain `fetch` against
+`https://generativelanguage.googleapis.com/v1beta/interactions` with an
+`x-goog-api-key` header, so connecting a real model added no dependency
+at all.
 
 1. Choose the provider and create an API key.
 2. `pnpm add <sdk> --filter @helpdesk-ai/ai-service` (or use `fetch`
@@ -142,14 +150,25 @@ decision unblocks. No provider SDK is installed until the choice is made.
    both — `landing.spec.tsx` and `how-it-works.spec.tsx` are written to
    fail until the site matches reality.
 
+   **Corrected in Sprint 9.0: they went to `api-ready`, not `available`.**
+   This step reasoned only about whether a UI existed. It does, but a
+   capability that answers nothing until the operator supplies their own
+   API key is not "usable end-to-end in the product UI today", and none
+   of this is deployed. `api-ready` was widened to cover it (ADR 0009).
+   The rest of the step was right: the notes came out and both specs did
+   fail until the site matched.
+
 Nothing in the domain, application layer, controller, BFF or UI changes.
 
-Decisions the choice still owes an answer to, none of which this sprint
-could make on its own: which model per task (a summary and a reply draft
-do not need the same one), the monthly ceiling and what happens when it is
-reached, whether ticket text may leave the machine at all under the
-provider's data-processing terms, and how the key is stored and rotated
-(SECURITY.md lists this as open).
+Decisions the choice owed an answer to. Sprint 9.0 answered three of
+them: ticket text may leave the machine and now does (ADR 0011 records
+exactly what is sent), one model serves all four tasks, and the key is
+stored as an environment variable in a git-ignored `.env`.
+
+Three are still open and are the real distance between `api-ready` and
+`available`: per-task model selection, a monthly ceiling with defined
+behavior when it is reached, and key rotation. SECURITY.md still lists
+these as unbuilt.
 
 ## Deliberately not done
 

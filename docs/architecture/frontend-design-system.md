@@ -181,16 +181,18 @@ per theme so native controls follow.
 
 `components/public/helpi.tsx` is a small floating guide on the public
 pages. It is **written guidance, not a chatbot and not AI**, and that
-distinction is a hard constraint rather than a preference: the whole site
-states that AI assistance is `Planned`, so a companion that looked or
-behaved like an AI assistant would contradict the product's own honesty
-claims. Concretely, Helpi:
+distinction is a hard constraint rather than a preference. The reason is
+structural rather than a matter of current status: Helpi is a navigation
+aid on the **public** site, while the AI capabilities live inside the
+authenticated product and are staff-only. A public companion that behaved
+like an AI assistant would imply a capability no visitor to that page can
+reach. Concretely, Helpi:
 
 - has **no text input and no conversation** — every hint is authored by
   hand in `lib/helpi-hints.ts` and selected by route;
 - carries the line _"Short written hints — not a chatbot."_ in its panel;
-- must never use `SparklesIcon` (reserved for the planned AI features) or
-  a speech bubble (reads as chat). Its mark is `CompassIcon` —
+- must never use `SparklesIcon` (reserved for the AI features) or a
+  speech bubble (reads as chat). Its mark is `CompassIcon` —
   orientation, not conversation;
 - is guarded by specs that reject "ask me", "chat with", "AI assistant"
   and any capability `product-status.ts` marks `planned`.

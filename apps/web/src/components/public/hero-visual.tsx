@@ -9,8 +9,9 @@ import styles from './hero-visual.module.css';
  * from assistive technologies.
  *
  * The AI values are an illustration, not a captured answer, so the panel
- * carries its own status label (see ADR 0009): the capability exists and is
- * in development, with no language model connected yet.
+ * carries its own status label (see ADR 0009): the capability is built and
+ * reachable, but a deployment has to bring its own provider credentials
+ * before it produces anything.
  */
 export function HeroVisual() {
   return (
@@ -33,7 +34,7 @@ export function HeroVisual() {
           <p className={styles.aiPanelTitle}>
             <SparklesIcon size={14} />
             AI analysis
-            <span className={styles.aiStatus}>In development</span>
+            <span className={styles.aiStatus}>API ready</span>
           </p>
           <dl className={styles.aiRows}>
             <div className={styles.aiRow}>

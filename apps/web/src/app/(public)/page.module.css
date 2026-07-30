@@ -416,8 +416,11 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
+  /* Column count follows the number of groups that actually have items —
+     PROJECT_STATUS drops a group rather than render a heading over an
+     empty list, so a fixed 3 would leave a dead cell whenever it does. */
   .statusGrid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   }
 }
 

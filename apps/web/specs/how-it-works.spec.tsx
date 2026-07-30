@@ -126,12 +126,13 @@ describe('How it works — AI section stays honest', () => {
     expect(aiSection).not.toBeNull();
     const scoped = within(aiSection as HTMLElement);
 
-    // The four implemented tasks are in development, duplicate detection is
-    // not started, and the missing piece is named rather than glossed over.
-    expect(scoped.getAllByText('In development').length).toBeGreaterThan(0);
+    // The four implemented tasks are API ready, duplicate detection is not
+    // started, and the condition that stands between "built" and "usable" —
+    // provider credentials — is named rather than glossed over.
+    expect(scoped.getAllByText('API ready').length).toBeGreaterThan(0);
     expect(scoped.getAllByText('Planned').length).toBeGreaterThan(0);
     expect(
-      scoped.getByText(/not connected yet is a language model/i),
+      scoped.getByText(/configures its own provider credentials/i),
     ).toBeTruthy();
     expect(scoped.queryByText('Available')).toBeNull();
     // No claim of autonomous resolution anywhere on the page.

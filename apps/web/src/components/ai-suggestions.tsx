@@ -36,7 +36,8 @@ import styles from './ai-suggestions.module.css';
  *   connected. A placeholder presented as a model's opinion would be worse
  *   than no panel at all.
  * - **Nothing is generated on its own.** Each task runs when someone asks
- *   for it, because each run costs money once a paid provider is connected.
+ *   for it, because every run spends quota — or money — against whichever
+ *   provider the deployment configured.
  *
  * The caller renders this only for staff; the API refuses everyone else, so
  * a mistake here is a cosmetic bug rather than a data leak.

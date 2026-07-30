@@ -48,14 +48,14 @@ Owns user and agent profiles, teams, and org structure (`helpdesk_users` databas
 
 Owns the core support-request domain: tickets, statuses, assignments, comments, SLA state (`helpdesk_tickets` database). Publishes ticket lifecycle events (`TicketCreated`, `TicketAssigned`, ...). It requests AI enrichment via events rather than embedding AI logic.
 
-### ai-service — Implemented (Sprint 8), model provider pending
+### ai-service — Implemented (Sprint 8); Google Gemini connected (Sprint 9.0)
 
 Owns all model-backed assistance. Implemented: summarization, classification, priority suggestion and reply drafts, staff-only, generated on request and stored append-only in `helpdesk_ai` (port 3009). Duplicate detection is still planned — it needs embeddings and similarity search.
 
 Two boundary decisions differ from the Sprint 1 sketch above, both deliberate:
 
 - **It reads a ticket synchronously**, from `tickets-service`, forwarding the caller's own access token — the event contracts carry no ticket text, and a service credential with standing read access to every ticket was the wrong price to pay for asynchrony (ADR 0011). It stores no ticket text, only its own output plus a hash of the context.
-- **The model provider sits behind a one-method port** (`AiProvider`), with output validated against per-task zod schemas before anything is stored (ADR 0010). A deterministic local provider ships today; connecting a paid provider is an adapter plus a config value, and it is an open product-owner decision.
+- **The model provider sits behind a one-method port** (`AiProvider`), with output validated against per-task zod schemas before anything is stored (ADR 0010). Two adapters ship: `local`, a deterministic keyword-and-template provider that is the default and the one CI runs on, and `gemini`, which calls Google's Interactions API. The port's promise that adding a provider is "an adapter plus a config value" was borne out — the Gemini adapter changed nothing in the domain, the application layer, the controller, the BFF or the UI, and added no dependency.
 
 It never writes to another service's database, and it has no path that changes a ticket: every suggestion is advice a person acts on or ignores.
 

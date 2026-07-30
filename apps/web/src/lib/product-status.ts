@@ -4,9 +4,16 @@
  * the public site must never present planned work as available.
  *
  * - `available`     usable end-to-end in the product UI today
- * - `api-ready`     implemented behind the gateway; product UI pending
+ * - `api-ready`     implemented behind the gateway, but not usable by
+ *                   default: it still needs a product UI, or configuration
+ *                   a deployment has to supply for itself
  * - `in-development` actively being built in the current sprint
  * - `planned`       on the roadmap, not started
+ *
+ * `api-ready` covers two shapes of "built but not turned on" (ADR 0009):
+ * assignment has an API and no picker UI yet, while the AI capabilities have
+ * both an API and a UI but need provider credentials per deployment. Code
+ * existing is never enough on its own to earn `available`.
  */
 
 export type CapabilityStatus =
@@ -94,34 +101,34 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
     key: 'ai-assistance',
     title: 'AI assistance',
     description:
-      'AI as an assistant, never an authority: suggestions are reviewed by people, and every final action stays human. The service is live behind the gateway with a deterministic local provider; the model provider is a deliberate, still-open decision.',
+      'AI as an assistant, never an authority: suggestions are reviewed by people, and every final action stays human. Gemini provider integration is implemented and verified locally. Each deployment must configure its own provider credentials before enabling these capabilities; without them the service answers from a deterministic local provider that connects to nothing.',
     capabilities: [
       {
         name: 'Summarization',
         description:
           'Condense long ticket threads into a short, factual summary.',
-        status: 'in-development',
-        note: 'Runs today through a deterministic local provider — no language model is connected yet.',
+        status: 'api-ready',
+        note: 'Shown in a staff-only panel on the ticket, labeled with the provider and model that produced it.',
       },
       {
         name: 'Classification',
         description: 'Suggest a category the moment a ticket arrives.',
-        status: 'in-development',
-        note: 'Suggests from a fixed category list. Applying it to the ticket is still manual, and no language model is connected yet.',
+        status: 'api-ready',
+        note: 'Suggests from a fixed category list. Applying it to the ticket is still a manual step.',
       },
       {
         name: 'Priority suggestion',
         description:
           'Estimate urgency from the request so triage starts pre-sorted.',
-        status: 'in-development',
-        note: 'Suggests a priority for a technician to accept or ignore; it never changes the ticket. No language model is connected yet.',
+        status: 'api-ready',
+        note: 'Suggests a priority for a technician to accept or ignore; it never changes the ticket.',
       },
       {
         name: 'Suggested replies',
         description:
           'Draft a first response for the technician to review, edit and send.',
-        status: 'in-development',
-        note: 'The draft is shown to staff only, and it is sent by a person or not at all. No language model is connected yet.',
+        status: 'api-ready',
+        note: 'The draft is shown to staff only, and it is sent by a person or not at all.',
       },
       {
         name: 'Duplicate detection',
@@ -272,6 +279,11 @@ function pick(areaKey: string, name: string): Capability {
 }
 
 export interface ProjectStatusGroup {
+  /**
+   * A group is omitted entirely when it has nothing in it, rather than
+   * rendering a heading over an empty list. Nothing sits in development
+   * between sprints, so "In development" is absent more often than not.
+   */
   title: 'Implemented' | 'In development' | 'Planned';
   items: string[];
 }
@@ -287,18 +299,14 @@ export const PROJECT_STATUS: ProjectStatusGroup[] = [
       'API gateway and web BFF with an httpOnly session cookie',
       'Design system, dark mode and accessible product UI',
       'Public product experience — this site',
-    ],
-  },
-  {
-    title: 'In development',
-    items: [
-      'AI service: summaries, classification, priorities and reply drafts (Sprint 8) — running on a local deterministic provider while the model provider is chosen',
+      'AI service: summaries, classification, priorities and reply drafts behind a provider port, with a deterministic local provider and Google Gemini',
     ],
   },
   {
     title: 'Planned',
     items: [
       'Duplicate detection, which needs embeddings and similarity search',
+      'Usage ceilings, key rotation and rate limiting, which the AI provider needs before a public deployment',
       'Notifications and analytics product UI',
       'Self-service signup and assignee picker',
       'Transactional outbox for event publishing',

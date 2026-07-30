@@ -39,10 +39,13 @@ staff browser → web-bff → api-gateway → ai-service
 
 Rules that follow, all enforced in code:
 
-- **No service credential.** The only token `ai-service` sends downstream
-  is the one the caller presented. Authorization is therefore inherited:
-  the service can never read a ticket the caller could not read. There is
-  no key that grants `ai-service` blanket access to the ticket store.
+- **No service credential for the ticket store.** The only token
+  `ai-service` sends downstream is the one the caller presented.
+  Authorization is therefore inherited: the service can never read a
+  ticket the caller could not read. There is no key that grants
+  `ai-service` blanket access to the ticket store. It does hold one
+  credential of its own — `GEMINI_API_KEY`, added in Sprint 9.0 — but
+  that key buys model calls and grants no ticket access whatsoever.
 - **Upstream authorization failures pass through unchanged.** A 401 stays
   a 401, and a 403/404 from `tickets-service` becomes `TicketNotFound` →
   404, preserving that service's own decision not to confirm a ticket's
@@ -116,3 +119,32 @@ Negative / accepted:
   feature (async pre-generation) this sprint does not ship.
 - **Reading `helpdesk_tickets` directly**: rejected outright; it violates
   ADR 0003 and would couple `ai-service` to another service's schema.
+
+## Update — Sprint 9.0: the context now leaves the machine
+
+This ADR was written while the only provider was local, so it settled
+what `ai-service` may _read_ and never had to say where that text _goes_.
+With `AI_PROVIDER=gemini` it goes to a third party, and that deserves to
+be stated plainly rather than left as an inference.
+
+**Sent to Google** when a suggestion is generated: the ticket title, the
+description, the public thread with each message's author role, the
+current status, priority and category, and a note when the thread was
+truncated. Nothing else.
+
+**Never sent:** internal notes. They are dropped in
+`build-ticket-context.ts` before a `TicketContext` exists, so no adapter
+can include them even by mistake — the provider is handed an object that
+never contained them. Sprint 8 verified this as behavior rather than
+intent: adding an internal note left the stored `contextHash`
+byte-identical, while adding a public reply changed it.
+
+**Not stored, either way.** A suggestion keeps the model's output plus a
+SHA-256 hash of the context. No ticket text is persisted by this service,
+and the `ai.suggestion.created.v1` event carries identifiers and metadata
+only.
+
+The rules above are unchanged by this — token forwarding, staff-only
+access, one attempt, the timeout. What changes is who can see the text
+that passes them, and that is a deployment's decision to make knowingly:
+with `AI_PROVIDER=local` nothing leaves the process at all.

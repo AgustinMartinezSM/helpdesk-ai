@@ -71,13 +71,15 @@ Target notes (all Planned):
 - Event name candidates: `UserCreated`, `TicketCreated`, `TicketAssigned`, `AIAnalysisRequested`, `NotificationSent`.
 - External systems (AI provider, email delivery) will sit behind service-owned abstractions so providers can be swapped without touching domain code.
 
-### Sprint 8 update to the AI boxes
+### Sprint 8–9.0 update to the AI boxes
 
 - `ai-service` exists (port 3009, `helpdesk_ai`) and the "behind an
   abstraction" intent above held: the abstraction is a one-method
-  `AiProvider` port with schema-validated output (ADR 0010). **No external
-  AI provider is connected**, so the arrow to "AI provider" is still
-  aspirational; a deterministic local provider answers today.
+  `AiProvider` port with schema-validated output (ADR 0010). The arrow to
+  "AI provider" is real as of Sprint 9.0 — `AI_PROVIDER=gemini` calls
+  Google's Interactions API over HTTPS. It is not the default: without
+  provider credentials a deterministic local provider answers instead,
+  and that is what CI runs on.
 - `AIAnalysisRequested` was never introduced. Suggestions are requested
   synchronously by staff, and `ai-service` reads the ticket from
   `tickets-service` with the caller's token, because event contracts carry

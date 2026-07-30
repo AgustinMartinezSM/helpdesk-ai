@@ -9,10 +9,11 @@
 Sprint 8 introduces `ai-service`, the first service in the platform whose
 behavior depends on a large language model. Two facts shape the design.
 
-First, **the model provider is not chosen yet**. Connecting a paid
-provider is a product-owner decision — it involves credentials, a cost
-model and a data-processing relationship with a third party. That
-decision cannot be made by the code.
+First, **the model provider is not chosen yet** (it was chosen in Sprint
+9.0 — see the update at the end). Connecting a paid provider is a
+product-owner decision — it involves credentials, a cost model and a
+data-processing relationship with a third party. That decision cannot be
+made by the code.
 
 Second, **the service still has to be real today**. A service that only
 compiles is not a service: it needs a persisted domain, an HTTP contract,
@@ -30,7 +31,7 @@ like emitting — unbounded, unvalidated and untyped.
 
 ```ts
 interface AiProvider {
-  readonly id: string; // 'local', later 'openai', ...
+  readonly id: string; // 'local', later 'gemini', ...
   readonly model: string; // 'heuristics-v1', later a model id
   run(request: AiTaskRequest): Promise<AiProviderOutput>;
 }
@@ -87,15 +88,16 @@ on every suggestion and displayed in the UI.
 ### Selection and the extension point
 
 `AI_PROVIDER` selects the adapter at bootstrap; an unknown value fails
-env validation with a message naming the accepted values. Today the only
-accepted value is `local`.
+env validation with a message naming the accepted values. The accepted
+values are `local` and `gemini` (added in Sprint 9.0 — see the update at
+the end of this ADR).
 
 `local` is a deterministic keyword-and-template provider
 (`heuristics-v1`): same input, same output, no network, no cost. It makes
 the whole path testable in CI and gives the UI something real to render,
 and it is labeled as itself everywhere it appears.
 
-Adding a provider is four edits, and no change to the domain,
+Adding a provider is five edits, and no change to the domain,
 application layer, controller, BFF or UI:
 
 1. add the provider id to the `AI_PROVIDER` enum plus its credential
@@ -107,14 +109,19 @@ application layer, controller, BFF or UI:
 4. run the shared provider contract suite against it
    (`src/infrastructure/providers/provider-contract.ts`) — a suite every
    adapter must pass, which asserts the port's promises rather than one
-   adapter's implementation.
+   adapter's implementation;
+5. document the new variables in `apps/ai-service/.env.example`. This
+   step was missing from the original list and Sprint 9.0 nearly shipped
+   an undocumented variable because of it.
 
 ## Consequences
 
 Positive:
 
-- The provider decision stays open without blocking a single line of the
-  rest of the sprint, and closing it later is additive.
+- The provider decision stayed open without blocking a single line of
+  the rest of Sprint 8, and closing it in Sprint 9.0 was additive. That
+  is now evidence rather than a prediction: see the update below for what
+  the Gemini adapter actually cost.
 - Output validation makes the store's shape independent of model
   behavior: the database cannot hold something the domain does not
   recognize.
@@ -126,8 +133,8 @@ Positive:
 Negative / accepted:
 
 - The `local` provider's output is genuinely modest. That is a feature
-  here — it is labeled — but it means the UI's value is only visible once
-  a real model is connected.
+  here — it is labeled — but it means that when `AI_PROVIDER=local` the
+  UI's value is not really on display.
 - A single-method port cannot expose provider-specific features
   (streaming, tool calls, embeddings). Streaming and embeddings are known
   future work: duplicate detection will need an embeddings port of its
@@ -154,3 +161,39 @@ Negative / accepted:
   rejected — it produces confident-looking output of a different nature
   than the one requested, which is exactly the failure mode the product
   claims to avoid.
+
+## Update — Sprint 9.0: Google Gemini
+
+The provider decision is closed. `gemini` calls Google's Interactions
+API (`POST /v1beta/interactions`) with `x-goog-api-key`, defaulting to
+`gemini-3.5-flash-lite`. `local` stays the default and is the provider CI
+runs on, so the test suite still needs no credential and no network.
+
+**What it cost.** The port's central claim was that adding a provider
+would not touch the domain, the application layer, the controller, the
+BFF or the UI. That held. The change was exactly the five edits listed
+above — `env.ts`, the adapter, the factory, a run of the contract suite,
+and `.env.example` — plus the adapter's own specs. Nothing else in the
+service moved, and no dependency was added: one HTTP call did not need
+an SDK.
+
+**Why Interactions rather than `generateContent`.** Both are documented
+and both would work. Interactions takes standard JSON Schema in
+`response_format.schema` (`required`, `enum`, `anyOf`), which maps
+straight onto the per-task output schemas this service already has;
+`generateContent`'s `responseSchema` accepts only an OpenAPI subset, so
+the same schemas would have needed a translation layer.
+
+**What I did not do.** Structured output is requested but still not
+trusted — the application layer validates every answer against the domain
+schema exactly as it did for `local`. A provider that returns a
+confident, well-formed, wrong shape is rejected the same way it always
+was, which is the whole reason validation lives outside the adapter.
+
+**What this opens that was not open before.** Ticket text now leaves the
+machine (ADR 0011 records what is and is not sent). The service now holds
+a credential of its own. And spend becomes real: usage ceilings, key
+rotation and rate limiting are unbuilt, and they are the work standing
+between `api-ready` and `available` (ADR 0009). One model serves all four
+tasks today; per-task model selection is still open, and a summary and a
+reply draft plausibly do not want the same one.

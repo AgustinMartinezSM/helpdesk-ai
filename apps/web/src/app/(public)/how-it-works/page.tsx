@@ -237,7 +237,7 @@ export default function HowItWorksPage() {
                 <SparklesIcon size={14} />
                 What AI would suggest
               </p>
-              <StatusPill status="in-development" />
+              <StatusPill status="api-ready" />
             </div>
             <dl className={styles.aiRows}>
               {AI_SUGGESTIONS.map((row) => (
@@ -256,11 +256,13 @@ export default function HowItWorksPage() {
         </p>
         <p className={styles.aiStatusNote}>
           Summaries, classification, priority suggestions and reply drafts are{' '}
-          <StatusPill status="in-development" />: the service that produces them
-          runs behind the gateway, and staff see them as a panel on the ticket.
-          What is not connected yet is a language model — today a deterministic
-          local provider answers, and the panel says so wherever its output
-          appears. Duplicate detection is still <StatusPill status="planned" />.
+          <StatusPill status="api-ready" />: the service that produces them runs
+          behind the gateway, and staff see them as a panel on the ticket. The
+          Google Gemini integration is implemented and verified locally, but
+          each deployment configures its own provider credentials before
+          enabling it — without them a deterministic local provider answers
+          instead, and the panel names whichever one produced what you are
+          reading. Duplicate detection is still <StatusPill status="planned" />.
         </p>
       </Section>
 

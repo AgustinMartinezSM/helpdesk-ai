@@ -1,6 +1,6 @@
 # Security Policy
 
-This document describes the security posture of HelpDesk AI at its current stage (sprints 1–7.6 complete: authentication, the ticket domain, and the audit, notification and analytics services). It distinguishes what is implemented today from what is planned.
+This document describes the security posture of HelpDesk AI at its current stage (sprints 1–9.0 complete: authentication, the ticket domain, the audit, notification and analytics services, and the AI service with a connected model provider). It distinguishes what is implemented today from what is planned.
 
 ## Reporting a Vulnerability
 
@@ -17,7 +17,8 @@ Do not test vulnerabilities against anything other than a local development envi
 - Each service ships an `.env.example`; the root `.env.example` holds only compose infrastructure overrides.
 - `JWT_ACCESS_SECRET` has **no default**: auth-service refuses to boot without a secret of at least 32 characters. The `.env.example` value is a placeholder that fails nothing silently — you must replace it.
 - Example infrastructure credentials (e.g. `helpdesk_admin` / `helpdesk_local_only_pg`, `auth_service` / `helpdesk_local_only_auth`) are non-default and local-only, overridable via a git-ignored `.env`.
-- The CI workflow uses no repository secrets; its database credentials exist only inside a throwaway service container.
+- `GEMINI_API_KEY` is the one third-party credential in the platform. It ships empty in `apps/ai-service/.env.example`, is required only when `AI_PROVIDER=gemini` (startup fails fast naming the variable), travels as an `x-goog-api-key` header and never in a URL, and is stripped from any error string that leaves the adapter. A real value belongs only in the git-ignored `apps/ai-service/.env`.
+- The CI workflow uses no repository secrets; its database credentials exist only inside a throwaway service container. It never sets `AI_PROVIDER`, so the schema default (`local`) applies and no model-provider key is needed to run the full suite. That default is what keeps CI credential-free — changing it would make every pipeline demand a key.
 
 ## Authentication (Implemented — auth-service)
 
@@ -38,7 +39,10 @@ Do not test vulnerabilities against anything other than a local development envi
 - **Fail-fast configuration validation** (`libs/configuration`): invalid configuration exits the process before the framework wires anything, reporting every offending variable.
 - **Authorization enforcement**: the roles claim is consumed by guards inside each service, not only by `/auth/me`. Ticket assignment is staff-only, analytics summaries are staff-only, the audit trail is admin-only, and requesters may close only their own resolved tickets. `libs/security` holds the shared actor model and role helpers.
 - **Database ownership**: every service connects to its own database with its own role (`helpdesk_auth`, `helpdesk_tickets`, `helpdesk_users`, `helpdesk_audit`, `helpdesk_notifications`, `helpdesk_analytics`, `helpdesk_ai`); admin credentials are separate. No cross-service database access exists (ADR 0003).
-- **AI data flow** (`ai-service`, ADR 0010 / ADR 0011): the service holds **no credential of its own** for the ticket store — it forwards the caller's access token, so it can never read a ticket the caller could not. Its endpoints are staff-only. **Internal notes are removed** before any context leaves the process, and the context is truncated to fixed limits. **No ticket text is persisted**: a stored suggestion keeps the model's output plus a SHA-256 hash of the context. Provider output is validated against a per-task schema before it is stored, so a remote model cannot decide what shape this platform's data takes. The published event carries metadata only, never content. With the local provider selected, no data leaves the machine at all.
+- **AI data flow** (`ai-service`, ADR 0010 / ADR 0011): the service holds **no credential for the ticket store** — it forwards the caller's access token, so it can never read a ticket the caller could not. Its endpoints are staff-only. **Internal notes are removed** before any context leaves the process, and the context is truncated to fixed limits. **No ticket text is persisted**: a stored suggestion keeps the model's output plus a SHA-256 hash of the context. Provider output is validated against a per-task schema before it is stored, so a remote model cannot decide what shape this platform's data takes. The published event carries metadata only, never content.
+
+  **Where the text goes depends on the configured provider.** With `AI_PROVIDER=local`, nothing leaves the machine at all. With `AI_PROVIDER=gemini`, the ticket title, description, public thread, status, priority and category are sent to Google to be processed under the Gemini API terms. Internal notes are excluded in both cases — they are dropped before a provider context object exists, which was verified as behavior: adding an internal note leaves the stored `contextHash` byte-identical, while adding a public reply changes it. The model-provider credential (`GEMINI_API_KEY`) is separate from ticket authorization and grants no access to any ticket.
+
 - **Dependency build-script allow-list**: pnpm 11 blocks lifecycle scripts by default; only an explicit allow-list may build (`@parcel/watcher`, `@prisma/client`, `@prisma/engines`, `@swc/core`, `argon2`, `nx`, `prisma`, `sharp`, `unrs-resolver`). The `@scarf/scarf` install telemetry is deliberately blocked.
 
 ## Planned Security Roadmap
@@ -49,8 +53,8 @@ None of the following is implemented. Do not assume any of it exists when assess
 - **Session management** (list/revoke own sessions).
 - **Upload validation** (file type, size, content checks) when file handling is introduced.
 - **Dependency audit in CI** (e.g. `pnpm audit`) — now that the workflow runs on a remote, this is an open task rather than a blocked one.
-- **Rate limiting** on the gateway and BFF, which throttle nothing today; only auth-service's credential endpoints are throttled. This matters more now that `ai-service` exists: with a paid provider connected, an unthrottled staff account is a spending path as well as a load path.
-- **Provider credential handling** for a paid model provider: no key exists yet, so nothing about rotation, scoping or per-request budgets has been designed. It must be part of connecting one (ADR 0010).
+- **Rate limiting** on the gateway and BFF, which throttle nothing today; only auth-service's credential endpoints are throttled. This is no longer hypothetical: a remote provider is connected, so an unthrottled staff account is a spending path as well as a load path. Even on a free tier the exposure is real — exhausting the quota takes the feature down for everyone, and the service surfaces that as a 503.
+- **Provider credential lifecycle**: the key is required-only-when-selected, header-only and redacted from errors (see Secrets Policy), but **rotation, scoping and per-request or monthly budget ceilings are not designed or built**. These are what stand between the AI capabilities being API ready and being safe to deploy publicly (ADR 0009 / ADR 0010).
 
 ## Scope Notes
 

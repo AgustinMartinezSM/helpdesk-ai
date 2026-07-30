@@ -3,9 +3,11 @@
 HelpDesk AI is a support operations platform: centralize requests,
 assist support teams, automate repetitive analysis, and keep humans in
 control of every important decision. AI assistance — summarization,
-classification, priority suggestion, suggested replies and duplicate
-detection — is **designed but not implemented**; the event backbone it
-will plug into already runs.
+classification, priority suggestion and suggested replies — is
+implemented behind a provider port and shown to staff as a panel on the
+ticket; a deployment supplies its own model-provider credentials before
+it answers with anything but the built-in deterministic provider.
+Duplicate detection is still designed but not built.
 
 It is a portfolio project by Agustín Martínez, built with the discipline
 of a production system: architecture decisions are written down before
@@ -14,7 +16,7 @@ review, and nothing is presented as working unless it is.
 
 ## Current status
 
-Sprints 1–7.6 complete. Nine applications and four libraries in an Nx
+Sprints 1–9.0 complete. Ten applications and four libraries in an Nx
 monorepo, an event-driven platform on RabbitMQ, an accessible product UI
 and a complete public product experience.
 
@@ -39,8 +41,9 @@ and a complete public product experience.
 | Public product experience (landing, how-it-works, features, security, about, engineering, contact) | Implemented         |
 | Local infrastructure: PostgreSQL 18, Redis 8, RabbitMQ 4.3 (compose)                               | Implemented         |
 | Notifications and analytics **product UI** (APIs exist, UI pending)                                | Planned             |
-| AI summaries, classification, priority and reply drafts (staff panel on a ticket)                  | In development      |
-| Model provider (abstraction done, provider choice open — ADR 0010)                                 | Pending decision    |
+| AI summaries, classification, priority and reply drafts (staff panel on a ticket)                  | API ready           |
+| Model provider: Google Gemini behind the `AiProvider` port (ADR 0010)                              | Implemented         |
+| AI usage ceilings, key rotation and rate limiting (needed before a public deployment)              | Planned             |
 | AI duplicate detection (needs embeddings and similarity search)                                    | Planned             |
 | Self-service signup, assignee picker, attachments                                                  | Planned             |
 | Transactional outbox for event publishing                                                          | Deferred (ADR 0006) |
@@ -175,7 +178,8 @@ Prettier on staged files).
   [frontend routes](docs/architecture/frontend-public-routes.md)
 - `docs/adr/` — architecture decision records (monorepo, BFF vs gateway,
   database ownership, messaging, deferred outbox, public/authenticated
-  split, contact delivery, product status representation)
+  split, contact delivery, product status representation, AI provider
+  abstraction, AI ticket context access)
 - `docs/progress/` — sprint logs
 - `CONTRIBUTING.md` — workflow, branching, commit conventions
 - `SECURITY.md` — security posture and reporting
