@@ -3,9 +3,13 @@
 **Date:** 2026-07-30
 **Sprint:** 9.0 — Close Sprint 8 and connect a model provider
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `feat/ai-service` (10 commits ahead of `main`, never pushed)
+**Branch:** `main` at `6d2a94c` — Sprint 9.0 merged, pushed, remote CI green
 
 ## Git state
+
+Sprint 9.0 is closed. `feat/ai-service` fast-forwarded onto `main` (ten
+commits, no merge commit, no rewritten history) and was pushed. One
+forward fix followed after the first remote run failed.
 
 Four commits were created on `feat/ai-service` this sprint, on top of
 `c6cc37b docs: record sprint 8 and the AI security posture`:
@@ -15,10 +19,15 @@ Four commits were created on `feat/ai-service` this sprint, on top of
 | `b2f245b` | `ci: add typecheck to the quality gate`                                      |
 | `b90eac6` | `feat(ai): add Gemini provider integration`                                  |
 | `155b9c0` | `docs(product): document the API-ready AI capabilities and Sprint 8 closure` |
-| _(this)_  | `fix(ai): harden provider error redaction`                                   |
+| `4b0a3c0` | `fix(ai): harden provider error redaction`                                   |
 
-`main` is unchanged and still equal to `origin/main`. Nothing has been
-merged or pushed; both are waiting on explicit approval.
+Then, on `main` after the merge:
+
+| Commit    | Message                                      |
+| --------- | -------------------------------------------- |
+| `6d2a94c` | `fix(ai): track ai-service assets directory` |
+
+`feat/ai-service` still exists and has not been deleted.
 
 ## Work completed
 
@@ -70,11 +79,20 @@ merged or pushed; both are waiting on explicit approval.
 
 ## Decisions pending
 
-- Merge `feat/ai-service` into `main` with `--ff-only`, then push.
-- Whether to verify the remote GitHub Actions run before or after merge.
 - Whether `docs/roadmap/PRODUCT-ROADMAP.md` should exist, and what it may
   publish.
 - Whether the provider-notice failure path is worth its own fix.
+- Whether to delete `feat/ai-service` now that remote CI is green.
+
+## CI maintenance items
+
+Not blocking, not part of any Sprint 9.0 change, and deliberately not
+bundled into an unrelated fix:
+
+- **`pnpm/action-setup@v4` targets Node.js 20**, which GitHub has
+  deprecated; the runner forces it onto Node 24 and emits an annotation on
+  every run. It is a warning today. Upgrade it on its own, when a workflow
+  maintenance pass is the actual task — not folded into a product change.
 
 ## Files changed this sprint
 
@@ -118,6 +136,15 @@ Full gate, all green on 2026-07-30:
   messaging, auth, tickets, users, audit, notification, analytics, ai.
 - `ai-service` unit specs 52 → 95. `apps/web` 117, with 5 rewritten.
 - Secret scan clean across tracked content and the full git history.
+- **Remote GitHub Actions green** on `6d2a94c`: lint (14 projects),
+  typecheck (13), test (14), build (14) and all 8 integration suites
+  against real PostgreSQL and RabbitMQ service containers.
+
+The run before it failed on `@helpdesk-ai/ai-service:build` because
+`apps/ai-service/src/assets` was an empty, untracked directory. Local
+verification cannot catch that class of break — the directory exists on
+this machine. When a build target references a path, check that git
+actually tracks it.
 
 `apps/web` has no `typecheck` target — it is covered by `next build`
 only. Worth knowing before trusting `pnpm typecheck` as total coverage.
@@ -163,14 +190,16 @@ auth-service, tickets-service, ai-service, api-gateway, web-bff and web.
 
 ## Exact next action
 
-Report the sprint result and wait for approval to merge. Nothing else.
+Sprint 9.0 is closed. Nothing is in flight. The next step is Sprint 9.1 —
+the product domain and tenancy audit — on its own branch, and it needs
+explicit approval before it starts.
 
 ## Resume commands
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
-git branch --show-current      # expect feat/ai-service
-git log --oneline -4
+git branch --show-current      # expect main
+git log --oneline -5
 git status --short             # expect clean
 docker compose up -d
 pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
@@ -178,11 +207,12 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Sprint 9.0 is committed on `feat/ai-service` and the full gate plus all
-> 8 integration suites are green. Review the branch diff against `main`.
-> If you approve, merge with `--ff-only`, push, and verify the remote
-> GitHub Actions run — the new `pnpm typecheck` step has not run on the
-> remote yet. Do not start Sprint 9.1 until that passes.
+> Sprint 9.0 is closed: the AI work is on `main`, remote CI is green, and
+> the AI capabilities are published as API ready. Start Sprint 9.1 — the
+> product domain and tenancy audit — on a branch off current `main`. It is
+> an audit, so produce the current- and target-state domain maps, the
+> permission matrix draft, the tenancy threat model and the migration risk
+> register before changing any schema.
 
 ## Repository isolation
 

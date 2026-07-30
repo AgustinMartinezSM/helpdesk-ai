@@ -1,6 +1,7 @@
 # Sprint 9.0 — Close Sprint 8 and connect a model provider
 
-Status: COMPLETE (2026-07-30), pending merge approval.
+Status: CLOSED (2026-07-30). Merged to `main` with `--ff-only` and pushed;
+remote CI green at `6d2a94c`.
 
 Goal: close the one thing Sprint 8 deliberately left open — the model
 provider choice — and make the repository tell the truth about it. Sprint
@@ -128,6 +129,33 @@ without the fix would have made the commit red.
   `web → bff → gateway → ai-service → tickets-service`. No real ticket
   data was used, and the free tier was the only thing spent.
 - No credential appears in tracked content or in the full git history.
+
+### Remote CI
+
+The branch fast-forwarded onto `main` as ten commits with no merge commit,
+and the first remote run of that history **failed** — the one thing local
+verification could not have caught.
+
+`@helpdesk-ai/ai-service:build` died with
+`ENOENT ... apps/ai-service/src/assets`. The webpack config declares
+`assets: ['./src/assets']`, the directory was empty, and git does not track
+empty directories, so it never reached a fresh checkout. It passed locally
+only because the empty directory happens to exist on the development
+machine. `auth-service`, `tickets-service` and `users-service` each track a
+`.gitkeep` for exactly this reason; `ai-service` was scaffolded without
+one, in Sprint 8.
+
+Worth recording plainly: the new `typecheck` step passed in that failing
+run. It was added to catch a class of break the gate could not see, and it
+did its job — but a build that only fails on a clean checkout is a
+different class again, and nothing local will ever find it. The lesson is
+that "green locally" and "green on a fresh clone" are separate claims.
+
+Fixed forward in `6d2a94c` (`fix(ai): track ai-service assets directory`),
+one empty file, no history rewritten. The following run was green:
+lint (14 projects), typecheck (13), test (14), build (14, with
+`@helpdesk-ai/ai-service:build` ✅) and all 8 integration suites against
+real PostgreSQL and RabbitMQ containers.
 
 ## Hardening increment: one redaction boundary
 
