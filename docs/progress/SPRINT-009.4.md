@@ -1,12 +1,11 @@
-# Sprint 9.4 — Write paths, scoped reads, and the rest of phases 5 and 6
+# Sprint 9.4 — the tenancy migration, completed
 
-Status: **Phases 5 and 6 complete (2026-07-31).** The 2026-07-30 half ran
-phase 6's writes and tickets-service's reads; the 2026-07-31 half ran
-everything both phases still owed: the remaining scoped reads, the permission
-cutover, the membership lifecycle, the consumer migration to the
-tenant-carrying stream, assignee validation, and the backfill re-run. Phase 7
-(`NOT NULL`, the first irreversible step) is deliberately not started — see
-`docs/architecture/tenancy-phase-7-readiness.md`.
+Status: **All phases complete (2026-07-31). The migration is done.** The
+2026-07-30 half ran phase 6's writes and tickets-service's reads; 2026-07-31
+ran everything else: the remaining scoped reads, the permission cutover, the
+membership lifecycle, the consumer migration to the tenant-carrying stream,
+assignee validation, the backfill re-run — and then, with explicit approval,
+phases 7 and 8: `NOT NULL` enforcement and the legacy cleanup.
 
 ## The plan's order was wrong, and following it would have broken the product
 
@@ -208,33 +207,60 @@ All five verification checks pass, and — new this sprint — all five now
 actually flip the exit code; before, only the count comparison did, and a run
 with untenanted rows still exited 0.
 
+## Phase 7 — the database refuses an untenanted row (2026-07-31, approved)
+
+Seven tables constrained with guard-UPDATE-then-`SET NOT NULL` migrations;
+rollback from here is a forward migration, not a `git revert`. Two tables
+are nullable **by design**: `user_snapshots` (registration creates the row
+before the membership event supplies the tenant) and `audit_events` — the
+one the readiness analysis missed and execution caught: the firehose records
+`user.registered.v1`, which is structurally tenantless forever, and the
+constraint would have dead-lettered every registration record. The
+constraint's types forced out three now-unreachable defensive branches, and
+a new integration test proves the net: inserting a tenantless row violates
+the constraint. Full record: `tenancy-phase-7-readiness.md`.
+
+## Phase 8 — no compatibility scaffolding remains (2026-07-31, approved)
+
+The dual publish ended: v2 is the only published revision of the five ticket
+and AI contracts, the v1 contracts are deleted, and the durable queues'
+stale v1 bindings are removed by the client itself — subscriptions declare
+`retiredBindingKeys` and every boot unbinds them idempotently, proven
+against the real broker including a pre-seeded stale binding. The `roles`
+claim left the token (login/refresh/me responses keep `user.roles` from the
+user row — the product's role names never belonged in the claim), the
+projected `roles` column left users-service, and `Actor` took its final
+shape: `permissions` required, `organizationId` deliberately optional
+because an account that belongs nowhere yet is a state the product mints on
+purpose. Rebuild procedures became per-organization by construction (R13).
+
 ## Not done
 
-- **Phase 7: `NOT NULL` and composite unique indexes.** The first step a code
-  revert cannot undo. Preconditions, ordering, rollback and the evidence
-  gathered so far live in `docs/architecture/tenancy-phase-7-readiness.md` —
-  it waits for explicit approval.
-- **Phase 8: stop publishing v1, remove the v1 no-op arms and their queue
-  bindings, drop the `roles` compatibility claim.**
-- **R13: the documented rebuild procedures are still cross-tenant staff
-  reads**, and rebuilds must still be followed by the tenant backfill.
+- **Seeded role-template rows** — still blocked on the template-vocabulary
+  and scope-qualifier decision; the code map in organizations-service is the
+  deliberate interim.
 - **R9 beyond tickets-service:** the other integration suites still teardown
   with unfiltered `deleteMany()`.
+- **`retiredBindingKeys` literals** stay until every environment's durable
+  queue has booted past this version once.
+- The Sprint 9.0 items (AI usage ceilings, key rotation, rate limiting,
+  roadmap document) are unchanged.
 
 ## Verified
 
 The 2026-07-30 half: full gate green locally and remotely (run `30589056698`
-on `75b2bbb`, first attempt). The 2026-07-31 half: full gate green
-(`format:check`, `lint`, `typecheck`, `test`, `build`) and all nine
-integration suites against real PostgreSQL and RabbitMQ, including the new
-adversarial coverage — audit's tenantless-v2 DLQ proof, analytics'
-two-organization summaries, notification's mismatch dead-letters, users'
-scoped directory end to end, organizations' lifecycle events on a real
-broker. Remotely: GitHub Actions run `30642812316` on `7d19d22` — the full
-gate plus all nine integration suites against real service containers —
-green on its first attempt. The only annotation is the known
-`pnpm/action-setup@v4` Node 20 deprecation warning, still tracked as its own
-maintenance item.
+on `75b2bbb`, first attempt). Phases 5 and 6: full gate green plus all nine
+integration suites, with the new adversarial coverage — audit's
+tenantless-v2 DLQ proof, analytics' two-organization summaries,
+notification's mismatch dead-letters, users' scoped directory end to end,
+organizations' lifecycle events on a real broker — and remotely, run
+`30642812316` on `7d19d22`, green on its first attempt. Phases 7 and 8: the
+full gate and all nine suites again after the constraints and the cleanup,
+now also proving the not-null net, the queue unbind against a pre-seeded
+stale binding, and that a legacy v1-typed publish is never delivered. The
+remote result for the final tip is recorded in its own docs commit, as
+usual. The only CI annotation throughout is the known `pnpm/action-setup@v4`
+Node 20 deprecation warning, still tracked as its own maintenance item.
 
 ## Documentation
 
@@ -247,8 +273,14 @@ synchronous edge and an updated rebuild note; `tenancy-migration-plan.md`'s
 phase 5/6 entries and seven risk cells now record what landed;
 `tenancy-target-state.md`'s header stopped claiming nothing reads the
 claims; `local-development.md` covers the new tickets-service variables; and
-`tenancy-phase-7-readiness.md` is new. Removed in passing: the stale
-"requires approval" note on the already-approved matrix, and the
-"auth-service is the only caller" comment on the internal endpoint. No
-fictional experience, customers, incidents or approvals were introduced
-anywhere in this sprint's documentation.
+`tenancy-phase-7-readiness.md` is new and now carries its own outcome
+record, including the exemption it had missed. After phases 7 and 8:
+the migration plan's last two phase entries and its header record
+completion, R13 and R14 closed in the risk register, `data-ownership.md`'s
+rebuild paths became per-organization (fixing the stale user-count line the
+plan had flagged), and `SECURITY.md`'s claims section reflects the token
+without `roles`. Removed in passing: the stale "requires approval" note on
+the already-approved matrix, and the "auth-service is the only caller"
+comment on the internal endpoint. No fictional experience, customers,
+incidents or approvals were introduced anywhere in this sprint's
+documentation.

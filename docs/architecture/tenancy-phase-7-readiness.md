@@ -1,14 +1,12 @@
 # Phase 7 readiness — enforce `NOT NULL` on the tenant columns
 
-Status: **Prepared 2026-07-31. Not started, and it must not start without
-explicit approval.** Phase 7 is the first step in the tenancy migration that
-a code revert cannot undo: after it, rollback is a forward migration making
-columns nullable again — safe, but a migration, not a `git revert`.
+Status: **Approved and executed 2026-07-31.** The sections below are the
+readiness analysis as approved; the outcome record at the end says what the
+execution actually did, including the one thing the analysis missed.
 
-This document is the evidence that the preconditions hold, the exact shape of
-the change, and what would go wrong if it ran anyway. It exists so the
-approval decision is about the step itself, not about whether the homework
-was done.
+Phase 7 is the first step in the tenancy migration that a code revert cannot
+undo: rollback from here is a forward migration making columns nullable
+again — safe, but a migration, not a `git revert`.
 
 ## What phase 7 would do
 
@@ -144,3 +142,38 @@ that service's constraint unapplied and everything else unchanged. Re-running
 is safe: the guard UPDATE is idempotent and `SET NOT NULL` is not partial.
 The platform runs correctly in the mixed state — the constraint is a net
 under behavior the code already enforces, not new behavior.
+
+## Outcome record — executed 2026-07-31 (`88b2cd6`)
+
+**Seven tables constrained, not nine.** The analysis above already exempted
+`user_snapshots`; execution surfaced a second structural exemption this
+document had missed: **`audit_events` cannot be `NOT NULL` while
+`user.registered.v1` exists**, because the firehose records every event,
+registration is anonymous forever, and the constraint would have
+dead-lettered every registration record. Both exemptions are
+nullable-by-design, spelled out on their schema comments, and the verifier
+prints their null counts as informational instead of failing on them. Their
+scoped reads already exclude nulls, so nothing user-visible changes.
+
+**Applied**: guard-UPDATE-then-`SET NOT NULL` migrations in tickets-service
+(three tables), ai-service, analytics-service (`ticket_snapshots` only) and
+notification-service (two tables), verified with `prisma migrate diff`
+(no drift) and by the integration suites' `migrate deploy` against populated
+`_test` databases. One index added because a real query needed it —
+`[organization_id, created_at]` for the tickets list; ai-service's reads
+turned out to filter by ticket id under the permission gate, so the index
+this document guessed at was not added.
+
+**The constraint deleted code, as predicted**: the regenerated client types
+forced out three now-unreachable defensive branches (tickets'
+refuse-and-name-the-row, ai's skip-with-warning, notification's legacy-null
+ref leg), and `TicketRef`/`TicketSnapshot` carry a required organization in
+their domains. A new integration test proves the net: inserting a tenantless
+row violates the constraint.
+
+**The `Actor` tightening** rides with the phase-8 claims cleanup rather than
+this migration, so the fixture churn happens once: `permissions` becomes
+required; `organizationId` deliberately stays optional, because a token for
+an account that belongs nowhere is a real minted state the product preserves
+(registration→membership is racy), and the refusal lives in
+`requireOrganization`.

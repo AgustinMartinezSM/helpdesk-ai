@@ -5,9 +5,9 @@ delivery plan; the threat ids are from `tenancy-threat-model.md`. Phases 0, 1
 and 2 ran in Sprint 9.2, phases 3 and 4 in Sprint 9.3, and phases 5 and 6 in
 Sprint 9.4 — in inverted order: phase 6's write half first, then phase 5's
 reads, then phase 6's consumers and lifecycle (see phase 5 for why). Each
-entry records its own deviations. Phases 7 and 8 are unstarted; phase 7's
-preconditions and evidence live in `tenancy-phase-7-readiness.md`, and it
-does not begin without explicit approval.
+entry records its own deviations. Phases 7 and 8 were approved and executed
+on 2026-07-31 — **the migration is complete**. Phase 7's evidence and outcome
+live in `tenancy-phase-7-readiness.md`.
 
 ## The ordering constraint that drives everything
 
@@ -41,7 +41,7 @@ cell says so and names the commit.
 | R10 | **CI provisioning duplicates the init script by hand.** A new database or role must be added in two places with no shared source.                                                        | `ci.yml:77`; `01-service-databases.sh`                                               |  Medium  |  Medium  | CI                             | Adding organizations-service means editing both. Note it in the PR checklist; consider generating one from the other. **Done by hand (`0e835e0`)** — the init script and two separate spots in `ci.yml`; still no shared source.                                                                                                                                                                                                                                                                    |  9.2   | CI-only                                                   |
 | R11 | **The gateway forwards every header untouched**, so any header-based tenancy is forgeable.                                                                                               | `service-proxy.ts:29`                                                                | **High** |   Low    | gateway                        | Tenancy lives only in the signed token. Never introduce a trusted tenant header without first giving the gateway a strip-and-reinject step.                                                                                                                                                                                                                                                                                                                                                         |  9.2   | n/a — a rule, not a change                                |
 | R12 | **CORS and the refresh cookie collide with per-tenant hosts.** Exact-match origins, no wildcard; cookie hard-coded to path `/session`.                                                   | `env.ts:34`; `session.controller.ts:144`                                             |  Medium  |   Low    | web-bff                        | Keep one host; select organization in-app rather than by subdomain. Revisit only if per-tenant hosts become a requirement.                                                                                                                                                                                                                                                                                                                                                                          |   —    | Changing later invalidates live sessions                  |
-| R13 | **A rebuild path becomes a cross-tenant operation.** Every documented projection rebuild is a global staff read.                                                                         | `data-ownership.md:58-65`                                                            |  Medium  |  Medium  | users, notification, analytics | Scope rebuild procedures per organization and update the doc in the same change.                                                                                                                                                                                                                                                                                                                                                                                                                    |  9.4   | Rebuilds are already destructive-then-replay; unchanged   |
+| R13 | **A rebuild path becomes a cross-tenant operation.** Every documented projection rebuild is a global staff read.                                                                         | `data-ownership.md:58-65`                                                            |  Medium  |  Medium  | users, notification, analytics | Scope rebuild procedures per organization and update the doc in the same change. **Done (phase 8)** — the scoped reads made every documented rebuild per-organization by construction; data-ownership.md records the two residual GAPs (registrations listing, user_snapshots re-stamp).                                                                                                                                                                                                            |  9.4   | Rebuilds are already destructive-then-replay; unchanged   |
 | R14 | **No role-changed event exists**, so users-service's projected `roles` cannot be kept fresh.                                                                                             | contracts.ts — only `user.registered.v1`                                             |   Low    |  Medium  | users                          | Membership events from organizations-service supersede this. Do not add a role-changed event to auth-service. **The events exist now (`4e68f93`)**; the projected `roles` column itself is phase-8 cleanup.                                                                                                                                                                                                                                                                                         |  9.4   | None                                                      |
 | R15 | **`correlationId` is never set**, so an audit row cannot be traced to a request or an actor.                                                                                             | all three publishers pass two args                                                   |   Low    |   High   | all                            | Pass it. Cheap, independent of tenancy, and it makes every later investigation possible. **Done (`3a913f0`)** — all three publishers stamp the request trace id on the envelope.                                                                                                                                                                                                                                                                                                                    |  9.2   | None                                                      |
 
@@ -386,7 +386,7 @@ merely able to see it.
   all five checks green (and all five now flip the verifier's exit code —
   previously only the count comparison did).
 
-### Phase 7 — enforce (9.4)
+### Phase 7 — enforce (9.4) — **done, with two structural exemptions**
 
 Only after the verification in phase 4 has been re-run and passes: set
 `NOT NULL`, add composite indexes with `organization_id` first, and make the
@@ -396,7 +396,16 @@ scope non-optional in every remaining type.
 first irreversible step** — reverting past it requires making columns nullable
 again, which is safe but is a migration rather than a code revert.
 
-### Phase 8 — legacy cleanup (9.4)
+**Executed 2026-07-31 (`88b2cd6`), approved.** Seven tables constrained.
+`user_snapshots` and `audit_events` are nullable **by design**, not by
+omission: registration is anonymous, creates the snapshot row before the
+membership event supplies a tenant, and is recorded by the firehose as the
+structurally tenantless `user.registered.v1` forever. The checkpoint holds
+where it can mean anything — every table whose rows are always attributable
+refuses an untenanted one — and the two exempt tables' scoped reads already
+exclude nulls. Full record: `tenancy-phase-7-readiness.md`.
+
+### Phase 8 — legacy cleanup (9.4) — **done**
 
 Stop publishing v1 events once every consumer reads v2. Remove the `roles`
 compatibility claim once every call site reads `perms`. Scope the documented
@@ -404,6 +413,26 @@ rebuild paths and update `data-ownership.md` in the same change (R13). Fix the
 stale line at `data-ownership.md:44` while there.
 
 **Checkpoint:** no compatibility scaffolding remains.
+
+**Executed 2026-07-31 (`1a09a56`, `87289bb`), approved.** The dual publish
+ended and the five v1 contracts are deleted; `user.registered.v1` lives on,
+being the only version an anonymous fact can have. The queue surgery is the
+client's own: subscriptions declare `retiredBindingKeys` and every boot
+unbinds them idempotently, proven against the real broker including a
+pre-seeded stale binding. The `roles` claim is gone from the token while the
+login/refresh/me responses keep `user.roles` from the user row —
+authorization reads `perms`, and the product's role names never belonged in
+the claim. users-service dropped its projected `roles` column (R14's stale
+copy), and `Actor` took its final shape: `permissions` required,
+`organizationId` deliberately optional because belongs-nowhere is a state
+the product mints on purpose. The rebuild paths became per-organization by
+construction (R13), with the two residual GAPs named in `data-ownership.md`.
+
+**What deliberately remains, and is not scaffolding:** the two
+nullable-by-design tenant columns (phase 7's exemptions), the
+`retiredBindingKeys` literals until every environment's durable queue has
+booted past this version once, and the code-map permission evaluator pending
+the template-vocabulary decision.
 
 ## Rollback and recovery
 
