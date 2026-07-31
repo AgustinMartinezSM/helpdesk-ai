@@ -37,3 +37,32 @@ export class UntenantedRowError extends TicketDomainError {
     super(`Row ${rowId} has no organization; re-run the tenant backfill`);
   }
 }
+
+/**
+ * The chosen assignee cannot hold tickets in this organization.
+ *
+ * One message for every cause, on purpose. Distinguishing "no such user"
+ * from "wrong organization", "suspended" or "not staff" would leak
+ * membership facts across the internal boundary — probing assignment could
+ * then map who belongs where. A foreign user simply has no membership row
+ * under the ticket's organization, so the cross-tenant case answers exactly
+ * like a guessed id.
+ */
+export class InvalidAssigneeError extends TicketDomainError {
+  constructor() {
+    super(
+      'The assignee is not an active member who can hold tickets in this organization',
+    );
+  }
+}
+
+/**
+ * The membership check could not run: the verifier is unconfigured, or the
+ * call to organizations-service failed. Fail closed — refusing an
+ * assignment is recoverable, a cross-tenant assignment is not.
+ */
+export class MembershipVerificationUnavailableError extends TicketDomainError {
+  constructor() {
+    super('Assignment is temporarily unavailable; try again shortly');
+  }
+}

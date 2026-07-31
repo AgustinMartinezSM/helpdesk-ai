@@ -5,9 +5,11 @@ import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { PERMISSIONS } from '@helpdesk-ai/security';
 import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
+import { MEMBERSHIP_VERIFIER } from '../../application/ports/membership-verifier';
 import { TICKET_REPOSITORY } from '../../application/ports/ticket.repository';
 import {
   FakeEventPublisher,
+  FakeMembershipVerifier,
   InMemoryTicketRepository,
 } from '../../application/testing/fakes';
 import { ticketsServiceEnvSchema } from '../../config/env';
@@ -27,9 +29,14 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
   let userToken: string;
   let otherToken: string;
   let agentToken: string;
+  // Shared with the tests so they can add rows and simulate an outage.
+  const memberships = new FakeMembershipVerifier();
 
   beforeAll(async () => {
     const env = validateEnv(ticketsServiceEnvSchema, TEST_ENV);
+    // The agent the suite assigns tickets to is a live member of the test
+    // organization; anybody else is refused with the one generic 422.
+    memberships.set(TEST_ORGANIZATION, '33333333-3333-4333-8333-333333333333');
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
@@ -40,6 +47,10 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
       // a live AMQP connection.
       .overrideProvider(EVENT_PUBLISHER)
       .useValue(new FakeEventPublisher())
+      // Replacing the verifier keeps the suite offline: the real one calls
+      // organizations-service over HTTP.
+      .overrideProvider(MEMBERSHIP_VERIFIER)
+      .useValue(memberships)
       .compile();
 
     app = moduleRef.createNestApplication({ logger: false });
@@ -196,6 +207,47 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
       .set(asUser(userToken))
       .send({ body: 'sneaky note', internal: true })
       .expect(403);
+  });
+
+  it('verifies assignees against live membership over HTTP', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/tickets')
+      .set(asUser(userToken))
+      .send({ title: 'Screen flickers', description: 'Only on Mondays' })
+      .expect(201);
+    const id = created.body.id;
+
+    // A verified member of the organization can hold the ticket.
+    await request(app.getHttpServer())
+      .patch(`/tickets/${id}/assignee`)
+      .set(asUser(agentToken))
+      .send({ assigneeId: '33333333-3333-4333-8333-333333333333' })
+      .expect(200);
+
+    // No membership row under this organization — a guessed id and a member
+    // of another tenant produce this same answer. 422, not 404: the ticket
+    // was found, the assignee is unusable.
+    const refused = await request(app.getHttpServer())
+      .patch(`/tickets/${id}/assignee`)
+      .set(asUser(agentToken))
+      .send({ assigneeId: '99999999-9999-4999-8999-999999999999' })
+      .expect(422);
+    expect(refused.body.message).toBe(
+      'The assignee is not an active member who can hold tickets in this organization',
+    );
+
+    // Verification down is 503, not any 4xx: the request was fine and can
+    // simply be retried.
+    memberships.failure = new Error('connect ECONNREFUSED 127.0.0.1:3010');
+    try {
+      await request(app.getHttpServer())
+        .patch(`/tickets/${id}/assignee`)
+        .set(asUser(agentToken))
+        .send({ assigneeId: '33333333-3333-4333-8333-333333333333' })
+        .expect(503);
+    } finally {
+      memberships.failure = null;
+    }
   });
 
   it('filters internal notes from requesters', async () => {

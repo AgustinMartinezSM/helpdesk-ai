@@ -7,7 +7,9 @@ import {
 import { NoOrganizationContextError } from '@helpdesk-ai/security';
 import {
   ForbiddenTicketActionError,
+  InvalidAssigneeError,
   InvalidStatusTransitionError,
+  MembershipVerificationUnavailableError,
   TicketDomainError,
   TicketNotFoundError,
   UntenantedRowError,
@@ -70,6 +72,23 @@ function describe(exception: TicketDomainError | NoOrganizationContextError): {
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       error: 'Internal Server Error',
+    };
+  }
+  if (exception instanceof InvalidAssigneeError) {
+    // A well-formed request naming an unusable assignee. Not 404: the
+    // ticket was found, and the deliberately generic message confirms
+    // nothing about who exists where.
+    return {
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      error: 'Unprocessable Entity',
+    };
+  }
+  if (exception instanceof MembershipVerificationUnavailableError) {
+    // The caller's request was fine; the verification dependency was not.
+    // 503 invites a retry, which a 4xx would wrongly discourage.
+    return {
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      error: 'Service Unavailable',
     };
   }
   return {

@@ -7,7 +7,9 @@ import {
 } from '@helpdesk-ai/security';
 import {
   ForbiddenTicketActionError,
+  InvalidAssigneeError,
   InvalidStatusTransitionError,
+  MembershipVerificationUnavailableError,
   TicketNotFoundError,
 } from '../../domain/errors';
 import {
@@ -18,6 +20,10 @@ import {
   type TicketStatus,
 } from '../../domain/ticket';
 import type { EventPublisher } from '../ports/event-publisher';
+import type {
+  AssigneeMembership,
+  MembershipVerifier,
+} from '../ports/membership-verifier';
 import type { Clock, TicketRepository } from '../ports/ticket.repository';
 
 export class ChangeTicketStatusUseCase {
@@ -92,6 +98,12 @@ export class AssignTicketUseCase {
     private readonly tickets: TicketRepository,
     private readonly clock: Clock,
     private readonly events: EventPublisher,
+    /**
+     * Null when the internal call is not configured. Deliberately not
+     * optional: a wiring site must say "no verifier" out loud, because the
+     * use case then refuses every assignment (fail closed).
+     */
+    private readonly memberships: MembershipVerifier | null,
   ) {}
 
   async execute(
@@ -120,6 +132,47 @@ export class AssignTicketUseCase {
     }
 
     const organizationId = requireOrganizationOf(actor, ticket);
+
+    // Re-validate the assignee against live membership state — including
+    // self-assignment: the actor's own token can be up to one TTL stale past
+    // a suspension, and this call is exactly the re-validation ADR 0014
+    // reserved for high-consequence operations (see the port's doc comment).
+    // Unassignment skips it because null references nobody.
+    if (assigneeId !== null) {
+      if (!this.memberships) {
+        // Fail closed, unlike auth's degrade-open resolver: refusing an
+        // assignment is recoverable, a cross-tenant assignment is not.
+        throw new MembershipVerificationUnavailableError();
+      }
+
+      let membership: AssigneeMembership | null;
+      try {
+        membership = await this.memberships.findInOrganization(
+          organizationId,
+          assigneeId,
+        );
+      } catch {
+        // 503, not 4xx: the caller's request was fine, the verification
+        // dependency was not.
+        throw new MembershipVerificationUnavailableError();
+      }
+
+      // One refusal for every cause — see InvalidAssigneeError. A foreign
+      // user has no row under the ticket's organization, so the cross-tenant
+      // case is indistinguishable from a guessed id.
+      if (membership === null || membership.status !== 'active') {
+        throw new InvalidAssigneeError();
+      }
+      if (membership.organizationStatus !== 'active') {
+        throw new InvalidAssigneeError();
+      }
+      // The can-take-a-ticket grant doubles as the can-hold-a-ticket marker:
+      // requesters and auditors lack it, agents and admins carry it.
+      if (!membership.permissions.includes(PERMISSIONS.TICKETS_ASSIGN_SELF)) {
+        throw new InvalidAssigneeError();
+      }
+    }
+
     const now = this.clock.now();
     const updated: Ticket = { ...ticket, assigneeId, updatedAt: now };
     await this.tickets.update(updated, {

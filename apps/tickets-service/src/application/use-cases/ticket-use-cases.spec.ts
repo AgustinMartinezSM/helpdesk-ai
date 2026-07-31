@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   NoOrganizationContextError,
   PERMISSIONS,
@@ -5,13 +6,16 @@ import {
 } from '@helpdesk-ai/security';
 import {
   ForbiddenTicketActionError,
+  InvalidAssigneeError,
   InvalidStatusTransitionError,
+  MembershipVerificationUnavailableError,
   TicketNotFoundError,
 } from '../../domain/errors';
 import { canTransition, requireOrganizationOf } from '../../domain/ticket';
 import { OTHER_ORGANIZATION, TEST_ORGANIZATION } from '../../testing/fixtures';
 import {
   FakeEventPublisher,
+  FakeMembershipVerifier,
   FixedClock,
   InMemoryTicketRepository,
 } from '../testing/fakes';
@@ -81,15 +85,20 @@ function buildContext() {
   const tickets = new InMemoryTicketRepository();
   const clock = new FixedClock(new Date('2026-07-28T12:00:00.000Z'));
   const events = new FakeEventPublisher();
+  const memberships = new FakeMembershipVerifier();
+  // The staff actor the suites assign to is a real, active member of the
+  // test organization unless a test overwrites the row to say otherwise.
+  memberships.set(TEST_ORGANIZATION, AGENT.id);
   return {
     tickets,
     clock,
     events,
+    memberships,
     create: new CreateTicketUseCase(tickets, clock, events),
     get: new GetTicketUseCase(tickets),
     listTickets: new ListTicketsUseCase(tickets),
     changeStatus: new ChangeTicketStatusUseCase(tickets, clock, events),
-    assign: new AssignTicketUseCase(tickets, clock, events),
+    assign: new AssignTicketUseCase(tickets, clock, events, memberships),
     comment: new AddCommentUseCase(tickets, clock, events),
   };
 }
@@ -475,6 +484,149 @@ describe('AssignTicketUseCase', () => {
     await expect(
       ctx.assign.execute(selfOnlyAgent, ticket.id, null),
     ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
+  });
+});
+
+describe('assignee verification', () => {
+  // Assignment re-validates the assignee against live membership state via
+  // a synchronous internal call — the operation class ADR 0014 reserved
+  // re-validation for. Reads never do this; they trust the token alone.
+
+  function aTicketFor(ctx: ReturnType<typeof buildContext>) {
+    return ctx.create.execute(REQUESTER, { title: 'T', description: 'D' });
+  }
+
+  it('consults live membership even for self-assignment', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+
+    const assigned = await ctx.assign.execute(AGENT, ticket.id, AGENT.id);
+
+    // The token alone is not enough: it can be a full TTL stale past a
+    // suspension, so even taking a ticket yourself is re-validated.
+    expect(assigned.assigneeId).toBe(AGENT.id);
+    expect(ctx.memberships.lookups).toEqual([
+      { organizationId: TEST_ORGANIZATION, userId: AGENT.id },
+    ]);
+  });
+
+  it('refuses a self-assignment when the actor was suspended after minting', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+    // The token still carries assign_self; the live row says suspended.
+    ctx.memberships.set(TEST_ORGANIZATION, AGENT.id, { status: 'suspended' });
+
+    await expect(
+      ctx.assign.execute(AGENT, ticket.id, AGENT.id),
+    ).rejects.toBeInstanceOf(InvalidAssigneeError);
+    expect(ctx.events.assigned).toEqual([]);
+  });
+
+  it('refuses a cross-tenant assignee: a foreign user has no row under the ticket organization', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+    // A real, fully active membership — in the OTHER organization. Under
+    // the ticket's organization there is no row at all, which is all a
+    // cross-tenant assignee looks like from inside a tenant.
+    ctx.memberships.set(OTHER_ORGANIZATION, FOREIGN_AGENT.id);
+
+    await expect(
+      ctx.assign.execute(AGENT, ticket.id, FOREIGN_AGENT.id),
+    ).rejects.toBeInstanceOf(InvalidAssigneeError);
+    expect(ctx.events.assigned).toEqual([]);
+  });
+
+  it('answers a guessed uuid exactly like a member of another tenant', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+    ctx.memberships.set(OTHER_ORGANIZATION, FOREIGN_AGENT.id);
+
+    // Same error, same message: the refusal must not reveal whether the id
+    // exists somewhere else.
+    for (const assigneeId of [randomUUID(), FOREIGN_AGENT.id]) {
+      const attempt = ctx.assign.execute(AGENT, ticket.id, assigneeId);
+      await expect(attempt).rejects.toBeInstanceOf(InvalidAssigneeError);
+      await expect(attempt).rejects.toThrow(new InvalidAssigneeError().message);
+    }
+  });
+
+  it('refuses an assignee whose template cannot hold tickets', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+    const requesterMember = randomUUID();
+    // Active and real, but without the can-take-a-ticket grant that doubles
+    // as the can-hold-a-ticket marker.
+    ctx.memberships.set(TEST_ORGANIZATION, requesterMember, {
+      roleTemplate: 'requester',
+      permissions: [PERMISSIONS.TICKETS_CREATE, PERMISSIONS.TICKETS_READ_OWN],
+    });
+
+    await expect(
+      ctx.assign.execute(AGENT, ticket.id, requesterMember),
+    ).rejects.toBeInstanceOf(InvalidAssigneeError);
+  });
+
+  it('refuses assignment inside a suspended organization', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+    // The member is fine; their whole organization is not.
+    ctx.memberships.set(TEST_ORGANIZATION, AGENT.id, {
+      organizationStatus: 'suspended',
+    });
+
+    await expect(
+      ctx.assign.execute(AGENT, ticket.id, AGENT.id),
+    ).rejects.toBeInstanceOf(InvalidAssigneeError);
+  });
+
+  it('maps a verifier failure to unavailable, never to an invalid assignee', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+    ctx.memberships.failure = new Error('connect ECONNREFUSED 127.0.0.1:3010');
+
+    // 503-shaped, not 4xx-shaped: the caller's request was fine, the
+    // verification dependency was not.
+    await expect(
+      ctx.assign.execute(AGENT, ticket.id, AGENT.id),
+    ).rejects.toBeInstanceOf(MembershipVerificationUnavailableError);
+    expect(ctx.events.assigned).toEqual([]);
+  });
+
+  it('refuses assignment while no verifier is configured (fail closed)', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+    const unconfigured = new AssignTicketUseCase(
+      ctx.tickets,
+      ctx.clock,
+      ctx.events,
+      null,
+    );
+
+    // The opposite of auth's degrade-open resolver, on purpose: refusing an
+    // assignment is recoverable, a cross-tenant assignment is not.
+    await expect(
+      unconfigured.execute(AGENT, ticket.id, AGENT.id),
+    ).rejects.toBeInstanceOf(MembershipVerificationUnavailableError);
+  });
+
+  it('never verifies an unassignment: null references nobody', async () => {
+    const ctx = buildContext();
+    const ticket = await aTicketFor(ctx);
+    await ctx.assign.execute(AGENT, ticket.id, AGENT.id);
+    const lookupsAfterAssign = ctx.memberships.lookups.length;
+
+    // Even an unconfigured verifier can unassign — there is no membership
+    // to check, so fail-closed has nothing to close.
+    const unconfigured = new AssignTicketUseCase(
+      ctx.tickets,
+      ctx.clock,
+      ctx.events,
+      null,
+    );
+    const unassigned = await unconfigured.execute(AGENT, ticket.id, null);
+
+    expect(unassigned.assigneeId).toBeNull();
+    expect(ctx.memberships.lookups).toHaveLength(lookupsAfterAssign);
   });
 });
 

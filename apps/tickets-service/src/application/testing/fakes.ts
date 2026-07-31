@@ -1,3 +1,4 @@
+import { PERMISSIONS } from '@helpdesk-ai/security';
 import type {
   Ticket,
   TicketComment,
@@ -10,6 +11,10 @@ import type {
   TicketCreatedEvent,
   TicketStatusChangedEvent,
 } from '../ports/event-publisher';
+import type {
+  AssigneeMembership,
+  MembershipVerifier,
+} from '../ports/membership-verifier';
 import type {
   Clock,
   TicketListFilter,
@@ -111,6 +116,46 @@ export class FakeEventPublisher implements EventPublisher {
     event: TicketCommentAddedEvent,
   ): Promise<void> {
     this.commentsAdded.push(event);
+  }
+}
+
+export class FakeMembershipVerifier implements MembershipVerifier {
+  /** Membership rows keyed by organization, then user — like the real data. */
+  private readonly rows = new Map<string, AssigneeMembership>();
+  /** Every lookup made, so tests can assert the verifier was (not) asked. */
+  readonly lookups: Array<{ organizationId: string; userId: string }> = [];
+  /** When set, every lookup throws it — the infrastructure-down case. */
+  failure: Error | null = null;
+
+  /** Registers a membership; defaults model an active agent in a live org. */
+  set(
+    organizationId: string,
+    userId: string,
+    overrides: Partial<AssigneeMembership> = {},
+  ): void {
+    this.rows.set(`${organizationId}:${userId}`, {
+      status: 'active',
+      roleTemplate: 'agent',
+      permissions: [
+        PERMISSIONS.TICKETS_ASSIGN_SELF,
+        PERMISSIONS.TICKETS_ASSIGN_AGENT,
+      ],
+      organizationStatus: 'active',
+      ...overrides,
+    });
+  }
+
+  async findInOrganization(
+    organizationId: string,
+    userId: string,
+  ): Promise<AssigneeMembership | null> {
+    this.lookups.push({ organizationId, userId });
+    if (this.failure) {
+      throw this.failure;
+    }
+    // Missing key answers null exactly like the adapter's 404: a foreign
+    // user has no row under this organization, same as a guessed id.
+    return this.rows.get(`${organizationId}:${userId}`) ?? null;
   }
 }
 

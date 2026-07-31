@@ -56,7 +56,10 @@ export class CreateTicketUseCase {
       priority: ticket.priority,
       status: ticket.status,
       traceId,
-      organizationId: actor.organizationId,
+      // The required const, not the raw optional claim: the event contract
+      // still types this possibly-undefined, but a tenantless caller was
+      // already refused above, so the event carries a guaranteed value.
+      organizationId,
       createdAt: now,
     });
 
