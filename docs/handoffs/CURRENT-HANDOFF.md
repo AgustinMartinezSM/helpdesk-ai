@@ -1,401 +1,206 @@
 # Current handoff
 
-**Date:** 2026-07-30
-**Sprint:** 9.4 — Write paths and the first scoped reads (in progress)
+**Date:** 2026-07-31
+**Sprint:** 9.4 — phases 5 and 6 of the tenancy migration, complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `main`, pushed, remote CI green. Everything below is merged.
+**Branch:** `main`. `git log --oneline -15` is the source of truth for the
+tip and for what is pushed; this file is for the things git cannot tell you.
 
-No commit sha here on purpose. This line has gone stale four times in one
-sprint — a handoff that names the tip is wrong the moment anything lands, and
-a wrong sha reads as authoritative. `git log --oneline -10` is the source of
-truth; this file is for the things git cannot tell you.
+Read `docs/progress/SPRINT-009.4.md` first — it now covers both halves of the
+sprint — then `docs/architecture/tenancy-phase-7-readiness.md`, which is what
+the next session most likely acts on.
 
-Read `docs/progress/SPRINT-009.4.md` first, then `SPRINT-009.3.md`. This file
-is the operational summary of both.
+## What is true now that was not yesterday
 
-## Sprint 9.4 — writes are tenant-safe, reads are being scoped
+**Authorization is permission-based and the claims are load-bearing.**
+`isStaff`/`isAdmin` and the duplicate `Actor` copies are deleted (ADR 0015,
+amended). Call sites check keys from `PERMISSIONS` in `libs/security`;
+`perms` in the token carries real values resolved from the membership's role
+template through a code map in organizations-service. Seeded template rows
+remain blocked on the template-vocabulary question — the map is the interim,
+and the agent template carries three marked interim widenings (`read_all`,
+`assign_agent`, flat `people.read`) that shrink when branches and teams
+arrive. Agents deliberately LOST the analytics summary (approved matrix);
+a test pins it.
 
-**The plan's phase order was wrong and I inverted it.** Reads before writes
-produces a broken product: reads would filter by `organization_id` while
-writes still did not set it, so a ticket created in that window would carry a
-null organization and its own author would not find it. Writes first has no
-such state — the leak window is unchanged from today, because reads were
-already unscoped.
+**The membership lifecycle exists.** Transitions with no self-loops and
+terminal `deactivated`, a version bump per transition (`mv` finally means
+something), `membership.created.v1` / `membership.status-changed.v1` born
+tenant-carrying, and an internal guarded status PATCH as the operator
+surface. Suspension bites at the next refresh (refresh re-resolves, never
+copies) with the one-TTL residual R7 accepted — except assignment, which
+closes even that window by asking live.
 
-**Every write in tickets-service and ai-service takes the organization from
-the token.** `requireOrganization` is the only bridge from the actor's
-optional organization to the domain's required one, so forgetting the check is
-a type error rather than a row belonging to nobody.
+**Every organization-owned read requires the tenant; every consumer reads
+the tenant-carrying stream.** audit, analytics, notification: v2 processed
+under `requireEnvelopeOrganization` (tenantless v2 dead-letters), v1 twins
+acknowledged as explicit no-ops. Do NOT "clean up" the v1 no-op arms or drop
+v1 contracts from subscriptions: the client only ever binds, never unbinds —
+removing them either double-applies facts or strands deliveries. Phase 8
+does queue surgery.
 
-**A child row takes its parent's tenant**, and a mutation insists the caller is
-acting inside the ticket's organization rather than merely able to see it.
-That discharges the debt phase 3 recorded.
+**The users directory is scoped through a projection.** `user_profiles`
+still has no organization column on purpose (ADR 0013);
+`directory_memberships` (fed by the membership events) is the scope, active
+members only. Its rebuild path is `backfill-directory-memberships.sh`.
 
-**tickets-service reads are scoped.** `findById(organizationId, id)`, and
-`organizationId` is required on `TicketListFilter` while every other field
-stays optional — the filter builds its predicate from optional spreads, so a
-forgotten field used to _widen_ the query. A foreign ticket answers null
-exactly as a missing one does, so it is a 404 and not a 403: confirming
-existence is the leak.
+**Assignees are validated against live membership, fail-closed.**
+tickets-service calls organizations-service's
+`GET /internal/organizations/:orgId/memberships/:userId` with the internal
+credential. ADR 0014's amendment draws the settled boundary: high-consequence
+mutations may ask synchronously; read paths never do. Without
+`ORGANIZATIONS_SERVICE_URL` + `INTERNAL_SERVICE_TOKEN` in tickets-service's
+env, every assignment answers 503 — by design, and the boot log says so.
 
-### What is left of phases 5 and 6
+**The backfill sequence ran and verified clean on 2026-07-31.** 13 users =
+13 memberships (2 organization_admin, 11 requester); directory projection
+13 = 13; zero untenanted rows in all nine scoped tables; counts unchanged;
+every id resolves; parents and children agree; everything on bootstrap. The
+dev databases were already clean because only `_test` databases absorbed the
+inter-phase churn — a deployed environment would NOT be, and must run the
+same sequence. All five verifier checks now flip the exit code (they did
+not before — subshell bug, fixed and commented).
 
-- **users-service directory, the audit filter, the five analytics
-  aggregates** are still unscoped. R5 says the analytics five must change in
-  one commit: a partial change leaves a dashboard mixing scoped and unscoped
-  numbers, which is worse than either.
-- **`isStaff`/`isAdmin` are still defined four times.** Delete them rather
-  than change their signature, and delete the duplicate `Actor` copies in
-  tickets-service and users-service in the same change or they drift.
-- **Consumers still read v1**, so the rows they project carry no tenant.
-- **Assignee validation** still accepts any uuid.
+## Phase 7 is prepared and NOT approved
 
-## Sprint 9.3 — phase 3, event contracts v2
-
-Every domain event except `user.registered` now goes out twice: v1 unchanged,
-and a v2 whose **envelope** carries `organizationId`. Nothing consumes a v2.
-No queue binds one. No schema and no column changed anywhere.
-
-**The plan's wording for this phase was wrong and cost real time.** It said
-"`organizationId` required on the v2 envelope", which conflates two separate
-questions — how a consumer tells old from new, and where the tenant sits.
-Both are now settled and written down in the plan itself so nobody
-re-litigates them from the same sentence. Version is in the contract name, as
-ADR 0005 always required. The tenant is on the envelope, next to
-`correlationId`, because every contract names its subject differently and the
-audit trail decodes events it has no schema for.
-
-ADR 0005 gained the envelope-evolution rule it never had: envelope fields are
-added optional and never renamed or removed, and requiredness lives on the
-publish path rather than on a schema that still has to accept v1.
-
-### Three things about phase 3 that will surprise you
-
-**There is no `user.registered.v2`, and there cannot be one.** Registration is
-anonymous, and the membership that would supply a tenant is created by
-_consuming_ that very event. A required field there would never be satisfied.
-It stays tenant-free until organizations-service publishes membership
-lifecycle events. Audit's tenant column for those rows comes from R4's
-per-type map, permanently.
-
-**A v2 is skipped, not faked, when the caller has no organization**, and the
-skip is logged with the contract and subject id. This stays routine even now
-that resolution fails closed, because "belongs to no organization" is still a
-real answer that mints a token — it is the state of an account waiting for its
-membership. What changed in Sprint 9.4 is that an organizations-service
-outage no longer produces a tenant-less token at all; it produces no token.
-
-**The audit trail now records two rows per fact.** The firehose binds `#` so
-it gets both versions, and the id-keyed dedupe cannot collapse two envelopes.
-This runs until phase 8 stops publishing v1. Both publishes share a
-`correlationId`, which is the only thing that groups them. Anything counting
-audit rows per logical fact double-counts across the window.
-
-## Phase 4 — the columns exist (nothing read them _at the time_)
-
-Eight tables across five services gained a nullable `organization_id`, and
-every row that existed was backfilled to the bootstrap organization. At that
-point no domain type, repository mapper or API response mentioned the column
-— that was the checkpoint. Sprint 9.4 changed it for tickets-service and
-ai-service; the other three still do not read theirs.
-
-### Three things to know before phase 5 or 7
-
-**`user_profiles` and `user_snapshots` deliberately have no column.** They are
-projected from `user.registered`, which carries no tenant and cannot — the
-membership that would supply one is created by consuming that very event. They
-wait for membership lifecycle events in phase 6. Do not "finish the job" by
-adding the column without giving it a source first.
-
-**Every row written between now and phase 6 has a null organization**, because
-no write path sets it yet. **Phase 7 must re-run the backfill before adding
-`NOT NULL`** — re-running only the verification will pass on stale data and
-then the constraint will fail.
-
-**A rebuild now leaves rows untenanted.** Replaying a projection restores its
-rows but not the tenant, which is not in the source it replays from until
-consumers read v2. Any rebuild has to be followed by the backfill. This is
-recorded in `data-ownership.md` next to the rebuild paths themselves.
-
-### Verification
-
-`infrastructure/postgres/operations/verify-tenant-columns.sh`, run with
-`--snapshot` before migrating and without it after. Five checks: counts
-against the snapshot, no untenanted rows, every id resolves against
-`helpdesk_organizations`, a ticket agrees with its comments and history, and
-everything is on the bootstrap organization.
-
-Worth knowing that its fourth check was wrong twice before it was right — a
-`LEFT JOIN` reports a ticket with no comments as a disagreement, and joining
-both child tables at once makes a cartesian product. What caught it was the
-checks contradicting each other, not the check itself. If you extend this
-script, keep the checks overlapping.
-
-### Debt phase 3 handed to phase 4 — discharged in Sprint 9.4
-
-A ticket event used to carry the **caller's** organization because the ticket
-had none. It has one now, the two are compared, and a mutation from outside
-the ticket's organization is refused. See the Sprint 9.4 section.
-
-## Sprint 9.2 — closed and merged
-
-Phases 0, 1 and 2 of `docs/architecture/tenancy-migration-plan.md`.
-
-| Commit    | Message                                                                         |
-| --------- | ------------------------------------------------------------------------------- |
-| `e2e37dc` | `test(tickets): assert scoped queries by row identity, not by count`            |
-| `3a913f0` | `feat(observability): carry the request trace id onto published events`         |
-| `0e835e0` | `feat(organizations): add organizations-service and the bootstrap organization` |
-| `c0d24cc` | `feat(auth): carry the active organization in the access token`                 |
-
-The platform behaves exactly as it did before. There is now an organization
-nobody references, and three token claims nobody reads.
-
-## What exists now that did not
-
-**organizations-service**, port 3010, database `helpdesk_organizations`, role
-`organizations_service`. Two tables: `organizations` and `memberships`. One
-bootstrap organization, id `00000000-0000-4000-8000-000000000001`, slug
-`bootstrap`, created by its own migration.
-
-It consumes `user.registered.v1` on `organizations-service.user-registered`
-and publishes nothing. It exposes `/health`, `/health/ready` and one internal
-endpoint, `GET /internal/memberships/:userId/active`.
-
-**It is deliberately absent from the api-gateway.** Do not add a route for it
-without a reason; browsers currently have no path to it at all.
-
-**It declares no `JWT_ACCESS_SECRET`**, unlike every other service, because it
-verifies no access tokens.
-
-**The access token carries `org`, `perms` and `mv`.** tickets-service and
-ai-service now read `org`; every other service still ignores all three.
-`perms` is still an empty array.
+`docs/architecture/tenancy-phase-7-readiness.md` has the constraint list,
+precondition queries with current answers, ordering, rollback, and the one
+open design point: `user_snapshots.organization_id` cannot be NOT NULL while
+registration (anonymous by design) creates the row before the membership
+event supplies the tenant — the honest cheap option is exempting it and
+documenting nullable-by-design. **Do not start phase 7 without explicit
+approval: it is the first step a code revert cannot undo.**
 
 ## Things that will bite you if you do not know them
 
-**Resolution fails closed now — but only on uncertainty.** This changed in
-Sprint 9.4. If organizations-service cannot be asked, no token is minted and
-login answers **503** (not 401 — the password was fine). If it _can_ be asked
-and the answer is "this person belongs nowhere", a token is still minted with
-no tenant claims, because that is the ordinary state of an account between
-registering and the consumer creating its membership. That second case is
-refused at the **write** instead, with a 403 that says so.
-
-**Memberships are not a projection.** They cannot be rebuilt from the event
-log. This is the first data in the platform with that property, and it is why
-the consumer creates a row if absent and never overwrites one. Do not
-"simplify" it into an upsert.
-
-**Existing users are backfilled by an operator script**, not by code:
-`infrastructure/postgres/operations/backfill-bootstrap-memberships.sh`. It
-reads `helpdesk_auth` and writes `helpdesk_organizations`, which a migration
-may do and a service may not. It is idempotent, and it is also the only
-recovery path if a `user.registered.v1` is lost to a broker outage. Run it
-after adding users by any route other than `POST /auth/register`.
-
-**The role-template mapping is written twice** — in the script and in
-`apps/organizations-service/src/domain/membership.ts`. If one changes, both
-change, in the same commit, or a user reconciled by hand and a user projected
-from an event land on different templates.
-
-**`INTERNAL_SERVICE_TOKEN` has no default and is optional in auth-service.**
-Unset means auth-service does not attempt resolution at all and mints tokens
-without tenant claims. If tenant claims are unexpectedly missing, check this
-first — it fails quietly by design, with one warning at bootstrap.
-
-**Adding a service still means editing `ci.yml` twice**, in two independent
-places: the role and database creation, and the `test-integration`
-invocation. Forgetting the second one fails nothing — the suite simply never
-runs remotely. `CONTRIBUTING.md` now carries the checklist.
+- **Resolution fails closed on uncertainty only** (unchanged from the last
+  handoff): cannot-ask → 503, belongs-nowhere → token without tenant claims,
+  refused at the write with 403.
+- **Tokens minted before this deploy carry `perms: []`** and are denied
+  staff surfaces until refreshed — one TTL, self-healing, safe direction.
+- **`INTERNAL_SERVICE_TOKEN` now lives in three `.env` files** (auth,
+  tickets, organizations) and also guards a mutation (the status PATCH).
+  Rotation and audit of internal calls are still not built; SECURITY.md now
+  names this the first thing to close before any deployment.
+- **The role-template mapping is written twice** — unchanged:
+  `backfill-bootstrap-memberships.sh` and `roleTemplateFromGlobalRoles` in
+  organizations-service must change in the same commit.
+- **Rows with NULL organization_id are invisible to every tenant** in audit
+  and notification reads until the backfill runs. That is deliberate;
+  the scripts exist and are idempotent.
+- **`backfill-tenant-columns.sh` refuses to run once a second organization
+  exists** (R4). That is a feature; do not "fix" it.
+- **Adding a service still means editing `ci.yml` twice** (unchanged).
+- **apps/web's client-side staff boolean** (`[id]/page.tsx`) still keys on
+  role strings; it drifts from server policy the day roles and permissions
+  diverge for some user. Phase 8 / the role-experience sprint owns it.
 
 ## Work incomplete / deliberately deferred
 
-- **R9 is done for tickets-service, and nowhere else.**
-  `apps/tickets-service/src/testing/fixtures.ts` now exports
-  `TEST_ORGANIZATION` and `OTHER_ORGANIZATION`, and the two-organization
-  isolation test uses both. Every other integration suite still declares
-  inline builders and still calls an unfiltered `deleteMany()`, so each one
-  needs the same treatment before it can become two-tenant.
-- **`mv` is emitted and never checked.** Nothing re-validates a membership
-  version. ADR 0014's re-validation idea also has an unresolved tension with
-  its own rule that downstream services never call organizations-service
-  synchronously. Settle that before any operation relies on `mv`.
-- **The internal credential has no rotation and no audit trail.** One shared
-  secret in two `.env` files. ADR 0011 named both as the story a service
-  credential deserves; SECURITY.md says they are not built.
-- **No organization selector and no token exchange.** Resolution picks the
-  oldest active membership in an active organization. That is deterministic,
-  which is what matters while there is one organization; it is not a product
-  rule.
-- **No membership lifecycle** — invite, activate, suspend, deactivate — and
-  therefore no membership events. Both are phase 6.
-- **Role templates are plain strings.** ADR 0015 wants seeded rows with
-  permission mappings. Note before building them: ADR 0015 lists eight
-  templates in lowercase prose and `tenancy-target-state.md` lists nine in
-  another convention including a platform-scoped one, and the approved
-  permission matrix uses a scope qualifier on twelve cells that has no
-  representation in a flat string set. That has to be resolved before any row
-  is seeded.
-- The Sprint 9.0 items are unchanged: usage ceilings, key rotation and rate
-  limiting still stand between the AI capabilities and `available`;
-  `docs/roadmap/PRODUCT-ROADMAP.md` still does not exist and creating it is a
-  product decision; the provider-notice failure path still drops the
-  conservative disclosure instead of defaulting to it.
+- **Phase 7** (above). **Phase 8**: stop publishing v1, remove no-op arms +
+  bindings, drop the `roles` claim and users-service's projected `roles`
+  column, scope the rebuild procedures (R13).
+- **R9 beyond tickets-service:** other integration suites still teardown
+  with unfiltered `deleteMany()`.
+- **`mv` is minted and bumped but nothing compares it** — its purpose
+  narrowed to "cheap staleness signal between TTL-tolerant and ask-live"
+  (ADR 0014 amendment).
+- **No organization selector / token exchange** (unchanged; resolution picks
+  the oldest active membership).
+- **Role-template vocabulary + scope qualifiers** still undecided; blocks
+  seeded template rows.
+- Sprint 9.0 leftovers unchanged: AI usage ceilings/key rotation/rate
+  limiting before `available`; `docs/roadmap/PRODUCT-ROADMAP.md` still a
+  product decision; provider-notice failure path; `feat/ai-service` branch
+  deletion still open.
 
-## Decisions made in Sprint 9.2 (a record of what was decided then)
+## Decisions made this session (all documented in place)
 
-Several of these have since been superseded — read the Sprint 9.4 section
-above for the current behaviour, not this list.
+- Synchronous membership verification for high-consequence mutations only
+  (ADR 0014 amendment) — assignment is the first.
+- Permission evaluator v1 = code map, not seeded rows; interim agent grants;
+  analytics narrowing applied (ADR 0015 amendment).
+- Consumers ack v1 as no-op on the same queue rather than rebinding.
+- Membership events are born tenant-carrying (no v1/v2 window);
+  `requireEnvelopeOrganization` is the consume-side guard.
+- Directory lists active members only, until people-management decides how
+  to present other statuses.
+- `user_snapshots` keeps one row per user; organization stamped by
+  `membership.created.v1`, row created from the membership event if the
+  registration event was lost.
+- `deactivated` is terminal; reactivation policy belongs to the
+  people-management sprint.
+- Assignment refusals are one generic 422 (cause-blind, so membership facts
+  do not leak); verification unavailability is 503.
 
-- Membership resolution is a synchronous call at mint time (ADR 0014 already
-  decided this); it failed open until the claims decided something.
-  **Superseded in 9.4:** it now fails closed on uncertainty.
-- Existing users are reconciled by an operator script, not by an auto-
-  provisioning path inside authentication.
-- `perms` is emitted empty rather than filled with invented permissions.
-- A session belongs to a person, not to a workspace. `refresh_tokens` gained
-  no column. This closes the question ADR 0014 left open.
-- The bootstrap organization is seeded by a migration, because
-  `prisma migrate deploy` is the only provisioning path that runs both locally
-  and in CI.
-- The service credential is a dedicated secret, not `JWT_ACCESS_SECRET`, and
-  it has no default.
-- organizations-service is not routed by the api-gateway.
+## Migrations added this session
 
-## Decisions pending
+- audit-service `20260731120837_add_organization_index` — scoped read index.
+- analytics-service `20260731120000_scope_analytics_to_organization` —
+  `user_snapshots.organization_id` (nullable, backfilled) + both indexes.
+- notification-service `20260731151205_scope_reads_by_organization` —
+  `[user_id, organization_id, created_at]` replaces `[user_id, created_at]`.
+- users-service `20260731120000_add_directory_memberships` — the projection
+  table.
 
-- When exactly resolution becomes fail-closed, and what login returns then.
-- How `mv` re-validation works without giving downstream services a
-  synchronous dependency on organizations-service.
-- The role-template vocabulary and the scope-qualifier representation, before
-  any template row is seeded.
-- Whether to delete `feat/ai-service`, still open from Sprint 9.0.
+All applied locally (dev and `_test`). organizations-service needed no
+migration — lifecycle uses existing columns.
 
-## Migrations
+## Tests executed (2026-07-31, local)
 
-Seven, all applied locally and in the test databases.
+Full gate green: `format:check`, `lint`, `typecheck`, `test`, `build` across
+all projects. All nine integration suites green against real PostgreSQL and
+RabbitMQ, including the new coverage: audit's DLQ proof for tenantless v2,
+analytics' two-organization summaries and membership-stamped user snapshots,
+notification's mismatch-dead-letters flow, users' end-to-end scoped
+directory, organizations' lifecycle events on a real broker. The backfill
+sequence and its verification are recorded above and in the readiness
+document. Remote CI: check `gh run list` for the run on the pushed tip; the
+docs commit recording it lands after this file.
 
-organizations-service (Sprint 9.2):
+## Services required to run locally
 
-- `20260730160817_init` — `organizations` and `memberships`.
-- `20260730161500_bootstrap_organization` — inserts the bootstrap
-  organization. `ON CONFLICT DO NOTHING`, so re-applying is safe.
-
-Phase 4, one per service, each adding the column **and** backfilling in the
-same file, every `UPDATE` scoped to `WHERE organization_id IS NULL` so
-re-running is a no-op:
-
-- `tickets-service/…_add_organization_id` — `tickets`, `ticket_comments`,
-  `ticket_history`.
-- `ai-service/…_add_organization_id` — `suggestions`.
-- `analytics-service/…_add_organization_id` — `ticket_snapshots`.
-- `notification-service/…_add_organization_id` — `ticket_refs`,
-  `notifications`.
-- `audit-service/…_add_organization_id` — `audit_events`.
-
-The bootstrap organization's id is a literal in all five. It cannot be looked
-up — organizations live in another database — which is why it was created as a
-fixed, obviously synthetic uuid rather than a random one.
-
-`users`, `refresh_tokens`, `user_profiles` and `user_snapshots` have no
-organization column, each for its own reason: the first two are global
-identity (ADR 0017, and a session belongs to a person), the last two have no
-tenant source until membership events exist.
-
-## Tests executed
-
-Full gate, green on 2026-07-30: `format:check`, `lint` (15 projects, 0 errors,
-9 pre-existing warnings), `typecheck` (14 projects — `apps/web` has none and is
-covered by `next build`), `test` (15 projects), `build` (15 projects).
-
-All nine integration suites against real PostgreSQL and RabbitMQ: messaging,
-auth, tickets, users, audit, notification, analytics, ai, organizations.
-
-Phase 3 additions, against the real broker: both versions of one fact reach a
-firehose subscriber with distinct envelope ids, a shared `correlationId` and
-the organization on the v2 only; a v2 is **not** routed to a queue bound to
-v1, proven with a v1 sentinel as the fence rather than a timeout, and the
-dead-letter queue stays empty; the audit trail records the pair as two rows.
-
-Beyond the suites, verified by hand with both services running (Sprint 9.2):
-
-- Register → `user.registered.v1` → membership created → login returned a
-  token carrying `org`, `perms: []`, `mv: 1`; refresh carried the same.
-- With organizations-service **stopped**: login and refresh both returned 200,
-  tokens carried no tenant claims, and the warning appeared in the log.
-- The event published during that outage was held by the durable queue and
-  became a membership on restart — 13 users, 13 memberships.
-- The backfill mapped 11 pre-existing users to 11 memberships (2
-  `organization_admin`, 9 `requester`); a second run changed nothing, and
-  there are zero duplicate `(organization_id, user_id)` pairs.
-
-**Verified remotely too.** GitHub Actions run `30564325494` on `4cb62a2` was
-green on its first attempt: lint 15, typecheck 14, test 15, build 15, and all
-nine integration suites against real service containers, including
-organizations-service. The provisioning step created the
-`organizations_service` role and `helpdesk_organizations_test` from `ci.yml`,
-which is the half of R10 that fails loudly — the other half, the
-`test-integration` invocation, was confirmed by seeing the ninth suite
-actually run in the log rather than by trusting the edit.
-
-Worth knowing why that was in doubt: local green and green on a fresh clone
-are separate claims, and this repository has been bitten by the difference
-before (an untracked empty `src/assets` broke `ai-service:build` in CI in
-Sprint 9.0 while passing locally).
-
-## Services required to run this locally
-
-`docker compose up -d` (PostgreSQL 5433, RabbitMQ 5672, Redis), then the
-services you need. organizations-service is required only for tokens to carry
-tenant claims; **login works without it**, which is the fail-open behaviour
-above.
-
-`ai-service` still needs a running `tickets-service` to read ticket context.
+`docker compose up -d`, then the services you need. New since yesterday:
+tickets-service wants `ORGANIZATIONS_SERVICE_URL` + `INTERNAL_SERVICE_TOKEN`
+(byte-identical to organizations-service's) or assignment answers 503.
+users-service now also consumes membership events; run organizations-service
+if you want the directory projection fed live.
 
 ## Environment variable names (no values)
 
-`apps/organizations-service/.env`: `NODE_ENV`, `PORT`, `LOG_LEVEL`,
-`DATABASE_URL`, `RABBITMQ_URL`, `INTERNAL_SERVICE_TOKEN`.
-
-`apps/auth-service/.env` gained: `ORGANIZATIONS_SERVICE_URL`,
-`INTERNAL_SERVICE_TOKEN` — which must be byte-identical to
-organizations-service's.
-
-`apps/ai-service/.env` is unchanged: `NODE_ENV`, `PORT`, `LOG_LEVEL`,
-`DATABASE_URL`, `RABBITMQ_URL`, `JWT_ACCESS_SECRET`, `TICKETS_SERVICE_URL`,
-`AI_PROVIDER`, `GEMINI_API_KEY`, `GEMINI_MODEL`.
-
-Every real `.env` is git-ignored (`.gitignore:26`) and must never be staged.
+Unchanged except: `apps/tickets-service/.env` gains
+`ORGANIZATIONS_SERVICE_URL`, `INTERNAL_SERVICE_TOKEN`. Every real `.env` is
+git-ignored and must never be staged.
 
 ## Known risks
 
-- **The local database was provisioned by hand.** The init script only runs on
-  first initialization of an empty volume, so `organizations_service`,
-  `helpdesk_organizations` and `helpdesk_organizations_test` were created with
-  `psql` inside the container. The script was edited too, so a clean checkout
-  is correct — but this machine's volume and the script have diverged before
-  and will again. Do not delete the volume to "fix" that; it holds every local
-  database.
-- **The Gemini endpoint and model id still rest on a smoke test from
-  2026-07-30.** Unchanged from Sprint 9.0.
-- **Ticket text still leaves the machine** when `AI_PROVIDER=gemini`, and
-  nothing throttles the gateway or BFF, so an authenticated staff account is
-  still a spending path.
-- `apps/web/next-env.d.ts` still flips between `.next/types/` and
-  `.next/dev/types/` depending on whether `next dev` or `next build` ran last.
-  The tracked version is the `next build` one. Do not commit the churn, and do
-  not gitignore it.
-- **`pnpm/action-setup@v4` targets Node.js 20**, which GitHub has deprecated.
-  Still a warning, still worth its own maintenance pass rather than being
-  folded into a product change.
+- The local database volume was hand-provisioned (unchanged warning: do not
+  delete the volume).
+- Gemini endpoint/model id still rest on the 2026-07-30 smoke test; ticket
+  text still leaves the machine with `AI_PROVIDER=gemini`; gateway/BFF still
+  unthrottled.
+- `apps/web/next-env.d.ts` churn (unchanged: tracked version is `next build`).
+- `pnpm/action-setup@v4` Node 20 deprecation warning (unchanged).
+- The verifier and backfill scripts hardcode local-only passwords; they are
+  operator tools for the local/CI shape only.
+
+## Exact next action
+
+Present phase 7 for approval using
+`docs/architecture/tenancy-phase-7-readiness.md` (including the
+`user_snapshots` exemption choice). If approved: one migration per service,
+`SET NOT NULL` guarded by the idempotent UPDATE, then make
+`Actor.organizationId`/`permissions` required and fix what the compiler
+surfaces, then re-run the verifier. If not: phase 8 cleanup or Sprint 9.5
+(branches) are both unblocked by this session's work — the dependency map
+prefers finishing enforcement first.
 
 ## Resume commands
 
 ```bash
 cd C:/Proyectos/helpdesk-ai
 git branch --show-current      # expect main
-git log --oneline -5
+git log --oneline -15
 git status --short             # expect clean
 docker compose up -d
 pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
@@ -403,42 +208,27 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Continue the HelpDesk AI tenancy migration. Everything through phase 4 is
-> merged and pushed on `main` with remote CI green, plus phase 6's write half
-> and phase 5's read half for tickets-service only. Read
-> `docs/progress/SPRINT-009.4.md` and then the Sprint 9.4 section of
-> `docs/handoffs/CURRENT-HANDOFF.md` before touching anything — the plan's
-> phase order was deliberately inverted and the reason matters.
+> Continue the HelpDesk AI tenancy migration. Phases 5 and 6 are complete and
+> merged on `main`: permission-based authorization (isStaff is gone), the
+> membership lifecycle with tenant-carrying events, consumers on the v2
+> stream with v1 acked as no-ops, the directory scoped through a projection,
+> assignee validation fail-closed, and the backfill re-run verified clean.
+> Read `docs/progress/SPRINT-009.4.md` and
+> `docs/architecture/tenancy-phase-7-readiness.md` before touching anything.
 >
-> Next: finish phase 5. Scope the users-service directory, the audit filter,
-> and all five analytics aggregates — R5 requires the five to land in one
-> commit, because a partial change leaves a dashboard mixing scoped and
-> unscoped numbers, which is worse than either. Then delete `isStaff` and
-> `isAdmin` rather than changing their signature, together with the duplicate
-> `Actor` copies in `tickets-service/src/domain/ticket.ts` and
-> `users-service/src/domain/user-profile.ts`, in one change or they drift.
-> Enumerate the use cases against the check so `AssignTicketUseCase` is not
-> missed — it is the one path that never calls `canView`.
->
-> Four things that are true now and were not two sprints ago, so do not
-> reason from older documents: membership resolution **fails closed on
-> uncertainty** and answers 503, while "belongs to no organization" is a real
-> answer that still mints a token and is refused at the write; every write in
-> tickets-service and ai-service already takes the organization from the
-> token; tickets reads are already scoped; and `user_profiles` and
-> `user_snapshots` have no organization column on purpose.
->
-> Do not start phase 7. `NOT NULL` is the first step a code revert cannot
-> undo, and it needs the backfill re-run first — not just the verification —
-> because every row written between phase 4 and phase 6 has a null
-> organization.
+> Next: decide phase 7. It is the first irreversible step (`NOT NULL`), it
+> is prepared but NOT approved, and the readiness document contains the one
+> open design point (`user_snapshots` exemption). Do not remove the v1 no-op
+> consumer arms, do not drop v1 contracts from subscriptions, and do not
+> seed role-template rows — the vocabulary question is still open and the
+> code map in organizations-service is the deliberate interim.
 
 ## Repository isolation
 
 This project is developed in isolation: work on it touches
 `C:\Proyectos\helpdesk-ai` and nothing else. No code, pattern or
 configuration is carried in from another repository on this machine, and
-none was during this sprint. Verify the root with
+none was during this session. Verify the root with
 `git rev-parse --show-toplevel` before starting, and stop if it differs.
 
 ---

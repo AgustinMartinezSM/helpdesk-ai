@@ -56,15 +56,16 @@ Every local projection must name how it gets rebuilt if lost — RabbitMQ is
 not a log (consumed events are gone; best-effort publishing means some
 never existed), so "rebuild from events" is never the answer:
 
-| Projection                            | Owner                 | Rebuild path                                                                                                                                                                           |
-| ------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `user_profiles`                       | users-service         | GAP: auth-service exposes no user listing yet; an admin listing endpoint is the documented prerequisite                                                                                |
-| `ticket_refs`                         | notification-service  | tickets-service `GET /tickets` with a staff token (id + requesterId suffice)                                                                                                           |
-| `ticket_snapshots` / `user_snapshots` | analytics-service     | tickets-service `GET /tickets` (status/priority/createdAt); user count needs the same auth listing as above                                                                            |
-| `notifications`                       | notification-service  | NON-REBUILDABLE BY DESIGN: derived state plus per-user readAt; accepted as ephemeral UX, not records                                                                                   |
-| `audit_events`                        | audit-service         | Not a projection — the trail itself. Append-only; NOT readable by other services for THEIR rebuilds (ADR 0006)                                                                         |
-| `suggestions`                         | ai-service            | Not a projection — records of what a model answered. Append-only, NOT rebuildable: regenerating asks a provider again and gets a different answer (ADR 0010)                           |
-| `organizations` / `memberships`       | organizations-service | Not a projection — nothing else holds this data. NOT rebuildable; `infrastructure/postgres/operations/backfill-bootstrap-memberships.sh` reconciles it from `helpdesk_auth` (ADR 0013) |
+| Projection                            | Owner                 | Rebuild path                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user_profiles`                       | users-service         | GAP: auth-service exposes no user listing yet; an admin listing endpoint is the documented prerequisite                                                                                                                                                                                                                                                           |
+| `ticket_refs`                         | notification-service  | tickets-service `GET /tickets` with a staff token (id + requesterId suffice)                                                                                                                                                                                                                                                                                      |
+| `ticket_snapshots` / `user_snapshots` | analytics-service     | tickets-service `GET /tickets` (status/priority/createdAt); user count needs the same auth listing as above                                                                                                                                                                                                                                                       |
+| `notifications`                       | notification-service  | NON-REBUILDABLE BY DESIGN: derived state plus per-user readAt; accepted as ephemeral UX, not records                                                                                                                                                                                                                                                              |
+| `audit_events`                        | audit-service         | Not a projection — the trail itself. Append-only; NOT readable by other services for THEIR rebuilds (ADR 0006)                                                                                                                                                                                                                                                    |
+| `suggestions`                         | ai-service            | Not a projection — records of what a model answered. Append-only, NOT rebuildable: regenerating asks a provider again and gets a different answer (ADR 0010)                                                                                                                                                                                                      |
+| `organizations` / `memberships`       | organizations-service | Not a projection — nothing else holds this data. NOT rebuildable; `infrastructure/postgres/operations/backfill-bootstrap-memberships.sh` reconciles it from `helpdesk_auth` (ADR 0013)                                                                                                                                                                            |
+| `directory_memberships`               | users-service         | Projection of memberships from `membership.*.v1` events, so the directory can be scoped without a synchronous call on every read. Rebuild/reconcile: `infrastructure/postgres/operations/backfill-directory-memberships.sh` reads `helpdesk_organizations` — an operator action, which is why it may cross the database boundary that services may not (ADR 0003) |
 
 ### The tenant column, and what a rebuild has to do about it
 
@@ -77,18 +78,23 @@ id with no foreign key, because organizations live in another database
 `infrastructure/postgres/operations/verify-tenant-columns.sh` is what checks
 that every one of them still resolves.
 
-`user_profiles` and `user_snapshots` deliberately did **not** get the column.
-They are projected from `user.registered`, which carries no tenant and cannot
-— the membership that would supply one is created by consuming that very
-event — so the column would have had no source. They wait for membership
-lifecycle events.
+`user_profiles` deliberately did **not** get the column, and still does not:
+it is projected from `user.registered`, which carries no tenant and cannot —
+the membership that would supply one is created by consuming that very event
+— and a single organization column on a profile would assert one-org-per-
+person, which ADR 0013 rejected. The directory is scoped through the
+`directory_memberships` projection instead. `user_snapshots` gained the
+column in Sprint 9.4, fed by `membership.created.v1`.
 
-This changes what a rebuild owes. Replaying or refetching a projection
-restores its rows, but the tenant is not in the source it replays from until
-the consumers read the v2 envelope. **Until then, a rebuild must be followed
-by the backfill**, or the rebuilt rows come back untenanted — which is
-invisible today, because nothing reads the column, and stops being invisible
-in the phase that makes it required.
+The consumers now read the tenant-carrying stream (`*.v2` and
+`membership.*.v1`), so rows written going forward carry their organization.
+What a rebuild owes is unchanged in one respect: the documented rebuild paths
+refetch over HTTP, and consumed events are gone — so **a rebuild must still
+be followed by the tenant backfill**
+(`infrastructure/postgres/operations/backfill-tenant-columns.sh`) unless the
+refetch source itself supplies the organization, which today it does not.
+That stays true until the rebuild procedures are re-scoped (R13), and it is
+the reason the backfill script is idempotent rather than one-shot.
 
 `organizations` and `memberships` are the first data here that is neither a
 projection nor a record of something that already happened. Every other store
@@ -126,7 +132,7 @@ coupling. The consequence is that the recovery path for the one store nothing
 else can reproduce is a manual database procedure, and stays one until that
 endpoint exists.
 
-Two services read another service's data synchronously (ADR 0011), and the two
+Three services read another service's data synchronously (ADR 0011), and the
 edges are not the same shape. `ai-service` fetches a ticket from
 `tickets-service` over HTTP, forwarding the caller's own access token, so it
 can read nothing the person asking could not read themselves; it stores **no
@@ -137,9 +143,15 @@ minting is what produces one: it carries a service credential
 (`INTERNAL_SERVICE_TOKEN`) in the `x-internal-service-token` header instead,
 which is standing access rather than borrowed access. It keeps nothing from
 the response — the membership it reads becomes claims in the token being
-signed, not a row in `helpdesk_auth`. So neither `helpdesk_ai` nor
-`helpdesk_auth` holds a copy of anyone else's data of record, and the
-ownership rule above still holds without exception.
+signed, not a row in `helpdesk_auth`. `tickets-service` calls
+`organizations-service` with the same service credential before assigning a
+ticket, and only then: assignment is a high-consequence mutation whose answer
+must be true at the moment of use, which a claim or a projection cannot
+promise (the amendment in ADR 0014 draws this boundary — mutations may
+re-validate, read paths never call). It too keeps nothing from the response.
+So none of `helpdesk_ai`, `helpdesk_auth` or `helpdesk_tickets` holds a copy
+of anyone else's data of record, and the ownership rule above still holds
+without exception.
 
 Retention note: `helpdesk_audit` keeps event payloads (including
 registration emails) indefinitely and the application exposes no deletion.

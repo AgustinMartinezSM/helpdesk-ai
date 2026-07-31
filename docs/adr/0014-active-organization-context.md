@@ -207,6 +207,46 @@ Negative / accepted:
   state. The implementation fails open instead, for the reason given above,
   until the claims decide something.
 
+## Amendment — Sprint 9.4: when a downstream service may ask synchronously
+
+This ADR ruled that downstream services gain no synchronous dependency on
+organizations-service, and separately said that operations which cannot
+tolerate claim staleness should re-validate before acting. Those two
+statements were in tension, and the tension had to be settled the moment
+something actually needed live membership data: assignee validation.
+
+Before assigning a ticket, tickets-service must know that the assignee is an
+active member of the ticket's organization with the standing to hold tickets.
+That data lives in organizations-service and nowhere else. Two honest options
+existed: project memberships into tickets-service and validate against the
+projection, or ask synchronously at the moment of assignment.
+
+**Settled: a downstream service may call organizations-service synchronously
+for high-consequence mutations, and never on a read path.** Assignment is the
+first such call. The projection alternative was rejected for this case
+because it duplicates live access state — the one kind of data ADR 0013
+established as non-rebuildable — and is still stale at the moment of use,
+which re-creates the exact problem the check exists to close. A synchronous
+answer at mutation time is the only version that is true when it is used.
+
+The boundary this draws:
+
+- **Read paths resolve authorization from the token alone.** Listing tickets,
+  reading the directory, the dashboard — none of these may call
+  organizations-service, whatever the temptation. The seven-service fan-out
+  and the outage-degrades-login-only property survive.
+- **A high-consequence mutation may re-validate synchronously.** Assignment
+  today; role changes and suspension-adjacent operations when they exist. The
+  call fails closed: if organizations-service cannot answer, the mutation is
+  refused with a 503 rather than performed on a stale claim — refusing an
+  assignment is recoverable, a cross-tenant one is not.
+
+This narrows what `mv` is for. The high-consequence path does not compare the
+claim's membership version; it fetches the live membership, which answers a
+strictly stronger question. `mv` remains useful as a cheap staleness signal
+for anything between "tolerate the TTL" and "fetch live state", and nothing
+reads it yet.
+
 ## Related
 
 ADR 0013 creates the service consulted at mint time. ADR 0012 explains why a

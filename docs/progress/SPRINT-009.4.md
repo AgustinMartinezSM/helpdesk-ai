@@ -1,8 +1,12 @@
-# Sprint 9.4 — Write paths, and the first scoped reads
+# Sprint 9.4 — Write paths, scoped reads, and the rest of phases 5 and 6
 
-Status: **In progress (2026-07-30).** Phase 6's write half is complete. Phase
-5's read half is complete for tickets-service and not started for
-users-service, audit-service or analytics-service.
+Status: **Phases 5 and 6 complete (2026-07-31).** The 2026-07-30 half ran
+phase 6's writes and tickets-service's reads; the 2026-07-31 half ran
+everything both phases still owed: the remaining scoped reads, the permission
+cutover, the membership lifecycle, the consumer migration to the
+tenant-carrying stream, assignee validation, and the backfill re-run. Phase 7
+(`NOT NULL`, the first irreversible step) is deliberately not started — see
+`docs/architecture/tenancy-phase-7-readiness.md`.
 
 ## The plan's order was wrong, and following it would have broken the product
 
@@ -121,27 +125,127 @@ already there for rows whose stored output no longer parses. Neither guesses:
 putting somebody else's row in front of a reader is the failure this whole
 migration exists to prevent.
 
+## The permission cutover (2026-07-31)
+
+`isStaff`/`isAdmin` and the duplicate `Actor` copies are deleted in one
+change, exactly as ADR 0015 argued: the symbol vanishing is what makes every
+copy a compile error that has to be looked at. Call sites now check the
+permission they always meant, drawn from a shared vocabulary in
+`libs/security` so producer and checker cannot drift on spelling.
+
+What forced the first evaluator increment into existence: a permission check
+against a `perms` claim that is always empty denies everyone. So
+organizations-service now resolves the claim from the membership's role
+template through a code map — deliberately not the seeded rows ADR 0015 wants,
+because the template-vocabulary question in the handoff is still open. The
+agent template carries three marked interim widenings of the approved matrix
+(`read_all`, `assign_agent`, flat `people.read`), each a behavior-preserving
+bridge until branches and teams exist. One narrowing was applied instead of
+bridged: agents lose the analytics summary, per the matrix, pinned by a test
+so it reads as a decision. Both amendments are recorded in ADR 0015.
+
+## The membership lifecycle exists now
+
+Transitions (invited→active, active⇄suspended, anything-but-deactivated→
+deactivated, no self-loops, deactivated terminal), a version bump on every
+transition — which is what finally gives `mv` something to mean — and two
+born-tenant-carrying events, `membership.created.v1` and
+`membership.status-changed.v1`. Suspension takes effect at the next refresh,
+because refresh re-resolves membership instead of copying claims; the
+residual window is one access-token TTL, accepted by R7, except where the
+next section closes it. The operator surface is an internal, guarded status
+PATCH until the people-management sprint builds the real one.
+
+## Consumers read the tenant-carrying stream
+
+audit, analytics and notification consumers process v2 (and the membership
+events) under a consume-side guard that dead-letters a tenantless envelope,
+and acknowledge v1 as an explicit no-op. The no-op — rather than dropping the
+v1 contracts from the subscription — is deliberate: the client only ever
+binds, never unbinds, so removing v1 from the contracts list would leave the
+durable queue's v1 bindings delivering messages nothing decodes, and
+processing both versions would double-apply every fact under two envelope
+ids. Since every write requires an organization, every v1 fact has a v2
+twin; acking v1 loses nothing, and phase 8 removes the bindings with queue
+surgery.
+
+notification-service additionally compares tenant as well as id: a follow-up
+event whose organization does not match the stored ticket ref dead-letters
+instead of notifying, and the assigned path — which used to trust
+`payload.assigneeId` with no lookup at all — now resolves the ref purely for
+that comparison.
+
+## The directory is scoped through a projection
+
+users-service projects `membership.*.v1` into `directory_memberships` and
+lists only active members of the caller's organization. `user_profiles`
+still has no organization column — one column would assert one-org-per-person,
+which ADR 0013 rejected — so the projection is the scope. Its rebuild path is
+an operator script reading `helpdesk_organizations`, recorded in
+`data-ownership.md`.
+
+## Assignees are validated against live membership
+
+`AssignTicketUseCase` no longer accepts any uuid. It asks
+organizations-service — synchronously, with the internal credential — whether
+the assignee holds an active membership in the ticket's organization with the
+can-take-a-ticket grant, and fails closed when it cannot ask. This settled
+the tension ADR 0014 recorded between "never call organizations-service
+downstream" and "re-validate what cannot tolerate staleness": high-consequence
+mutations may ask, read paths never do. The amendment in ADR 0014 draws the
+boundary.
+
+## The backfill, re-run and verified (2026-07-31)
+
+As phase 4 predicted, re-running was mandatory rather than optional — though
+the dev databases turned out clean (13 users, 13 memberships, 2
+organization_admin + 11 requester; zero untenanted rows across all nine
+scoped tables, because nothing wrote to the dev databases between the phases;
+the `_test` databases absorb the integration churn). The sequence executed:
+membership backfill re-run (idempotent, counts equal), directory projection
+reconciled (13 = 13), tenant-column snapshot → dry run → execute → verify.
+All five verification checks pass, and — new this sprint — all five now
+actually flip the exit code; before, only the count comparison did, and a run
+with untenanted rows still exited 0.
+
 ## Not done
 
-- **users-service directory, the audit filter, the five analytics
-  aggregates.** Still unscoped.
-- **`isStaff`/`isAdmin` are still defined four times.** Deleting them and the
-  duplicate `Actor` copies has to land in one change or the copies drift.
-- **Consumers still read v1.** They do not set `organization_id` on the rows
-  they project, so those rows are still null for anything written since phase 4. The enforcement phase has to re-run the backfill regardless.
-- **Assignee validation.** `AssignTicketUseCase` still accepts any uuid. It
-  gets cheaper once the read scope exists, which it now does for tickets —
-  but validating that the assignee is a member needs membership data
-  tickets-service does not have.
-- **`NOT NULL` and composite indexes.** The enforcement phase, and the first
-  step that a code revert cannot undo.
+- **Phase 7: `NOT NULL` and composite unique indexes.** The first step a code
+  revert cannot undo. Preconditions, ordering, rollback and the evidence
+  gathered so far live in `docs/architecture/tenancy-phase-7-readiness.md` —
+  it waits for explicit approval.
+- **Phase 8: stop publishing v1, remove the v1 no-op arms and their queue
+  bindings, drop the `roles` compatibility claim.**
+- **R13: the documented rebuild procedures are still cross-tenant staff
+  reads**, and rebuilds must still be followed by the tenant backfill.
+- **R9 beyond tickets-service:** the other integration suites still teardown
+  with unfiltered `deleteMany()`.
 
 ## Verified
 
-Full gate green: `format:check`, `lint` (15 projects), `typecheck` (14),
-`test` (15), `build` (15). All nine integration suites against real PostgreSQL
-and RabbitMQ, tickets-service now at nine including the two-organization
-isolation test.
+The 2026-07-30 half: full gate green locally and remotely (run `30589056698`
+on `75b2bbb`, first attempt). The 2026-07-31 half: full gate green
+(`format:check`, `lint`, `typecheck`, `test`, `build`) and all nine
+integration suites against real PostgreSQL and RabbitMQ, including the new
+adversarial coverage — audit's tenantless-v2 DLQ proof, analytics'
+two-organization summaries, notification's mismatch dead-letters, users'
+scoped directory end to end, organizations' lifecycle events on a real
+broker. The remote CI result for the pushed tip is recorded in its own
+docs commit, as usual.
 
-Remotely too: `main` fast-forwarded to `75b2bbb`, GitHub Actions run
-`30589056698` green on its first attempt.
+## Documentation
+
+Meaningfully changed this sprint: ADR 0014 and ADR 0015 gained amendments
+recording the synchronous-call boundary and the code-map evaluator;
+`SECURITY.md`'s authorization, token-claims and service-credential sections
+were rewritten because the claims stopped being decorative;
+`data-ownership.md` gained the `directory_memberships` projection, the third
+synchronous edge and an updated rebuild note; `tenancy-migration-plan.md`'s
+phase 5/6 entries and seven risk cells now record what landed;
+`tenancy-target-state.md`'s header stopped claiming nothing reads the
+claims; `local-development.md` covers the new tickets-service variables; and
+`tenancy-phase-7-readiness.md` is new. Removed in passing: the stale
+"requires approval" note on the already-approved matrix, and the
+"auth-service is the only caller" comment on the internal endpoint. No
+fictional experience, customers, incidents or approvals were introduced
+anywhere in this sprint's documentation.

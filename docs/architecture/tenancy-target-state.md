@@ -1,19 +1,22 @@
 # Tenancy — target state
 
-Status: **Approved 2026-07-30, first phases implemented.** This document
+Status: **Approved 2026-07-30, phases 0–6 implemented.** This document
 describes where the domain is going and why; the current system is described in
-`tenancy-current-state.md`.
+`tenancy-current-state.md` (a Sprint 9.1 audit snapshot — read it as history).
 
 Every structural decision below is recorded in an ADR (0012–0017), all now
-Accepted. Approved does not mean built. What exists after Sprint 9.2 is
-organizations-service, its `organizations` and `memberships` tables, and the
-`org`, `perms` and `mv` claims on the access token — which every service
-receives and none reads. Everything else here is still a target: the rest of
-the organizational graph (branches, departments, stations, service desks,
-teams, queues), role templates as seeded rows with their permissions, the
-`organization_id` column on organization-owned data, and every visibility rule
-below. `tenancy-migration-plan.md` is the sequence that builds it and records
-which phases have run.
+Accepted. As of Sprint 9.4 the core of this picture is real: the `org` and
+`perms` claims are load-bearing (permissions resolve from the role template
+through the code map ADR 0015's amendment describes — seeded rows still
+pending on the template-vocabulary question), every organization-owned table
+carries `organization_id`, reads require the tenant and writes take it from
+the token, the consumers read the tenant-carrying event stream, and the
+membership lifecycle exists with its events. Still a target: the rest of the
+organizational graph (branches, departments, stations, service desks, teams,
+queues), seeded role-template rows, the scoped ticket reads below
+(`read_branch`/`read_team` — `read_all` stands in for agents until teams
+exist), and `NOT NULL` enforcement (phase 7, prepared and unapproved).
+`tenancy-migration-plan.md` records exactly which phases have run.
 
 ## The shape
 

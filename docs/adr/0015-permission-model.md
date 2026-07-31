@@ -137,9 +137,48 @@ Negative / accepted:
 - More upfront modelling than the current two booleans, for a product that
   today has two meaningful roles.
 
+## Amendment — Sprint 9.4: the first evaluator increment is a code map
+
+`isStaff`/`isAdmin` are deleted and every call site checks a permission key,
+which forced the first version of the evaluator into existence. What shipped
+deviates from this ADR in one deliberate way: **role templates map to
+permissions through a code map in organizations-service
+(`src/domain/permissions.ts`), not through seeded rows.**
+
+The reason is a decision this ADR cannot settle by itself. The handoff
+records an unresolved vocabulary question — this ADR names eight templates in
+lowercase prose, the target-state document names nine in another convention
+including a platform-scoped one, and the approved matrix uses an own-scope
+qualifier on twelve cells that a flat string set cannot represent. Seeding
+rows now would freeze provisional answers into data that migrations then have
+to carry. A code map keeps the mapping reviewable and testable while leaving
+the vocabulary question genuinely open; the seeded rows arrive with the
+sprint that settles it, and custom roles still reuse the same evaluator shape
+when they come.
+
+Two boundaries hold regardless:
+
+- **The key vocabulary lives in `libs/security` (`PERMISSIONS`)**, imported
+  by both the map and every call site, so producer and checker cannot drift
+  on spelling. Only keys with a real server-side call site exist — an
+  unchecked key in a token is a claim nothing can falsify.
+- **The agent template carries three marked interim widenings** of the
+  approved matrix: `tickets.read_all` (the matrix wants team-scoped reads,
+  and teams do not exist), `tickets.assign_agent` (the matrix reserves it
+  for managers, who do not exist), and a flat `people.read` (the matrix
+  grants it own-scope, and there is no scope to qualify by). Each is a
+  behavior-preserving bridge, commented as such in the map, and shrinks to
+  the matrix cell when branches and teams arrive. The own-scope cell that
+  already had a home stayed there: a requester closing their own resolved
+  ticket is domain logic, not a grantable key.
+
+One narrowing was applied rather than bridged: agents no longer read the
+analytics summary. The matrix gives `analytics.read` to owners, admins and
+auditors only, the product ships no analytics UI, and a test pins the change
+so it reads as a decision rather than an accident.
+
 ## Related
 
 ADR 0014 carries `perms` in the token. ADR 0013 puts the evaluator in
-organizations-service. The draft matrix lives in
-`docs/architecture/tenancy-target-state.md` and requires approval before it
-is treated as decided.
+organizations-service. The approved matrix lives in
+`docs/architecture/tenancy-target-state.md`.
