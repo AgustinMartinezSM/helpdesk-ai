@@ -3,6 +3,8 @@
  * broker — one with a platform contract, one the consumer has never heard
  * of — both land as rows in the real database through the actual firehose
  * consumer, and recording the same envelope twice collapses into one row.
+ * Tenancy rides along end to end: a v2 envelope's organizationId is
+ * persisted on the row, and a tenantless v2 dead-letters instead of landing.
  *
  * Requires the compose stack (`pnpm infra:up`); run via
  * `nx run @helpdesk-ai/audit-service:test-integration`.
@@ -13,9 +15,12 @@
  * run's random identifiers.
  */
 import { randomUUID } from 'node:crypto';
+import { connect as amqplibConnect } from 'amqplib';
+import type { Channel, ChannelModel } from 'amqplib';
 import { z } from '@helpdesk-ai/configuration';
 import {
   MessagingClient,
+  deadLetterQueueOf,
   defineEvent,
   ticketCreatedV1,
   ticketCreatedV2,
@@ -24,7 +29,7 @@ import { SystemClock } from '../../application/ports/audit-event.repository';
 import { RecordAuditEventUseCase } from '../../application/use-cases/record-audit-event';
 import { PrismaAuditEventRepository } from '../../infrastructure/prisma/prisma-audit-event.repository';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
-import { EventLogConsumer } from './event-log.consumer';
+import { EVENT_LOG_QUEUE, EventLogConsumer } from './event-log.consumer';
 
 const databaseUrl = process.env.DATABASE_URL;
 const rabbitmqUrl = process.env.RABBITMQ_URL;
@@ -35,6 +40,8 @@ if (!databaseUrl || !rabbitmqUrl) {
 }
 
 const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
+
+const DLQ = deadLetterQueueOf(EVENT_LOG_QUEUE);
 
 // A contract that exists ONLY in this spec: to the consumer under test the
 // resulting event is an unknown type — exactly what the firehose is for.
@@ -65,6 +72,8 @@ describe('audit trail (real broker, real database)', () => {
   let repository: PrismaAuditEventRepository;
   let consumerClient: MessagingClient;
   let publisherClient: MessagingClient;
+  let rawConnection: ChannelModel;
+  let rawChannel: Channel;
 
   beforeAll(async () => {
     prisma = new PrismaService(databaseUrl as string);
@@ -85,9 +94,19 @@ describe('audit trail (real broker, real database)', () => {
       new RecordAuditEventUseCase(repository, new SystemClock()),
     );
     await consumer.start();
+
+    // Raw side channel to inspect the DLQ, same as the messaging lib's own
+    // int spec. Purged up front for the same reason the table is wiped: on
+    // the shared local broker the dead letters of earlier runs are noise.
+    rawConnection = await amqplibConnect(rabbitmqUrl as string);
+    rawChannel = await rawConnection.createChannel();
+    await rawChannel.purgeQueue(DLQ);
   });
 
   afterAll(async () => {
+    // The queue and its DLQ stay: they are the service's real durable
+    // topology on the local broker, not fixtures of this suite.
+    await rawConnection.close();
     await publisherClient.close();
     await consumerClient.close();
     await prisma.auditEvent.deleteMany();
@@ -110,18 +129,59 @@ describe('audit trail (real broker, real database)', () => {
     );
     expect(recorded.type).toBe('ticket.created.v1');
     expect(recorded.payload).toMatchObject({ ticketId });
+    // v1 rows archive the compatibility window: no tenant to persist.
+    expect(recorded.organizationId).toBeNull();
   });
 
   it('records event types the consumer has no contract for', async () => {
-    const envelope = await publisherClient.publish(wormholeOpenedV9, {
-      sector: 7,
-    });
+    // v9 is tenant-carrying by the version half of the rule, so even a type
+    // the consumer has never heard of must bring its tenant along.
+    const envelope = await publisherClient.publish(
+      wormholeOpenedV9,
+      { sector: 7 },
+      { organizationId: ORGANIZATION_ID },
+    );
 
     const recorded = await waitFor(() =>
       prisma.auditEvent.findUnique({ where: { id: envelope.id } }),
     );
     expect(recorded.type).toBe('wormhole.opened.v9');
     expect(recorded.payload).toEqual({ sector: 7 });
+    expect(recorded.organizationId).toBe(ORGANIZATION_ID);
+  });
+
+  it('dead-letters a v2 envelope published without its tenant, recording nothing', async () => {
+    // publish() without the organizationId option: buildEnvelope skips the
+    // field entirely, which is exactly how a misbehaving producer would put
+    // a tenantless v2 on the bus.
+    const envelope = await publisherClient.publish(ticketCreatedV2, {
+      ticketId: randomUUID(),
+      requesterId: randomUUID(),
+      title: 'Audit int test (tenantless)',
+      priority: 'low',
+      status: 'open',
+      createdAt: '2026-07-31T12:00:00.000Z',
+    });
+
+    // Each probe pops one message; strays from other local activity are
+    // dropped, and only this run's envelope id ends the wait.
+    const deadLettered = await waitFor(async () => {
+      const message = await rawChannel.get(DLQ, { noAck: true });
+      if (message === false) {
+        return null;
+      }
+      const body = JSON.parse(message.content.toString('utf-8')) as {
+        id: string;
+        type: string;
+      };
+      return body.id === envelope.id ? body : null;
+    });
+
+    expect(deadLettered.type).toBe('ticket.created.v2');
+    // Rejected before recording: the dead letter is the only trace of it.
+    expect(
+      await prisma.auditEvent.findUnique({ where: { id: envelope.id } }),
+    ).toBeNull();
   });
 
   it('records both versions of one fact as two rows, joined by the trace id', async () => {
@@ -167,6 +227,10 @@ describe('audit trail (real broker, real database)', () => {
     // The trace id is the only handle that groups them back into one fact.
     expect(rowV1.correlationId).toBe(traceId);
     expect(rowV2.correlationId).toBe(traceId);
+    // The tenant lands only where the envelope carried it: the v2 row owns
+    // it, the v1 row waits for the operator backfill.
+    expect(rowV1.organizationId).toBeNull();
+    expect(rowV2.organizationId).toBe(ORGANIZATION_ID);
   });
 
   it('collapses recording the same envelope twice into one row (real ON CONFLICT)', async () => {

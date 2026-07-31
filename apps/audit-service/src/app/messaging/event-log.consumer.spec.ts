@@ -43,12 +43,16 @@ describe('EventLogConsumer', () => {
       id: '7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f',
       type: 'some.future.event.v9',
       occurredAt: '2026-07-28T12:00:00.000Z',
+      // v9 is tenant-carrying (v2 or higher), so the envelope brings one.
+      organizationId: '00000000-0000-4000-8000-000000000001',
       payload: { opaque: true },
     });
 
-    expect(
-      events.events.get('7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f')?.type,
-    ).toBe('some.future.event.v9');
+    const recorded = events.events.get('7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f');
+    expect(recorded?.type).toBe('some.future.event.v9');
+    expect(recorded?.organizationId).toBe(
+      '00000000-0000-4000-8000-000000000001',
+    );
   });
 
   it('closes its messaging client on shutdown', async () => {

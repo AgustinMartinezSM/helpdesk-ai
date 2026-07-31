@@ -22,6 +22,7 @@ export class PrismaAuditEventRepository implements AuditEventRepository {
           type: event.type,
           occurredAt: event.occurredAt,
           correlationId: event.correlationId,
+          organizationId: event.organizationId,
           payload: event.payload as Prisma.InputJsonValue,
           recordedAt: event.recordedAt,
         },
@@ -31,8 +32,15 @@ export class PrismaAuditEventRepository implements AuditEventRepository {
   }
 
   async list(filter: AuditEventListFilter): Promise<AuditEvent[]> {
+    // Equality on organization_id never matches NULL, so rows recorded from
+    // v1-era envelopes are invisible to every tenant on purpose. The
+    // operator backfill is what makes them visible again — they all belong
+    // to the bootstrap organization while it is the only one.
     const rows = await this.prisma.auditEvent.findMany({
-      where: filter.type ? { type: filter.type } : undefined,
+      where: {
+        organizationId: filter.organizationId,
+        ...(filter.type ? { type: filter.type } : {}),
+      },
       orderBy: { occurredAt: 'desc' },
       take: filter.limit,
       skip: filter.offset,
@@ -47,6 +55,7 @@ function toDomain(row: AuditEventRow): AuditEvent {
     type: row.type,
     occurredAt: row.occurredAt,
     correlationId: row.correlationId,
+    organizationId: row.organizationId,
     payload: row.payload,
     recordedAt: row.recordedAt,
   };

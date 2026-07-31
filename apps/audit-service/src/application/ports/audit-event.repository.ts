@@ -3,6 +3,12 @@ import type { AuditEvent } from '../../domain/audit-event';
 export const AUDIT_EVENT_REPOSITORY = Symbol('AUDIT_EVENT_REPOSITORY');
 
 export interface AuditEventListFilter {
+  /**
+   * Tenant scope, required and first on purpose: a field the compiler
+   * insists on cannot be forgotten quietly, and forgetting it is exactly how
+   * a read would leak the whole trail.
+   */
+  organizationId: string;
   type?: string;
   limit: number;
   offset: number;

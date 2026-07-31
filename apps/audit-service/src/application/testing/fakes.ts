@@ -18,10 +18,16 @@ export class InMemoryAuditEventRepository implements AuditEventRepository {
   }
 
   async list(filter: AuditEventListFilter): Promise<AuditEvent[]> {
-    return [...this.events.values()]
-      .filter((event) => !filter.type || event.type === filter.type)
-      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
-      .slice(filter.offset, filter.offset + filter.limit);
+    return (
+      [...this.events.values()]
+        // The scope is enforced here for real, mirroring the SQL equality: a
+        // unit suite must not be able to pass against a leaking repository,
+        // and null (a v1-era row) matches no tenant at all.
+        .filter((event) => event.organizationId === filter.organizationId)
+        .filter((event) => !filter.type || event.type === filter.type)
+        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+        .slice(filter.offset, filter.offset + filter.limit)
+    );
   }
 }
 

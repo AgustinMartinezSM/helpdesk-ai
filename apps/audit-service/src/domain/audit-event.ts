@@ -11,6 +11,13 @@ export interface AuditEvent {
   readonly type: string;
   readonly occurredAt: Date;
   readonly correlationId: string | null;
+  /**
+   * Tenant the envelope carried when it crossed the bus; null means a
+   * v1-era envelope, which had nowhere to carry one. The operator backfill
+   * assigns those rows to the bootstrap organization while it is the only
+   * one — the trail archives the compatibility window as it happened.
+   */
+  readonly organizationId: string | null;
   readonly payload: unknown;
   readonly recordedAt: Date;
 }

@@ -40,5 +40,6 @@ model AuditEvent {
 
   @@index([type, occurredAt])
   @@index([occurredAt])
+  @@index([organizationId, occurredAt])
   @@map("audit_events")
 }
