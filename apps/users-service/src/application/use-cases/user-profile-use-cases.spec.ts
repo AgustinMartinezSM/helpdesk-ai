@@ -1,8 +1,9 @@
+import { PERMISSIONS, type Actor } from '@helpdesk-ai/security';
 import {
   ForbiddenProfileActionError,
   ProfileNotFoundError,
 } from '../../domain/errors';
-import { displayNameFromEmail, type Actor } from '../../domain/user-profile';
+import { displayNameFromEmail } from '../../domain/user-profile';
 import { FixedClock, InMemoryUserProfileRepository } from '../testing/fakes';
 import {
   GetMyProfileUseCase,
@@ -10,13 +11,17 @@ import {
 } from './profile-queries';
 import { RegisterUserProfileUseCase } from './register-user-profile';
 
+// Member-shaped but without people.read: proves the directory gate rejects
+// on the missing key, not on an empty token.
 const USER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
   roles: ['user'],
+  permissions: new Set([PERMISSIONS.ORGANIZATION_READ]),
 };
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
   roles: ['agent'],
+  permissions: new Set([PERMISSIONS.PEOPLE_READ]),
 };
 
 const REGISTRATION = {
@@ -94,7 +99,7 @@ describe('profile queries', () => {
     expect(profile.userId).toBe(USER.id);
   });
 
-  it('restricts the directory to staff', async () => {
+  it('restricts the directory to people.read holders', async () => {
     const ctx = buildContext();
     await ctx.register.execute(REGISTRATION);
 

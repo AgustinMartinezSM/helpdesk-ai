@@ -1,4 +1,4 @@
-import type { Actor } from '@helpdesk-ai/security';
+import { PERMISSIONS, type Actor } from '@helpdesk-ai/security';
 import { ForbiddenAuditActionError } from '../../domain/errors';
 import { FixedClock, InMemoryAuditEventRepository } from '../testing/fakes';
 import { ListAuditEventsUseCase } from './list-audit-events';
@@ -7,14 +7,21 @@ import { RecordAuditEventUseCase } from './record-audit-event';
 const ADMIN: Actor = {
   id: '44444444-4444-4444-8444-444444444444',
   roles: ['admin'],
+  permissions: new Set([PERMISSIONS.AUDIT_READ]),
 };
+/** Agent-shaped grants: real workspace keys, none of them audit.read. */
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
   roles: ['agent'],
+  permissions: new Set([
+    PERMISSIONS.TICKETS_READ_ALL,
+    PERMISSIONS.TICKETS_NOTE_INTERNAL,
+  ]),
 };
 const USER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
   roles: ['user'],
+  permissions: new Set([PERMISSIONS.ORGANIZATION_READ]),
 };
 
 const ENVELOPE = {
@@ -82,7 +89,7 @@ describe('RecordAuditEventUseCase', () => {
 });
 
 describe('ListAuditEventsUseCase', () => {
-  it('is admin-only: agents and plain users are rejected', async () => {
+  it('requires audit.read: agents and plain users are rejected', async () => {
     const ctx = buildContext();
 
     await expect(

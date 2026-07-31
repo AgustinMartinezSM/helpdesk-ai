@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { isStaff, type Actor } from '@helpdesk-ai/security';
+import {
+  hasPermission,
+  PERMISSIONS,
+  requireOrganization,
+  type Actor,
+} from '@helpdesk-ai/security';
 import { TRACE_ID_HEADER } from '@helpdesk-ai/observability';
 import {
   AiDomainError,
   ForbiddenAiActionError,
-  NoOrganizationContextError,
   ProviderOutputError,
   ProviderUnavailableError,
 } from '../../domain/errors';
@@ -65,7 +69,9 @@ export class GenerateSuggestionUseCase {
     actor: Actor,
     input: GenerateSuggestionInput,
   ): Promise<Suggestion> {
-    if (!isStaff(actor)) {
+    // note_internal is the internal-staff-workspace key: suggestion output
+    // derives from conversation context a requester cannot see.
+    if (!hasPermission(actor, PERMISSIONS.TICKETS_NOTE_INTERNAL)) {
       throw new ForbiddenAiActionError();
     }
 
@@ -73,10 +79,7 @@ export class GenerateSuggestionUseCase {
     // with no organization produces a suggestion nothing can attribute, and
     // this one is the only guard in the platform that also stops money being
     // spent on a request that was going to be rejected anyway.
-    const organizationId = actor.organizationId;
-    if (!organizationId) {
-      throw new NoOrganizationContextError();
-    }
+    const organizationId = requireOrganization(actor);
 
     // Throws TicketNotFound / TicketAccessUnauthorized / unavailable — all
     // of them mean "do not call a paid provider", so this comes first.

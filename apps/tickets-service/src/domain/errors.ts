@@ -28,25 +28,6 @@ export class InvalidStatusTransitionError extends TicketDomainError {
 }
 
 /**
- * The caller's token carries no organization, so there is no tenant to write
- * the row under.
- *
- * Reachable in ordinary use, not just in a fault: it is the state of every
- * account between registering and organizations-service consuming the
- * registration event, which is normally milliseconds but is not guaranteed.
- * auth-service refuses to mint only when it *cannot determine* membership;
- * "this person belongs nowhere" is a real answer and still produces a token.
- *
- * So this is where that answer is enforced — at the write, where the
- * alternative is a row nobody can be shown to own.
- */
-export class NoOrganizationContextError extends TicketDomainError {
-  constructor() {
-    super('Your account is not part of an organization yet');
-  }
-}
-
-/**
  * A stored row carries no organization. The database was provisioned or
  * migrated incompletely — re-run the backfill — and until it is, the row
  * cannot be shown to anybody, because nothing can say whose it is.

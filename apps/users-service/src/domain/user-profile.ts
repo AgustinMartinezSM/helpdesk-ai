@@ -25,13 +25,3 @@ export function displayNameFromEmail(email: string): string {
   const [localPart] = email.split('@');
   return localPart || email;
 }
-
-/** Identity claims of the caller, taken from the verified access token. */
-export interface Actor {
-  readonly id: string;
-  readonly roles: string[];
-}
-
-export function isStaff(actor: Actor): boolean {
-  return actor.roles.includes('agent') || actor.roles.includes('admin');
-}

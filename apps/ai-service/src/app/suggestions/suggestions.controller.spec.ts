@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { MessagingClient } from '@helpdesk-ai/messaging';
+import { PERMISSIONS } from '@helpdesk-ai/security';
 import {
   AI_PROVIDER,
   type AiProvider,
@@ -131,11 +132,22 @@ describe('AI HTTP API (fakes, real JWT verification)', () => {
 
     const jwt = app.get(JwtService);
     requesterToken = await jwt.signAsync(
-      { email: 'ada@example.com', roles: ['user'], org: TEST_ORGANIZATION },
+      {
+        email: 'ada@example.com',
+        roles: ['user'],
+        org: TEST_ORGANIZATION,
+        // Member-shaped, deliberately without the internal-workspace key.
+        perms: [PERMISSIONS.ORGANIZATION_READ, PERMISSIONS.TICKETS_READ_OWN],
+      },
       { subject: REQUESTER },
     );
     agentToken = await jwt.signAsync(
-      { email: 'agent@example.com', roles: ['agent'], org: TEST_ORGANIZATION },
+      {
+        email: 'agent@example.com',
+        roles: ['agent'],
+        org: TEST_ORGANIZATION,
+        perms: [PERMISSIONS.TICKETS_NOTE_INTERNAL],
+      },
       { subject: AGENT },
     );
   });

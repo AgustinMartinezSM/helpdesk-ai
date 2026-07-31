@@ -13,7 +13,6 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { TRACE_ID_HEADER } from '@helpdesk-ai/observability';
-import type { Actor } from '../../domain/ticket';
 import { AddCommentUseCase } from '../../application/use-cases/add-comment';
 import { CreateTicketUseCase } from '../../application/use-cases/create-ticket';
 import {
@@ -24,7 +23,11 @@ import {
   AssignTicketUseCase,
   ChangeTicketStatusUseCase,
 } from '../../application/use-cases/ticket-lifecycle';
-import { JwtAccessGuard, type AccessTokenPayload } from '@helpdesk-ai/security';
+import {
+  JwtAccessGuard,
+  type AccessTokenPayload,
+  type Actor,
+} from '@helpdesk-ai/security';
 import {
   AddCommentDto,
   AssignTicketDto,
@@ -48,6 +51,9 @@ function actorOf(req: AuthenticatedRequest): Actor {
     // token, and a second place that decides what a valid token looks like
     // is a second place that can be wrong.
     organizationId: req.user.org,
+    // Absent claim -> empty set: an old token loses capabilities rather
+    // than gaining them.
+    permissions: new Set(req.user.perms ?? []),
   };
 }
 

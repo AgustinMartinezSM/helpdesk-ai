@@ -1,14 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import {
+  hasPermission,
+  PERMISSIONS,
+  requireOrganization,
+  type Actor,
+} from '@helpdesk-ai/security';
+import {
   ForbiddenTicketActionError,
   TicketNotFoundError,
 } from '../../domain/errors';
 import {
   canView,
-  isStaff,
-  requireOrganization,
   requireOrganizationOf,
-  type Actor,
   type TicketComment,
 } from '../../domain/ticket';
 import type { EventPublisher } from '../ports/event-publisher';
@@ -41,9 +44,9 @@ export class AddCommentUseCase {
     }
 
     const internal = input.internal ?? false;
-    // Internal notes are a staff tool; requesters can never write (or read)
-    // them.
-    if (internal && !isStaff(actor)) {
+    // Internal notes are the internal staff workspace; whoever lacks the
+    // grant can never write (or read) them.
+    if (internal && !hasPermission(actor, PERMISSIONS.TICKETS_NOTE_INTERNAL)) {
       throw new ForbiddenTicketActionError();
     }
 

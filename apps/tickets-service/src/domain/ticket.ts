@@ -1,7 +1,10 @@
 import {
-  ForbiddenTicketActionError,
-  NoOrganizationContextError,
-} from './errors';
+  hasPermission,
+  PERMISSIONS,
+  requireOrganization,
+  type Actor,
+} from '@helpdesk-ai/security';
+import { ForbiddenTicketActionError } from './errors';
 
 export const TICKET_STATUSES = [
   'open',
@@ -80,44 +83,6 @@ export interface TicketHistoryEntry {
 }
 
 /**
- * Identity claims of the caller, taken from the verified access token.
- *
- * A duplicate of the shared one in `@helpdesk-ai/security`; deleting it is
- * the read-path phase, and it has to go in the same change as the other
- * copies or they drift.
- */
-export interface Actor {
-  readonly id: string;
-  readonly roles: string[];
-  /**
-   * Tenant the caller is acting in. Optional because the token claim is:
-   * resolution fails open, so a token minted during an organizations-service
-   * outage carries none, as does one for a user with no membership.
-   *
-   * Nothing in this domain reads it yet. It exists so an event can say which
-   * organization caused it — and note that this is the *caller's* tenant, not
-   * the *ticket's*, which is a distinction that stops mattering only when
-   * tickets carry their own column.
-   */
-  readonly organizationId?: string;
-}
-
-/**
- * The tenant to write a row under, or a refusal.
- *
- * The only way to turn the actor's optional organization into the required
- * one the domain types ask for. That is deliberate: a write path cannot get a
- * usable value without passing through the refusal, so forgetting the check
- * is a type error rather than a row that belongs to nobody.
- */
-export function requireOrganization(actor: Actor): string {
-  if (!actor.organizationId) {
-    throw new NoOrganizationContextError();
-  }
-  return actor.organizationId;
-}
-
-/**
  * The tenant to write a child row under, having confirmed the caller is
  * acting inside the ticket's organization and not merely able to see it.
  *
@@ -138,11 +103,14 @@ export function requireOrganizationOf(actor: Actor, ticket: Ticket): string {
   return ticket.organizationId;
 }
 
-export function isStaff(actor: Actor): boolean {
-  return actor.roles.includes('agent') || actor.roles.includes('admin');
-}
-
-/** Requesters see their own tickets; staff see everything. */
+/**
+ * Requesters see their own tickets; the org-wide read sees every ticket in
+ * the organization. Callers that fail this get the not-found answer, never a
+ * 403 — confirming the ticket exists is the leak.
+ */
 export function canView(actor: Actor, ticket: Ticket): boolean {
-  return isStaff(actor) || ticket.requesterId === actor.id;
+  return (
+    hasPermission(actor, PERMISSIONS.TICKETS_READ_ALL) ||
+    ticket.requesterId === actor.id
+  );
 }

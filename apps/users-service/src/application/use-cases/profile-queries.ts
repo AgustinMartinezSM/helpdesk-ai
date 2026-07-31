@@ -1,12 +1,9 @@
+import { hasPermission, PERMISSIONS, type Actor } from '@helpdesk-ai/security';
 import {
   ForbiddenProfileActionError,
   ProfileNotFoundError,
 } from '../../domain/errors';
-import {
-  isStaff,
-  type Actor,
-  type UserProfile,
-} from '../../domain/user-profile';
+import type { UserProfile } from '../../domain/user-profile';
 import type { UserProfileRepository } from '../ports/user-profile.repository';
 
 export class GetMyProfileUseCase {
@@ -28,9 +25,10 @@ export class GetMyProfileUseCase {
 export class ListUserProfilesUseCase {
   constructor(private readonly profiles: UserProfileRepository) {}
 
-  /** Staff only: the directory exists for agent pickers and ticket views. */
+  /** people.read gates the directory: it exists for agent pickers and
+   * ticket views, not for browsing colleagues. */
   async execute(actor: Actor): Promise<UserProfile[]> {
-    if (!isStaff(actor)) {
+    if (!hasPermission(actor, PERMISSIONS.PEOPLE_READ)) {
       throw new ForbiddenProfileActionError();
     }
     return this.profiles.list();

@@ -28,7 +28,15 @@ interface AuthenticatedRequest {
 }
 
 function actorOf(req: AuthenticatedRequest): Actor {
-  return { id: req.user.sub, roles: req.user.roles };
+  return {
+    id: req.user.sub,
+    roles: req.user.roles,
+    // Nothing here reads these yet; they are carried now so the scoping
+    // change that follows has claims to read instead of a controller to
+    // rediscover. Both undefined/empty on a token minted without a tenant.
+    organizationId: req.user.org,
+    permissions: new Set(req.user.perms ?? []),
+  };
 }
 
 /** Wire shape: dates travel as ISO strings. */

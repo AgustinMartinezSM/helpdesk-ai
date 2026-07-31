@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { MessagingClient } from '@helpdesk-ai/messaging';
+import { PERMISSIONS } from '@helpdesk-ai/security';
 import { USER_PROFILE_REPOSITORY } from '../../application/ports/user-profile.repository';
 import { RegisterUserProfileUseCase } from '../../application/use-cases/register-user-profile';
 import {
@@ -60,11 +61,20 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
 
     const jwt = app.get(JwtService);
     userToken = await jwt.signAsync(
-      { email: 'ada@example.com', roles: ['user'] },
+      {
+        email: 'ada@example.com',
+        roles: ['user'],
+        // Member-shaped, deliberately without people.read.
+        perms: [PERMISSIONS.ORGANIZATION_READ],
+      },
       { subject: USER_ID },
     );
     agentToken = await jwt.signAsync(
-      { email: 'agent@example.com', roles: ['agent'] },
+      {
+        email: 'agent@example.com',
+        roles: ['agent'],
+        perms: [PERMISSIONS.PEOPLE_READ],
+      },
       { subject: AGENT_ID },
     );
   });
@@ -119,7 +129,7 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     });
   });
 
-  it('restricts the directory to staff', async () => {
+  it('restricts the directory to people.read holders', async () => {
     await project(AGENT_ID, 'agent@example.com', ['agent']);
 
     await request(app.getHttpServer())

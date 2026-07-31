@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { requireOrganization } from '../../domain/ticket';
-import type { Actor, Ticket, TicketPriority } from '../../domain/ticket';
+import { requireOrganization, type Actor } from '@helpdesk-ai/security';
+import type { Ticket, TicketPriority } from '../../domain/ticket';
 import type { EventPublisher } from '../ports/event-publisher';
 import type { Clock, TicketRepository } from '../ports/ticket.repository';
 

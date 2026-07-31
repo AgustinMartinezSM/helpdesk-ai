@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { MessagingClient } from '@helpdesk-ai/messaging';
+import { PERMISSIONS } from '@helpdesk-ai/security';
 import {
   TICKET_SNAPSHOT_REPOSITORY,
   USER_SNAPSHOT_REPOSITORY,
@@ -25,6 +26,7 @@ const TEST_ENV = {
 
 describe('Analytics HTTP API (fakes, real JWT verification)', () => {
   let app: INestApplication;
+  let adminToken: string;
   let agentToken: string;
   let userToken: string;
 
@@ -72,8 +74,25 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
     await app.init();
 
     const jwt = app.get(JwtService);
+    adminToken = await jwt.signAsync(
+      {
+        email: 'root@example.com',
+        roles: ['admin'],
+        perms: [PERMISSIONS.ANALYTICS_READ],
+      },
+      { subject: '44444444-4444-4444-8444-444444444444' },
+    );
+    // Agent-shaped grants, none of them analytics.read: the matrix keeps the
+    // dashboard from agents (docs/architecture/tenancy-target-state.md).
     agentToken = await jwt.signAsync(
-      { email: 'agent@example.com', roles: ['agent'] },
+      {
+        email: 'agent@example.com',
+        roles: ['agent'],
+        perms: [
+          PERMISSIONS.TICKETS_READ_ALL,
+          PERMISSIONS.TICKETS_NOTE_INTERNAL,
+        ],
+      },
       { subject: '33333333-3333-4333-8333-333333333333' },
     );
     userToken = await jwt.signAsync(
@@ -94,10 +113,19 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
       .expect(403);
   });
 
-  it('serves the dashboard summary to staff', async () => {
-    const response = await request(app.getHttpServer())
+  it('refuses agents now that analytics.read left their template', async () => {
+    // Pinned behavior change: agents used to pass the generic staff check.
+    // The approved matrix narrows the dashboard to analytics.read holders.
+    await request(app.getHttpServer())
       .get('/analytics/summary')
       .set('authorization', `Bearer ${agentToken}`)
+      .expect(403);
+  });
+
+  it('serves the dashboard summary to analytics.read holders', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/analytics/summary')
+      .set('authorization', `Bearer ${adminToken}`)
       .expect(200);
 
     expect(response.body.totalTickets).toBe(1);

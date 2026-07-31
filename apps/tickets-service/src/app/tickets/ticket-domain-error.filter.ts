@@ -4,10 +4,10 @@ import {
   type ArgumentsHost,
   type ExceptionFilter,
 } from '@nestjs/common';
+import { NoOrganizationContextError } from '@helpdesk-ai/security';
 import {
   ForbiddenTicketActionError,
   InvalidStatusTransitionError,
-  NoOrganizationContextError,
   TicketDomainError,
   TicketNotFoundError,
   UntenantedRowError,
@@ -24,10 +24,17 @@ interface JsonResponse {
  * This used to default to 404, which meant a domain error nobody had mapped
  * yet silently became "not found" — and it did: a caller with no organization
  * got a 404 for a ticket they were in the middle of creating.
+ *
+ * NoOrganizationContextError lives in @helpdesk-ai/security now (it is the
+ * shared requireOrganization helper that throws it), so it is caught by name
+ * next to the domain hierarchy rather than through it.
  */
-@Catch(TicketDomainError)
+@Catch(TicketDomainError, NoOrganizationContextError)
 export class TicketDomainErrorFilter implements ExceptionFilter {
-  catch(exception: TicketDomainError, host: ArgumentsHost): void {
+  catch(
+    exception: TicketDomainError | NoOrganizationContextError,
+    host: ArgumentsHost,
+  ): void {
     const response = host.switchToHttp().getResponse<JsonResponse>();
     const { status, error } = describe(exception);
 
@@ -39,7 +46,7 @@ export class TicketDomainErrorFilter implements ExceptionFilter {
   }
 }
 
-function describe(exception: TicketDomainError): {
+function describe(exception: TicketDomainError | NoOrganizationContextError): {
   status: number;
   error: string;
 } {

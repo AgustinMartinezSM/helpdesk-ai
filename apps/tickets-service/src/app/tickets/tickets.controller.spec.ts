@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
+import { PERMISSIONS } from '@helpdesk-ai/security';
 import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
 import { TICKET_REPOSITORY } from '../../application/ports/ticket.repository';
 import {
@@ -52,16 +53,44 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
     await app.init();
 
     const jwt = app.get(JwtService);
+    // The perms claim mirrors what auth-service mints per role template.
+    const requesterPerms = [
+      PERMISSIONS.TICKETS_CREATE,
+      PERMISSIONS.TICKETS_READ_OWN,
+      PERMISSIONS.TICKETS_REPLY_PUBLIC,
+    ];
+    const agentPerms = [
+      PERMISSIONS.TICKETS_READ_ALL,
+      PERMISSIONS.TICKETS_NOTE_INTERNAL,
+      PERMISSIONS.TICKETS_CHANGE_STATUS,
+      PERMISSIONS.TICKETS_ASSIGN_SELF,
+      PERMISSIONS.TICKETS_ASSIGN_AGENT,
+    ];
     userToken = await jwt.signAsync(
-      { email: 'user@x.com', roles: ['user'], org: TEST_ORGANIZATION },
+      {
+        email: 'user@x.com',
+        roles: ['user'],
+        org: TEST_ORGANIZATION,
+        perms: requesterPerms,
+      },
       { subject: '11111111-1111-4111-8111-111111111111' },
     );
     otherToken = await jwt.signAsync(
-      { email: 'other@x.com', roles: ['user'], org: TEST_ORGANIZATION },
+      {
+        email: 'other@x.com',
+        roles: ['user'],
+        org: TEST_ORGANIZATION,
+        perms: requesterPerms,
+      },
       { subject: '22222222-2222-4222-8222-222222222222' },
     );
     agentToken = await jwt.signAsync(
-      { email: 'agent@x.com', roles: ['agent'], org: TEST_ORGANIZATION },
+      {
+        email: 'agent@x.com',
+        roles: ['agent'],
+        org: TEST_ORGANIZATION,
+        perms: agentPerms,
+      },
       { subject: '33333333-3333-4333-8333-333333333333' },
     );
   });

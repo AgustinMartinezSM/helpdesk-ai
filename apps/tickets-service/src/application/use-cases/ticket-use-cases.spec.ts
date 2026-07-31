@@ -1,14 +1,14 @@
 import {
+  NoOrganizationContextError,
+  PERMISSIONS,
+  type Actor,
+} from '@helpdesk-ai/security';
+import {
   ForbiddenTicketActionError,
   InvalidStatusTransitionError,
-  NoOrganizationContextError,
   TicketNotFoundError,
 } from '../../domain/errors';
-import {
-  canTransition,
-  requireOrganizationOf,
-  type Actor,
-} from '../../domain/ticket';
+import { canTransition, requireOrganizationOf } from '../../domain/ticket';
 import { OTHER_ORGANIZATION, TEST_ORGANIZATION } from '../../testing/fixtures';
 import {
   FakeEventPublisher,
@@ -23,28 +23,55 @@ import {
   ChangeTicketStatusUseCase,
 } from './ticket-lifecycle';
 
+/** What a requester-shaped token carries after permission resolution. */
+const REQUESTER_PERMISSIONS = [
+  PERMISSIONS.TICKETS_CREATE,
+  PERMISSIONS.TICKETS_READ_OWN,
+  PERMISSIONS.TICKETS_REPLY_PUBLIC,
+] as const;
+
+/** What an agent-shaped token carries: the keys these use cases check. */
+const AGENT_PERMISSIONS = [
+  PERMISSIONS.TICKETS_READ_ALL,
+  PERMISSIONS.TICKETS_NOTE_INTERNAL,
+  PERMISSIONS.TICKETS_CHANGE_STATUS,
+  PERMISSIONS.TICKETS_ASSIGN_SELF,
+  PERMISSIONS.TICKETS_ASSIGN_AGENT,
+] as const;
+
 const REQUESTER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
   roles: ['user'],
   organizationId: TEST_ORGANIZATION,
+  permissions: new Set(REQUESTER_PERMISSIONS),
 };
 const OTHER_USER: Actor = {
   id: '22222222-2222-4222-8222-222222222222',
   roles: ['user'],
   organizationId: TEST_ORGANIZATION,
+  permissions: new Set(REQUESTER_PERMISSIONS),
 };
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
   roles: ['agent'],
   organizationId: TEST_ORGANIZATION,
+  permissions: new Set(AGENT_PERMISSIONS),
 };
-/** Staff, but acting in a different tenant. */
+/**
+ * Fully-permissioned staff, but acting in a different tenant. The grants are
+ * deliberately identical to AGENT's so the isolation tests prove it is the
+ * organization scope that rejects them, never a missing permission.
+ */
 const FOREIGN_AGENT: Actor = {
   id: '44444444-4444-4444-8444-444444444444',
   roles: ['agent'],
   organizationId: OTHER_ORGANIZATION,
+  permissions: new Set(AGENT_PERMISSIONS),
 };
-/** Authenticated, but between registering and getting a membership. */
+/**
+ * Authenticated, but between registering and getting a membership — such a
+ * token carries neither an organization nor resolved permissions.
+ */
 const TENANTLESS_USER: Actor = {
   id: '55555555-5555-4555-8555-555555555555',
   roles: ['user'],
@@ -416,6 +443,38 @@ describe('AssignTicketUseCase', () => {
     const unassigned = await ctx.assign.execute(AGENT, ticket.id, null);
     expect(unassigned.assigneeId).toBeNull();
     expect(ctx.tickets.history.at(-1)?.detail).toBe('unassigned');
+  });
+
+  it('splits taking a ticket from handing one over: assign_self alone', async () => {
+    const ctx = buildContext();
+    const ticket = await ctx.create.execute(REQUESTER, {
+      title: 'T',
+      description: 'D',
+    });
+    // The matrix's two assignment cells: an actor granted only assign_self
+    // can take the ticket, but unassigning or targeting anyone else needs
+    // assign_agent.
+    const selfOnlyAgent: Actor = {
+      ...AGENT,
+      permissions: new Set([
+        PERMISSIONS.TICKETS_READ_ALL,
+        PERMISSIONS.TICKETS_ASSIGN_SELF,
+      ]),
+    };
+
+    const taken = await ctx.assign.execute(
+      selfOnlyAgent,
+      ticket.id,
+      selfOnlyAgent.id,
+    );
+    expect(taken.assigneeId).toBe(selfOnlyAgent.id);
+
+    await expect(
+      ctx.assign.execute(selfOnlyAgent, ticket.id, REQUESTER.id),
+    ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
+    await expect(
+      ctx.assign.execute(selfOnlyAgent, ticket.id, null),
+    ).rejects.toBeInstanceOf(ForbiddenTicketActionError);
   });
 });
 

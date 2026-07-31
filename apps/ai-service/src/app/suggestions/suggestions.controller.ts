@@ -56,6 +56,9 @@ function actorOf(req: AuthenticatedRequest): Actor {
     // the payload the guard already verified — the same reason the bearer
     // header below is re-read rather than decoded again.
     organizationId: req.user.org,
+    // Absent claim -> empty set: an old token loses capabilities rather
+    // than gaining them.
+    permissions: new Set(req.user.perms ?? []),
   };
 }
 

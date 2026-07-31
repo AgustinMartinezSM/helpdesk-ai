@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { MessagingClient } from '@helpdesk-ai/messaging';
+import { PERMISSIONS } from '@helpdesk-ai/security';
 import { AUDIT_EVENT_REPOSITORY } from '../../application/ports/audit-event.repository';
 import { RecordAuditEventUseCase } from '../../application/use-cases/record-audit-event';
 import {
@@ -57,11 +58,24 @@ describe('Audit HTTP API (fakes, real JWT verification)', () => {
 
     const jwt = app.get(JwtService);
     adminToken = await jwt.signAsync(
-      { email: 'root@example.com', roles: ['admin'] },
+      {
+        email: 'root@example.com',
+        roles: ['admin'],
+        perms: [PERMISSIONS.AUDIT_READ],
+      },
       { subject: '44444444-4444-4444-8444-444444444444' },
     );
+    // Agent-shaped grants, none of them audit.read: behavior preserved —
+    // agents could not read the trail before either.
     agentToken = await jwt.signAsync(
-      { email: 'agent@example.com', roles: ['agent'] },
+      {
+        email: 'agent@example.com',
+        roles: ['agent'],
+        perms: [
+          PERMISSIONS.TICKETS_READ_ALL,
+          PERMISSIONS.TICKETS_NOTE_INTERNAL,
+        ],
+      },
       { subject: '33333333-3333-4333-8333-333333333333' },
     );
 

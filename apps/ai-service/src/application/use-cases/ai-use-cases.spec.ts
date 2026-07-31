@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { Actor } from '@helpdesk-ai/security';
+import {
+  NoOrganizationContextError,
+  PERMISSIONS,
+  type Actor,
+} from '@helpdesk-ai/security';
 import {
   ForbiddenAiActionError,
-  NoOrganizationContextError,
   ProviderOutputError,
   ProviderUnavailableError,
   TicketNotFoundError,
@@ -39,14 +42,29 @@ const staff: Actor = {
   id: randomUUID(),
   roles: ['agent'],
   organizationId: TEST_ORGANIZATION,
+  permissions: new Set([PERMISSIONS.TICKETS_NOTE_INTERNAL]),
 };
+// Member-shaped but without the internal-workspace key: proves the gate
+// rejects on the missing grant, not on an empty token.
 const requester: Actor = {
   id: REQUESTER_ID,
   roles: ['user'],
   organizationId: TEST_ORGANIZATION,
+  permissions: new Set([
+    PERMISSIONS.ORGANIZATION_READ,
+    PERMISSIONS.TICKETS_READ_OWN,
+  ]),
 };
-/** Staff, but between registering and getting a membership. */
-const tenantlessStaff: Actor = { id: randomUUID(), roles: ['agent'] };
+/**
+ * Carries the workspace grant but no organization. Contrived on purpose:
+ * the permission gate runs first, so proving the organization refusal still
+ * fires requires an actor that passes it.
+ */
+const tenantlessStaff: Actor = {
+  id: randomUUID(),
+  roles: ['agent'],
+  permissions: new Set([PERMISSIONS.TICKETS_NOTE_INTERNAL]),
+};
 
 const VALID_OUTPUTS: Record<SuggestionTask, unknown> = {
   summary: { text: 'Cannot sign in since the password reset.', bullets: [] },

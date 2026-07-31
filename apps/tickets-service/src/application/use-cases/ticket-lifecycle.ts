@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import {
+  hasPermission,
+  PERMISSIONS,
+  requireOrganization,
+  type Actor,
+} from '@helpdesk-ai/security';
+import {
   ForbiddenTicketActionError,
   InvalidStatusTransitionError,
   TicketNotFoundError,
@@ -7,10 +13,7 @@ import {
 import {
   canTransition,
   canView,
-  isStaff,
-  requireOrganization,
   requireOrganizationOf,
-  type Actor,
   type Ticket,
   type TicketStatus,
 } from '../../domain/ticket';
@@ -38,13 +41,18 @@ export class ChangeTicketStatusUseCase {
       throw new TicketNotFoundError();
     }
 
-    // Staff drive the lifecycle; a requester may only close their own
-    // ticket once it is resolved (confirming the fix).
+    // change_status drives the lifecycle. The one exception is the matrix's
+    // own-scope cell: a requester may close their own ticket once it is
+    // resolved (confirming the fix) — enforced here as domain logic, not by
+    // a permission key.
     const requesterClosingResolved =
       ticket.requesterId === actor.id &&
       ticket.status === 'resolved' &&
       to === 'closed';
-    if (!isStaff(actor) && !requesterClosingResolved) {
+    if (
+      !hasPermission(actor, PERMISSIONS.TICKETS_CHANGE_STATUS) &&
+      !requesterClosingResolved
+    ) {
       throw new ForbiddenTicketActionError();
     }
 
@@ -92,7 +100,14 @@ export class AssignTicketUseCase {
     assigneeId: string | null,
     traceId?: string,
   ): Promise<Ticket> {
-    if (!isStaff(actor)) {
+    // Taking a ticket yourself and handing one to somebody else are separate
+    // grants; unassigning counts as the latter — it changes someone else's
+    // queue, not your own.
+    const required =
+      assigneeId === actor.id
+        ? PERMISSIONS.TICKETS_ASSIGN_SELF
+        : PERMISSIONS.TICKETS_ASSIGN_AGENT;
+    if (!hasPermission(actor, required)) {
       throw new ForbiddenTicketActionError();
     }
 

@@ -1,11 +1,15 @@
 import { Controller, Get, Req, UseFilters, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAccessGuard, type AccessTokenPayload } from '@helpdesk-ai/security';
+import {
+  JwtAccessGuard,
+  type AccessTokenPayload,
+  type Actor,
+} from '@helpdesk-ai/security';
 import {
   GetMyProfileUseCase,
   ListUserProfilesUseCase,
 } from '../../application/use-cases/profile-queries';
-import type { Actor, UserProfile } from '../../domain/user-profile';
+import type { UserProfile } from '../../domain/user-profile';
 import { UserDomainErrorFilter } from './user-domain-error.filter';
 
 interface AuthenticatedRequest {
@@ -13,7 +17,14 @@ interface AuthenticatedRequest {
 }
 
 function actorOf(req: AuthenticatedRequest): Actor {
-  return { id: req.user.sub, roles: req.user.roles };
+  return {
+    id: req.user.sub,
+    roles: req.user.roles,
+    // Both undefined/empty on a token minted without a tenant. Read from the
+    // payload the guard already verified — no second decoding.
+    organizationId: req.user.org,
+    permissions: new Set(req.user.perms ?? []),
+  };
 }
 
 /** Wire shape: dates travel as ISO strings. */

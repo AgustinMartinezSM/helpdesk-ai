@@ -22,7 +22,14 @@ interface AuthenticatedRequest {
 }
 
 function actorOf(req: AuthenticatedRequest): Actor {
-  return { id: req.user.sub, roles: req.user.roles };
+  return {
+    id: req.user.sub,
+    roles: req.user.roles,
+    // Both undefined/empty on a token minted without a tenant. Read from the
+    // payload the guard already verified — no second decoding.
+    organizationId: req.user.org,
+    permissions: new Set(req.user.perms ?? []),
+  };
 }
 
 /** Wire shape: dates travel as ISO strings, payload stays as recorded. */

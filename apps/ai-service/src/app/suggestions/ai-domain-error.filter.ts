@@ -4,10 +4,10 @@ import {
   type ArgumentsHost,
   type ExceptionFilter,
 } from '@nestjs/common';
+import { NoOrganizationContextError } from '@helpdesk-ai/security';
 import {
   AiDomainError,
   ForbiddenAiActionError,
-  NoOrganizationContextError,
   ProviderOutputError,
   ProviderUnavailableError,
   TicketAccessUnauthorizedError,
@@ -26,10 +26,18 @@ interface JsonResponse {
  * their request (403/404), refresh their session (401), retry later (503)
  * or report a defect (502). Collapsing them into 500 would make every
  * failure look like the same outage.
+ *
+ * NoOrganizationContextError comes from @helpdesk-ai/security (the shared
+ * requireOrganization helper throws it), so it is caught by name next to the
+ * domain hierarchy. Its message is a fixed literal, which is why living
+ * outside the redacting AiDomainError base is acceptable.
  */
-@Catch(AiDomainError)
+@Catch(AiDomainError, NoOrganizationContextError)
 export class AiDomainErrorFilter implements ExceptionFilter {
-  catch(exception: AiDomainError, host: ArgumentsHost): void {
+  catch(
+    exception: AiDomainError | NoOrganizationContextError,
+    host: ArgumentsHost,
+  ): void {
     const response = host.switchToHttp().getResponse<JsonResponse>();
     const { status, error } = classify(exception);
 
@@ -41,7 +49,10 @@ export class AiDomainErrorFilter implements ExceptionFilter {
   }
 }
 
-function classify(exception: AiDomainError): { status: number; error: string } {
+function classify(exception: AiDomainError | NoOrganizationContextError): {
+  status: number;
+  error: string;
+} {
   if (
     exception instanceof ForbiddenAiActionError ||
     exception instanceof NoOrganizationContextError
