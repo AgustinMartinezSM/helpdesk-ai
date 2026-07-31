@@ -7,6 +7,8 @@ const BASE_URL = 'http://localhost:3010';
 const SERVICE_TOKEN = 'a'.repeat(48);
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
+const BRANCH_A = '00000000-0000-4000-8000-00000000000a';
+const BRANCH_B = '00000000-0000-4000-8000-00000000000b';
 
 type FakeFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -37,6 +39,7 @@ describe('HttpMembershipResolver', () => {
         organizationId: ORGANIZATION_ID,
         permissions: [],
         membershipVersion: 2,
+        branchIds: [],
       });
     });
 
@@ -47,11 +50,47 @@ describe('HttpMembershipResolver', () => {
     // The user credential must not be reused for a process credential, and
     // there is no caller token at mint time to send anyway.
     expect(seenHeaders['authorization']).toBeUndefined();
+    // An empty branch set is an ordinary answer (an unscoped member), not a
+    // shape problem — it parses and passes through as-is.
     expect(resolved).toEqual({
       organizationId: ORGANIZATION_ID,
       permissions: [],
       membershipVersion: 2,
+      branchIds: [],
     });
+  });
+
+  it('passes the branch set through untouched', async () => {
+    const resolver = resolverWith(async () =>
+      jsonResponse({
+        organizationId: ORGANIZATION_ID,
+        permissions: ['tickets.read_branch'],
+        membershipVersion: 4,
+        branchIds: [BRANCH_A, BRANCH_B],
+      }),
+    );
+
+    const resolved = await resolver.resolveFor(USER_ID);
+
+    expect(resolved?.branchIds).toEqual([BRANCH_A, BRANCH_B]);
+  });
+
+  it('treats a response missing branchIds as a shape mismatch', async () => {
+    const resolver = resolverWith(async () =>
+      jsonResponse({
+        organizationId: ORGANIZATION_ID,
+        permissions: [],
+        membershipVersion: 2,
+      }),
+    );
+
+    // The internal contract moves in lockstep in this monorepo: a response
+    // without the field is an upstream that has not caught up, and it must
+    // surface as a failure rather than silently mint branchless tokens for
+    // every branch-scoped member.
+    await expect(resolver.resolveFor(USER_ID)).rejects.toBeInstanceOf(
+      MembershipResolutionFailedError,
+    );
   });
 
   it('reads a user with no membership as null, not as a failure', async () => {
@@ -60,6 +99,7 @@ describe('HttpMembershipResolver', () => {
         organizationId: null,
         permissions: [],
         membershipVersion: null,
+        branchIds: [],
       }),
     );
 
@@ -116,6 +156,7 @@ describe('HttpMembershipResolver', () => {
         organizationId: null,
         permissions: [],
         membershipVersion: null,
+        branchIds: [],
       });
     });
 

@@ -17,6 +17,12 @@ export interface AccessTokenClaims {
   perms?: string[];
   /** Membership version; lets a caller detect a stale tenant snapshot. */
   mv?: number;
+  /**
+   * Branch ids the active membership covers. Minted only when non-empty —
+   * an empty set says nothing an absent claim does not, and absence is what
+   * branch-scoped visibility reads as "deny".
+   */
+  br?: string[];
 }
 
 export interface IssuedAccessToken {

@@ -11,6 +11,8 @@ import {
 
 const REFRESH_TTL_SECONDS = 3600;
 const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
+const BRANCH_A = '00000000-0000-4000-8000-00000000000a';
+const BRANCH_B = '00000000-0000-4000-8000-00000000000b';
 
 const user: User = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -44,11 +46,14 @@ describe('SessionService tenant claims', () => {
         organizationId: ORGANIZATION_ID,
         permissions: [],
         membershipVersion: 3,
+        branchIds: [],
       }),
     );
 
     await sessions.issueSession(user);
 
+    // The exact-equality here also pins the empty-branch-set case: an
+    // unscoped member's claims carry no `br` key at all.
     expect(tokenIssuer.lastClaims).toEqual({
       sub: user.id,
       email: user.email,
@@ -58,12 +63,47 @@ describe('SessionService tenant claims', () => {
     });
   });
 
+  it('mints br when the membership covers branches', async () => {
+    const { sessions, tokenIssuer } = buildSessions(
+      FakeMembershipResolver.resolving({
+        organizationId: ORGANIZATION_ID,
+        permissions: ['tickets.read_branch'],
+        membershipVersion: 3,
+        branchIds: [BRANCH_A, BRANCH_B],
+      }),
+    );
+
+    await sessions.issueSession(user);
+
+    expect(tokenIssuer.lastClaims?.br).toEqual([BRANCH_A, BRANCH_B]);
+  });
+
+  it('omits br for a membership with an empty branch set', async () => {
+    const { sessions, tokenIssuer } = buildSessions(
+      FakeMembershipResolver.resolving({
+        organizationId: ORGANIZATION_ID,
+        permissions: ['tickets.read_branch'],
+        membershipVersion: 3,
+        branchIds: [],
+      }),
+    );
+
+    await sessions.issueSession(user);
+
+    // An empty set says nothing an absent claim does not — branch-scoped
+    // visibility denies on absence either way — so the claim is omitted,
+    // like the other tenant claims are for a user who belongs nowhere.
+    expect('br' in (tokenIssuer.lastClaims ?? {})).toBe(false);
+    expect(tokenIssuer.lastClaims?.org).toBe(ORGANIZATION_ID);
+  });
+
   it('mints no roles claim, while the session response keeps user.roles', async () => {
     const { sessions, tokenIssuer } = buildSessions(
       FakeMembershipResolver.resolving({
         organizationId: ORGANIZATION_ID,
         permissions: ['tickets.read_own'],
         membershipVersion: 1,
+        branchIds: [],
       }),
     );
 
@@ -94,6 +134,7 @@ describe('SessionService tenant claims', () => {
       email: user.email,
     });
     expect('org' in (tokenIssuer.lastClaims ?? {})).toBe(false);
+    expect('br' in (tokenIssuer.lastClaims ?? {})).toBe(false);
     // Belonging nowhere is a real answer, not a fault. It is the state of
     // every account between registering and the consumer creating its
     // membership, so the token is issued and the write paths are what refuse.
@@ -151,6 +192,7 @@ describe('SessionService tenant claims', () => {
       organizationId: ORGANIZATION_ID,
       permissions: [],
       membershipVersion: 1,
+      branchIds: [],
     });
     const { sessions } = buildSessions(memberships);
 

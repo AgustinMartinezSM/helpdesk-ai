@@ -4,6 +4,12 @@ export interface ResolvedMembership {
   organizationId: string;
   permissions: string[];
   membershipVersion: number;
+  /**
+   * Branch ids the membership covers. Always present — an unscoped member
+   * carries an empty array — because the internal contract answers the
+   * question either way; whether the claim is minted is the session's call.
+   */
+  branchIds: string[];
 }
 
 /**

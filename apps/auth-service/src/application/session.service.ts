@@ -61,6 +61,15 @@ export class SessionService {
           perms: membership.permissions,
           mv: membership.membershipVersion,
         }),
+        // `br` only when the membership actually covers branches: an empty
+        // set says nothing an absent claim does not — branch-scoped
+        // visibility denies on absence either way — and omitting it keeps an
+        // unscoped member's token identical to the ones minted before
+        // branches existed.
+        ...(membership &&
+          membership.branchIds.length > 0 && {
+            br: membership.branchIds,
+          }),
       });
 
     const now = this.clock.now();

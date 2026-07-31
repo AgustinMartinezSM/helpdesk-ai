@@ -26,6 +26,15 @@ export interface Actor {
    * (an unprivileged caller), not a forgotten field.
    */
   readonly permissions: ReadonlySet<string>;
+  /**
+   * The branches the active membership covers (the `br` claim). OPTIONAL on
+   * purpose, unlike `permissions`: absent denies branch-scoped visibility,
+   * which is the safe direction to be wrong in; it has exactly one consumer
+   * today (`tickets.read_branch`); and the required-field churn permissions
+   * paid for is not yet buying anything here. The moment branch scope is
+   * enforced more widely is the moment to revisit.
+   */
+  readonly branchIds?: ReadonlySet<string>;
 }
 
 /**

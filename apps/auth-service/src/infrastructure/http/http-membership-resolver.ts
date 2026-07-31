@@ -33,6 +33,12 @@ const responseSchema = z.object({
   organizationId: z.string().min(1).nullable(),
   permissions: z.array(z.string()),
   membershipVersion: z.number().int().nullable(),
+  // Required, exactly like the fields above: the internal contract moves in
+  // lockstep in this monorepo, so a response without the field is a shape
+  // mismatch to surface, not a gap to paper over with a default. An
+  // optional-with-default here would let a half-deployed upstream silently
+  // mint branchless tokens for every branch-scoped member.
+  branchIds: z.array(z.uuid()),
 });
 
 export class MembershipResolutionFailedError extends Error {
@@ -97,11 +103,12 @@ export class HttpMembershipResolver implements MembershipResolver {
       );
     }
 
-    const { organizationId, permissions, membershipVersion } = parsed.data;
+    const { organizationId, permissions, membershipVersion, branchIds } =
+      parsed.data;
     if (organizationId === null || membershipVersion === null) {
       return null;
     }
 
-    return { organizationId, permissions, membershipVersion };
+    return { organizationId, permissions, membershipVersion, branchIds };
   }
 }

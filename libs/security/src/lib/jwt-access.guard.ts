@@ -27,6 +27,12 @@ export interface AccessTokenPayload {
   perms?: string[];
   /** Membership version; lets a caller detect a stale tenant snapshot. */
   mv?: number;
+  /**
+   * The branch ids the active membership covers, minted only when non-empty
+   * (omitted otherwise, like the other tenant claims). Read by branch-scoped
+   * visibility (`tickets.read_branch`).
+   */
+  br?: string[];
 }
 
 interface AuthenticatedRequest {

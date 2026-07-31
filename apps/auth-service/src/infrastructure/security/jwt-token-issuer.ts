@@ -30,6 +30,7 @@ export class JwtTokenIssuer implements TokenIssuer {
         ...(claims.org !== undefined && { org: claims.org }),
         ...(claims.perms !== undefined && { perms: claims.perms }),
         ...(claims.mv !== undefined && { mv: claims.mv }),
+        ...(claims.br !== undefined && { br: claims.br }),
       },
       { subject: claims.sub },
     );
