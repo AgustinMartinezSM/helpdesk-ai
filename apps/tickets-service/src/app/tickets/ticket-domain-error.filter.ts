@@ -12,7 +12,6 @@ import {
   MembershipVerificationUnavailableError,
   TicketDomainError,
   TicketNotFoundError,
-  UntenantedRowError,
 } from '../../domain/errors';
 
 interface JsonResponse {
@@ -65,14 +64,6 @@ function describe(exception: TicketDomainError | NoOrganizationContextError): {
     // Authenticated, but entitled to nothing yet. 403 rather than 404: there
     // is no ticket to hide, and the caller should be told why.
     return { status: HttpStatus.FORBIDDEN, error: 'Forbidden' };
-  }
-  if (exception instanceof UntenantedRowError) {
-    // A stored row the service cannot attribute. The request was fine; the
-    // database was migrated incompletely, and that is a 500, not a 404.
-    return {
-      status: HttpStatus.INTERNAL_SERVER_ERROR,
-      error: 'Internal Server Error',
-    };
   }
   if (exception instanceof InvalidAssigneeError) {
     // A well-formed request naming an unusable assignee. Not 404: the

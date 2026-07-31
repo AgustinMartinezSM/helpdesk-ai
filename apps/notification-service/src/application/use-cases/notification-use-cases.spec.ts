@@ -46,19 +46,8 @@ function buildContext() {
 
 async function seedRef(
   ctx: ReturnType<typeof buildContext>,
-  organizationId: string | null = ORG_A,
+  organizationId: string = ORG_A,
 ) {
-  if (organizationId === null) {
-    // A legacy ref projected before tenancy: written straight through the
-    // repository because RegisterTicketRefUseCase (the v2 path) can no
-    // longer produce one.
-    await ctx.refs.upsert({
-      ticketId: TICKET,
-      requesterId: REQUESTER,
-      organizationId: null,
-    });
-    return;
-  }
   await ctx.registerRef.execute({
     ticketId: TICKET,
     requesterId: REQUESTER,
@@ -141,22 +130,6 @@ describe('status change notifications', () => {
       }),
     ).rejects.toBeInstanceOf(TenantMismatchError);
     expect(ctx.notifications.notifications).toHaveLength(0);
-  });
-
-  it('proceeds on a legacy null-org ref and stamps the event tenant', async () => {
-    const ctx = buildContext();
-    await seedRef(ctx, null);
-
-    const created = await ctx.statusChanged.execute({
-      sourceEventId: EVENT_A,
-      ticketId: TICKET,
-      organizationId: ORG_A,
-      actorId: AGENT,
-      fromStatus: 'open',
-      toStatus: 'in_progress',
-    });
-
-    expect(created).toMatchObject({ userId: REQUESTER, organizationId: ORG_A });
   });
 
   it('collapses redelivery of the same event into one notification', async () => {
@@ -318,25 +291,6 @@ describe('comment notifications', () => {
       }),
     ).rejects.toBeInstanceOf(TenantMismatchError);
     expect(ctx.notifications.notifications).toHaveLength(0);
-  });
-});
-
-describe('ticket ref projection', () => {
-  it('lets a v2 replay correct a legacy null-org ref — the event is the truth', async () => {
-    const ctx = buildContext();
-    await seedRef(ctx, null);
-
-    await ctx.registerRef.execute({
-      ticketId: TICKET,
-      requesterId: REQUESTER,
-      organizationId: ORG_A,
-    });
-
-    expect(await ctx.refs.findByTicketId(TICKET)).toEqual({
-      ticketId: TICKET,
-      requesterId: REQUESTER,
-      organizationId: ORG_A,
-    });
   });
 });
 

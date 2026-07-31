@@ -26,9 +26,9 @@ model TicketRef {
   /// Tenant this ticket belongs to (ADR 0012). An opaque identifier, never a
   /// foreign key (ADR 0003). Written by ticket.created.v2 and compared
   /// against every follow-up event's organization before anyone is notified.
-  /// Still nullable in the column — NOT NULL is the phase-7 enforcement —
-  /// and NULL marks a legacy row the operator backfill may have missed.
-  organizationId String? @map("organization_id") @db.Uuid
+  /// NOT NULL since the phase-7 enforcement: every ref carries its tenant,
+  /// and a mismatch dead-letters — there is no legacy-null leg left.
+  organizationId String @map("organization_id") @db.Uuid
 
   @@map("ticket_refs")
 }
@@ -47,10 +47,9 @@ model Notification {
 
   /// Tenant of the event that produced this row (ADR 0012). An opaque
   /// identifier, never a foreign key (ADR 0003). Every read filters on it,
-  /// so a NULL row (written before tenancy) is invisible until the operator
-  /// backfill stamps it. Still nullable in the column — NOT NULL is the
-  /// phase-7 enforcement — but the domain type requires it on every write.
-  organizationId String? @map("organization_id") @db.Uuid
+  /// every write goes through a v2 event whose envelope carries it, and
+  /// NOT NULL (phase 7) makes the column agree with the domain type.
+  organizationId String @map("organization_id") @db.Uuid
 
   @@unique([userId, sourceEventId])
   /// The scoped list's exact shape: WHERE user_id AND organization_id,

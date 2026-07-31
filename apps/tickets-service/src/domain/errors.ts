@@ -28,17 +28,6 @@ export class InvalidStatusTransitionError extends TicketDomainError {
 }
 
 /**
- * A stored row carries no organization. The database was provisioned or
- * migrated incompletely — re-run the backfill — and until it is, the row
- * cannot be shown to anybody, because nothing can say whose it is.
- */
-export class UntenantedRowError extends TicketDomainError {
-  constructor(rowId: string) {
-    super(`Row ${rowId} has no organization; re-run the tenant backfill`);
-  }
-}
-
-/**
  * The chosen assignee cannot hold tickets in this organization.
  *
  * One message for every cause, on purpose. Distinguishing "no such user"

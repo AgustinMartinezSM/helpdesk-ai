@@ -48,15 +48,12 @@ interface NotifyDeps {
 /**
  * Refuses to act on an event whose organization disagrees with the ref.
  *
- * A null stored organization is the one tolerated exception: the ref
- * predates tenancy, and the event's envelope organization is verified
- * upstream by the publisher taking it from the ticket row itself — so
- * proceeding and letting the notification carry the event's organization
- * is safe, while dead-lettering every legacy ticket's follow-ups would
- * silence them for no protective gain.
+ * This used to tolerate a null stored organization (a ref that predated
+ * tenancy); the phase-7 NOT NULL guarantees every ref carries its tenant,
+ * so a mismatch is the only non-happy path left.
  */
 function verifyTenant(ref: TicketRef, organizationId: string): void {
-  if (ref.organizationId !== null && ref.organizationId !== organizationId) {
+  if (ref.organizationId !== organizationId) {
     throw new TenantMismatchError(
       ref.ticketId,
       ref.organizationId,

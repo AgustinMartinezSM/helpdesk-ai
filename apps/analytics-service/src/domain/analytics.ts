@@ -14,11 +14,11 @@ export interface TicketSnapshot {
   /** Envelope occurredAt of the newest applied event — the LWW guard. */
   readonly lastEventAt: Date;
   /**
-   * Tenant this snapshot belongs to (ADR 0012). Nullable only for rows that
-   * predate the backfill; every v2 event carries one and may correct a
-   * backfilled value under the same LWW guard as status.
+   * Tenant this snapshot belongs to (ADR 0012). Required since the phase-7
+   * NOT NULL on the column: every v2 event carries one, and may still
+   * correct the stored value under the same LWW guard as status.
    */
-  readonly organizationId: string | null;
+  readonly organizationId: string;
 }
 
 /**
@@ -32,7 +32,9 @@ export interface UserSnapshot {
   /**
    * Null between registering and the membership event arriving — registration
    * is anonymous by design, so the tenant is stamped by membership.created.
-   * A null row falls out of every scoped count until then.
+   * A null row falls out of every scoped count until then. Deliberately
+   * EXEMPT from the phase-7 NOT NULL: the registration-first write path must
+   * stay able to insert a tenantless row.
    */
   readonly organizationId: string | null;
 }

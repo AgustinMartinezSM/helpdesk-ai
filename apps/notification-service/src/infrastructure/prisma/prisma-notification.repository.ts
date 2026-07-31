@@ -77,8 +77,7 @@ export class PrismaTicketRefRepository implements TicketRefRepository {
 
   async upsert(ref: TicketRef): Promise<void> {
     // update sets requesterId AND organizationId: the v2 event is the
-    // ticket's truth, so a replay may correct a legacy null left by a row
-    // projected before tenancy.
+    // ticket's truth, and a replay may correct a stored value.
     await this.prisma.ticketRef.upsert({
       where: { ticketId: ref.ticketId },
       create: {
@@ -111,11 +110,7 @@ function toDomain(row: NotificationRow): Notification {
   return {
     id: row.id,
     userId: row.userId,
-    // The scoped where-clauses above are the only path to this mapper, and
-    // both filter on the caller's organization — so a returned row always
-    // carries exactly that organization and the NULL branch of the column
-    // is unreachable here. The assertion records that reasoning.
-    organizationId: row.organizationId as string,
+    organizationId: row.organizationId,
     type: row.type as NotificationType,
     ticketId: row.ticketId,
     message: row.message,

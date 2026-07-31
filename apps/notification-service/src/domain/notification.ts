@@ -39,10 +39,9 @@ export interface TicketRef {
   readonly ticketId: string;
   readonly requesterId: string;
   /**
-   * Tenant the ticket belongs to. Null marks a legacy row projected before
-   * tenancy existed: the operator backfill stamped those with the bootstrap
-   * organization, but the type stays honest about rows the migration may
-   * have missed rather than pretending the column was always populated.
+   * Tenant the ticket belongs to. Required since the phase-7 NOT NULL on the
+   * column: every ref carries its organization, so a follow-up event that
+   * disagrees with it is the only non-happy path left.
    */
-  readonly organizationId: string | null;
+  readonly organizationId: string;
 }

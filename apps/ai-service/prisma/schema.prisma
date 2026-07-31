@@ -61,9 +61,10 @@ model Suggestion {
   /// Tenant this suggestion belongs to (ADR 0012). An opaque identifier,
   /// never a foreign key (ADR 0003).
   ///
-  /// Nullable for now: populated by a backfill, read by nothing, and NOT NULL
-  /// only once the write path sets it.
-  organizationId String? @map("organization_id") @db.Uuid
+  /// NOT NULL since the phase-7 enforcement: the write path takes the
+  /// organization from the token, so the constraint is the net under
+  /// behavior the code already refuses to get wrong.
+  organizationId String @map("organization_id") @db.Uuid
 
   @@index([ticketId, task, createdAt])
   @@map("suggestions")

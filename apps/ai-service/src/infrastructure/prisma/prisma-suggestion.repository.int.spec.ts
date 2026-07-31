@@ -147,9 +147,12 @@ describe('PrismaSuggestionRepository (real PostgreSQL)', () => {
     const good = build('summary', new Date('2026-07-29T10:00:00.000Z'));
     await repository.append(good);
     // Simulates a historical row from before the schemas were tightened.
+    // organizationId is required even here: the phase-7 NOT NULL means not
+    // even a hand-written historical row can omit its tenant.
     await prisma.suggestion.create({
       data: {
         id: randomUUID(),
+        organizationId: TEST_ORGANIZATION,
         ticketId,
         task: 'summary',
         output: { text: '' },
@@ -174,6 +177,7 @@ describe('PrismaSuggestionRepository (real PostgreSQL)', () => {
     await prisma.suggestion.create({
       data: {
         id: randomUUID(),
+        organizationId: TEST_ORGANIZATION,
         ticketId,
         task: 'sentiment',
         output: { text: 'whatever' },

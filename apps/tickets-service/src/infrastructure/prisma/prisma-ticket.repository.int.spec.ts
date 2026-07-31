@@ -182,6 +182,24 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
     ).not.toBeNull();
   });
 
+  it('rejects an untenanted row at the database itself, not just in types', async () => {
+    // The phase-7 net under everything else in this file. The domain types
+    // and the regenerated client already make an organization-less write
+    // unrepresentable in TypeScript, so raw SQL is the only way left to
+    // attempt one — and the NOT NULL constraint refuses it even there.
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO tickets
+          (id, title, description, status, priority, requester_id,
+           created_at, updated_at, organization_id)
+        VALUES
+          (${randomUUID()}::uuid, 'untenanted', 'must not exist',
+           'open'::"TicketStatus", 'low'::"TicketPriority",
+           ${randomUUID()}::uuid, now(), now(), NULL)
+      `,
+    ).rejects.toThrow(/organization_id/);
+  });
+
   it('updates lifecycle fields and appends history', async () => {
     const ticket = aTicket();
     await repository.create(ticket, aHistoryEntry(ticket));

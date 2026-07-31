@@ -13,6 +13,13 @@
 # WHERE organization_id IS NULL, so a second run reports zero rows updated
 # and a value a consumer set deliberately is never overwritten.
 #
+# Since phase 7, seven of these tables (tickets, ticket_comments,
+# ticket_history, suggestions, ticket_snapshots, ticket_refs, notifications)
+# carry NOT NULL, so the WHERE-NULL update is a structural no-op there. The
+# script remains meaningful only for legacy rows in the two tables that are
+# nullable by design — user_snapshots and audit_events — where registration
+# legitimately writes tenantless rows that a membership normally stamps.
+#
 # SAFETY: assigning the bootstrap organization uniformly is only correct
 # while it is the ONLY organization — with one tenant, every untenanted row
 # can belong to nobody else. Once a second organization exists this blanket

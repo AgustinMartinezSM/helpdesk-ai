@@ -17,7 +17,8 @@ interface SuggestionRow {
   provider: string;
   model: string;
   contextHash: string;
-  organizationId: string | null;
+  /** NOT NULL since phase 7, so the type can finally say so. */
+  organizationId: string;
   inputTokens: number | null;
   outputTokens: number | null;
   latencyMs: number;
@@ -106,17 +107,6 @@ export class PrismaSuggestionRepository implements SuggestionRepository {
       if (!parsed.success) {
         this.logger?.warn(
           `skipping suggestion ${row.id}: stored ${row.task} output no longer matches its schema`,
-        );
-        continue;
-      }
-      if (!row.organizationId) {
-        // Written in the window between the column being added and the write
-        // path setting it. Skipped rather than shown, for the same reason as
-        // the two cases above: a row this service cannot attribute is a row
-        // it should not put in front of anybody. Re-running the tenant
-        // backfill is the fix.
-        this.logger?.warn(
-          `skipping suggestion ${row.id}: no organization; re-run the tenant backfill`,
         );
         continue;
       }

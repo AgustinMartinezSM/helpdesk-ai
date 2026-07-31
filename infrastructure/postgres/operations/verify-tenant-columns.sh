@@ -5,11 +5,19 @@
 # afterthought, because a backfill that half-worked looks exactly like one that
 # worked until something reads the column.
 #
-# Four questions, one per section below:
+# Five questions, one per section below:
 #   1. Did any row disappear? (counts, compared against a snapshot)
 #   2. Are any rows still untenanted?
 #   3. Does any row point at an organization that does not exist?
 #   4. Do a ticket and its comments and history agree on the organization?
+#   5. Did everything land on the bootstrap organization?
+#
+# Since phase 7 the seven constrained tables carry NOT NULL, so a null there
+# is doubly impossible — check 2 stays as belt and braces. user_snapshots and
+# audit_events are EXEMPT by design (registration is anonymous, and the audit
+# firehose records the tenantless user.registered.v1), so they legitimately
+# accumulate null rows between a registration and its membership event: their
+# counts are printed as informational and never fail the run.
 #
 # USAGE
 #
@@ -41,6 +49,11 @@ analytics_service:helpdesk_analytics:ticket_snapshots user_snapshots
 notification_service:helpdesk_notifications:ticket_refs notifications
 audit_service:helpdesk_audit:audit_events
 "
+
+# Tables whose organization_id is nullable BY DESIGN after phase 7. Check 2
+# reports their null counts but never fails on them; every other table in
+# SCOPED is NOT NULL and fails the run on a single null.
+NULLABLE_BY_DESIGN="helpdesk_analytics.user_snapshots helpdesk_audit.audit_events"
 
 # The per-check loops below run in `| while` pipelines, which are subshells:
 # an assignment to FAILED inside them silently vanishes. That bug shipped in
@@ -92,7 +105,7 @@ else
 fi
 
 echo ""
-echo "2. Rows still without an organization (expect 0 everywhere)"
+echo "2. Rows still without an organization (0 required on the NOT NULL tables)"
 echo "$SCOPED" | while IFS=: read -r role db tables; do
   [ -z "$role" ] && continue
   suffix=$(echo "$db" | sed 's/^helpdesk_//')
@@ -100,11 +113,20 @@ echo "$SCOPED" | while IFS=: read -r role db tables; do
   for table in $tables; do
     n=$(psql "$url" -v ON_ERROR_STOP=1 --tuples-only --no-align \
       -c "SELECT count(*) FROM ${table} WHERE organization_id IS NULL;")
-    echo "   ${db}.${table}: ${n}"
-    if [ "$n" != "0" ]; then
-      echo "   ^^ UNPOPULATED ROWS"
-      echo "check2 ${db}.${table} ${n} untenanted rows" >> "$FAILURES"
-    fi
+    case " ${NULLABLE_BY_DESIGN} " in
+      *" ${db}.${table} "*)
+        # Registrations legitimately leave nulls here until the membership
+        # event stamps them; the count is worth seeing, not worth failing on.
+        echo "   ${db}.${table}: ${n} (nullable by design)"
+        ;;
+      *)
+        echo "   ${db}.${table}: ${n}"
+        if [ "$n" != "0" ]; then
+          echo "   ^^ UNPOPULATED ROWS"
+          echo "check2 ${db}.${table} ${n} untenanted rows" >> "$FAILURES"
+        fi
+        ;;
+    esac
   done
 done
 
