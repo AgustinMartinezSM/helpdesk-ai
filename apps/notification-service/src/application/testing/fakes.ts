@@ -12,6 +12,8 @@ export class InMemoryNotificationRepository implements NotificationRepository {
 
   async add(notification: Notification): Promise<void> {
     // Mirrors the (userId, sourceEventId) unique index with DO NOTHING.
+    // Tenant-free like the real index: sourceEventId is a per-envelope uuid,
+    // so the pair cannot collide across tenants.
     const duplicate = this.notifications.some(
       (existing) =>
         existing.userId === notification.userId &&
@@ -22,9 +24,17 @@ export class InMemoryNotificationRepository implements NotificationRepository {
     }
   }
 
-  async listForUser(userId: string, limit: number): Promise<Notification[]> {
+  async listForUser(
+    userId: string,
+    organizationId: string,
+    limit: number,
+  ): Promise<Notification[]> {
     return this.notifications
-      .filter((notification) => notification.userId === userId)
+      .filter(
+        (notification) =>
+          notification.userId === userId &&
+          notification.organizationId === organizationId,
+      )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit);
   }
@@ -32,11 +42,14 @@ export class InMemoryNotificationRepository implements NotificationRepository {
   async markRead(
     id: string,
     userId: string,
+    organizationId: string,
     readAt: Date,
   ): Promise<Notification | null> {
     const index = this.notifications.findIndex(
       (notification) =>
-        notification.id === id && notification.userId === userId,
+        notification.id === id &&
+        notification.userId === userId &&
+        notification.organizationId === organizationId,
     );
     if (index < 0) {
       return null;

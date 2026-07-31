@@ -13,12 +13,16 @@ export class PrismaNotificationRepository implements NotificationRepository {
   async add(notification: Notification): Promise<void> {
     // skipDuplicates compiles to ON CONFLICT DO NOTHING on the
     // (userId, sourceEventId) unique index: redelivery collapses into the
-    // notification the event already produced.
+    // notification the event already produced. The index deliberately does
+    // NOT include the organization: sourceEventId is a per-envelope uuid,
+    // globally unique, so the pair cannot collide across tenants — the
+    // tenant column scopes reads, it does not widen the key.
     await this.prisma.notification.createMany({
       data: [
         {
           id: notification.id,
           userId: notification.userId,
+          organizationId: notification.organizationId,
           type: notification.type,
           ticketId: notification.ticketId,
           message: notification.message,
@@ -31,9 +35,16 @@ export class PrismaNotificationRepository implements NotificationRepository {
     });
   }
 
-  async listForUser(userId: string, limit: number): Promise<Notification[]> {
+  async listForUser(
+    userId: string,
+    organizationId: string,
+    limit: number,
+  ): Promise<Notification[]> {
+    // Rows with a NULL organization_id (written before tenancy) match no
+    // caller's organization, so they stay invisible until the operator
+    // backfill stamps them — invisible beats attributed to the wrong tenant.
     const rows = await this.prisma.notification.findMany({
-      where: { userId },
+      where: { userId, organizationId },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
@@ -43,16 +54,19 @@ export class PrismaNotificationRepository implements NotificationRepository {
   async markRead(
     id: string,
     userId: string,
+    organizationId: string,
     readAt: Date,
   ): Promise<Notification | null> {
     // updateMany so a foreign id is a no-op instead of a thrown P2025;
-    // the readAt: null condition keeps the first read timestamp.
+    // the readAt: null condition keeps the first read timestamp. The
+    // organization is part of the predicate: another tenant's id answers
+    // null exactly like a nonexistent one.
     await this.prisma.notification.updateMany({
-      where: { id, userId, readAt: null },
+      where: { id, userId, organizationId, readAt: null },
       data: { readAt },
     });
     const row = await this.prisma.notification.findFirst({
-      where: { id, userId },
+      where: { id, userId, organizationId },
     });
     return row ? toDomain(row) : null;
   }
@@ -62,10 +76,20 @@ export class PrismaTicketRefRepository implements TicketRefRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async upsert(ref: TicketRef): Promise<void> {
+    // update sets requesterId AND organizationId: the v2 event is the
+    // ticket's truth, so a replay may correct a legacy null left by a row
+    // projected before tenancy.
     await this.prisma.ticketRef.upsert({
       where: { ticketId: ref.ticketId },
-      create: { ticketId: ref.ticketId, requesterId: ref.requesterId },
-      update: { requesterId: ref.requesterId },
+      create: {
+        ticketId: ref.ticketId,
+        requesterId: ref.requesterId,
+        organizationId: ref.organizationId,
+      },
+      update: {
+        requesterId: ref.requesterId,
+        organizationId: ref.organizationId,
+      },
     });
   }
 
@@ -74,7 +98,11 @@ export class PrismaTicketRefRepository implements TicketRefRepository {
       where: { ticketId },
     });
     return row
-      ? { ticketId: row.ticketId, requesterId: row.requesterId }
+      ? {
+          ticketId: row.ticketId,
+          requesterId: row.requesterId,
+          organizationId: row.organizationId,
+        }
       : null;
   }
 }
@@ -83,6 +111,11 @@ function toDomain(row: NotificationRow): Notification {
   return {
     id: row.id,
     userId: row.userId,
+    // The scoped where-clauses above are the only path to this mapper, and
+    // both filter on the caller's organization — so a returned row always
+    // carries exactly that organization and the NULL branch of the column
+    // is unreachable here. The assertion records that reasoning.
+    organizationId: row.organizationId as string,
     type: row.type as NotificationType,
     ticketId: row.ticketId,
     message: row.message,

@@ -26,3 +26,22 @@ export class MissingTicketRefError extends Error {
     this.name = 'MissingTicketRefError';
   }
 }
+
+/**
+ * Raised when an event's organization does not match the tenant stored on
+ * the ticket ref it references. Outside the NotificationDomainError
+ * hierarchy for the same reason as MissingTicketRefError: it must never map
+ * to an HTTP response — it propagates out of the consumer handler so the
+ * delivery dead-letters. A mismatch means a forged or corrupted event, and
+ * silently notifying would deliver one tenant's fact to another tenant's
+ * user — the exact failure mode the tenancy migration exists to prevent.
+ */
+export class TenantMismatchError extends Error {
+  constructor(ticketId: string, stored: string, received: string) {
+    super(
+      `event organization ${received} does not match organization ${stored} ` +
+        `stored for ticket ${ticketId}; dead-lettering for inspection`,
+    );
+    this.name = 'TenantMismatchError';
+  }
+}

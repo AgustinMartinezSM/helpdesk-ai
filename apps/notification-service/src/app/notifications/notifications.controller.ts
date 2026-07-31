@@ -31,9 +31,9 @@ function actorOf(req: AuthenticatedRequest): Actor {
   return {
     id: req.user.sub,
     roles: req.user.roles,
-    // Nothing here reads these yet; they are carried now so the scoping
-    // change that follows has claims to read instead of a controller to
-    // rediscover. Both undefined/empty on a token minted without a tenant.
+    // The queries call requireOrganization on this: a token minted without
+    // a tenant answers 403 via the filter, never an unscoped read. perms
+    // stays along for the ride — no endpoint here gates on a permission.
     organizationId: req.user.org,
     permissions: new Set(req.user.perms ?? []),
   };

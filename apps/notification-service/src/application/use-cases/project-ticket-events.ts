@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { MissingTicketRefError } from '../../domain/errors';
+import {
+  MissingTicketRefError,
+  TenantMismatchError,
+} from '../../domain/errors';
 import type {
   Notification,
   NotificationType,
@@ -13,8 +16,10 @@ import type {
 
 /**
  * Notification policy, one use case per consumed event. Shared rules:
- * an actor is never notified about their own action, and delivery is
- * at-least-once so everything ends in the idempotent `add`.
+ * an actor is never notified about their own action, delivery is
+ * at-least-once so everything ends in the idempotent `add`, and every
+ * follow-up event must agree with the stored ref about which tenant the
+ * ticket belongs to before anyone is notified.
  */
 
 export class RegisterTicketRefUseCase {
@@ -23,10 +28,12 @@ export class RegisterTicketRefUseCase {
   async execute(input: {
     ticketId: string;
     requesterId: string;
+    organizationId: string;
   }): Promise<void> {
     const ref: TicketRef = {
       ticketId: input.ticketId,
       requesterId: input.requesterId,
+      organizationId: input.organizationId,
     };
     await this.refs.upsert(ref);
   }
@@ -38,10 +45,31 @@ interface NotifyDeps {
   clock: Clock;
 }
 
-async function requesterOf(
+/**
+ * Refuses to act on an event whose organization disagrees with the ref.
+ *
+ * A null stored organization is the one tolerated exception: the ref
+ * predates tenancy, and the event's envelope organization is verified
+ * upstream by the publisher taking it from the ticket row itself — so
+ * proceeding and letting the notification carry the event's organization
+ * is safe, while dead-lettering every legacy ticket's follow-ups would
+ * silence them for no protective gain.
+ */
+function verifyTenant(ref: TicketRef, organizationId: string): void {
+  if (ref.organizationId !== null && ref.organizationId !== organizationId) {
+    throw new TenantMismatchError(
+      ref.ticketId,
+      ref.organizationId,
+      organizationId,
+    );
+  }
+}
+
+async function verifiedRefOf(
   refs: TicketRefRepository,
   ticketId: string,
-): Promise<string> {
+  organizationId: string,
+): Promise<TicketRef> {
   const ref = await refs.findByTicketId(ticketId);
   if (!ref) {
     // Throwing dead-letters the message: an absent ref means the ticket's
@@ -49,11 +77,13 @@ async function requesterOf(
     // here would lose the notification forever.
     throw new MissingTicketRefError(ticketId);
   }
-  return ref.requesterId;
+  verifyTenant(ref, organizationId);
+  return ref;
 }
 
 function notification(
   userId: string,
+  organizationId: string,
   type: NotificationType,
   ticketId: string,
   message: string,
@@ -63,6 +93,7 @@ function notification(
   return {
     id: randomUUID(),
     userId,
+    organizationId,
     type,
     ticketId,
     message,
@@ -78,17 +109,23 @@ export class NotifyStatusChangedUseCase {
   async execute(input: {
     sourceEventId: string;
     ticketId: string;
+    organizationId: string;
     actorId: string;
     fromStatus: string;
     toStatus: string;
   }): Promise<Notification | null> {
-    const requesterId = await requesterOf(this.deps.refs, input.ticketId);
-    if (input.actorId === requesterId) {
+    const ref = await verifiedRefOf(
+      this.deps.refs,
+      input.ticketId,
+      input.organizationId,
+    );
+    if (input.actorId === ref.requesterId) {
       return null;
     }
 
     const created = notification(
-      requesterId,
+      ref.requesterId,
+      input.organizationId,
       'ticket-status-changed',
       input.ticketId,
       `Your ticket moved from ${input.fromStatus} to ${input.toStatus}`,
@@ -106,6 +143,7 @@ export class NotifyAssignedUseCase {
   async execute(input: {
     sourceEventId: string;
     ticketId: string;
+    organizationId: string;
     actorId: string;
     assigneeId: string | null;
   }): Promise<Notification | null> {
@@ -114,8 +152,19 @@ export class NotifyAssignedUseCase {
       return null;
     }
 
+    // The ref is resolved purely for tenant comparison — the recipient stays
+    // payload.assigneeId, whose membership is validated at the source
+    // (tickets-service refuses invalid assignees as of this sprint). This
+    // use case used to trust the payload with no lookup at all, which made
+    // it the most direct cross-tenant vector. Behavior change: a missing
+    // ref now throws like the other follow-ups — an assignment for a ticket
+    // we never saw created is a gap to dead-letter and replay, not to guess
+    // about.
+    await verifiedRefOf(this.deps.refs, input.ticketId, input.organizationId);
+
     const created = notification(
       input.assigneeId,
+      input.organizationId,
       'ticket-assigned',
       input.ticketId,
       'A ticket was assigned to you',
@@ -133,6 +182,7 @@ export class NotifyCommentAddedUseCase {
   async execute(input: {
     sourceEventId: string;
     ticketId: string;
+    organizationId: string;
     authorId: string;
     internal: boolean;
   }): Promise<Notification | null> {
@@ -142,13 +192,18 @@ export class NotifyCommentAddedUseCase {
       return null;
     }
 
-    const requesterId = await requesterOf(this.deps.refs, input.ticketId);
-    if (input.authorId === requesterId) {
+    const ref = await verifiedRefOf(
+      this.deps.refs,
+      input.ticketId,
+      input.organizationId,
+    );
+    if (input.authorId === ref.requesterId) {
       return null;
     }
 
     const created = notification(
-      requesterId,
+      ref.requesterId,
+      input.organizationId,
       'ticket-comment-added',
       input.ticketId,
       'New comment on your ticket',

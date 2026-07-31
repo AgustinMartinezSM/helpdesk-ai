@@ -31,11 +31,13 @@ const TEST_ENV = {
 const REQUESTER = '11111111-1111-4111-8111-111111111111';
 const AGENT = '33333333-3333-4333-8333-333333333333';
 const TICKET = '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222';
+const ORGANIZATION = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 describe('Notifications HTTP API (fakes, real JWT verification)', () => {
   let app: INestApplication;
   let requesterToken: string;
   let agentToken: string;
+  let tenantlessToken: string;
   let notificationId: string;
 
   beforeAll(async () => {
@@ -71,19 +73,37 @@ describe('Notifications HTTP API (fakes, real JWT verification)', () => {
     await app.init();
 
     const jwt = app.get(JwtService);
+    // Tokens carry the tenant claims the scoped reads require. Empty perms
+    // is fine — there are no permission gates on these endpoints, only the
+    // organization requirement.
     requesterToken = await jwt.signAsync(
-      { email: 'ada@example.com', roles: ['user'] },
+      {
+        email: 'ada@example.com',
+        roles: ['user'],
+        org: ORGANIZATION,
+        perms: [],
+      },
       { subject: REQUESTER },
     );
     agentToken = await jwt.signAsync(
-      { email: 'agent@example.com', roles: ['agent'] },
+      {
+        email: 'agent@example.com',
+        roles: ['agent'],
+        org: ORGANIZATION,
+        perms: [],
+      },
       { subject: AGENT },
+    );
+    tenantlessToken = await jwt.signAsync(
+      { email: 'limbo@example.com', roles: ['user'] },
+      { subject: REQUESTER },
     );
 
     // Seed one notification for the requester through the real policy.
     await new RegisterTicketRefUseCase(refs).execute({
       ticketId: TICKET,
       requesterId: REQUESTER,
+      organizationId: ORGANIZATION,
     });
     const created = await new NotifyStatusChangedUseCase({
       refs,
@@ -92,6 +112,7 @@ describe('Notifications HTTP API (fakes, real JWT verification)', () => {
     }).execute({
       sourceEventId: '7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f',
       ticketId: TICKET,
+      organizationId: ORGANIZATION,
       actorId: AGENT,
       fromStatus: 'open',
       toStatus: 'in_progress',
@@ -105,6 +126,20 @@ describe('Notifications HTTP API (fakes, real JWT verification)', () => {
 
   it('rejects unauthenticated access', async () => {
     await request(app.getHttpServer()).get('/notifications/me').expect(401);
+  });
+
+  it('answers 403 to a token minted without an organization', async () => {
+    // Authenticated but entitled to nothing yet — the state of every account
+    // between registering and its membership projection landing.
+    await request(app.getHttpServer())
+      .get('/notifications/me')
+      .set('authorization', `Bearer ${tenantlessToken}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .patch(`/notifications/${notificationId}/read`)
+      .set('authorization', `Bearer ${tenantlessToken}`)
+      .expect(403);
   });
 
   it('serves own notifications and validates the limit bound', async () => {
