@@ -1,6 +1,10 @@
-import type { Membership } from '../../domain/membership';
+import type { Membership, MembershipStatus } from '../../domain/membership';
 import type { Organization } from '../../domain/organization';
-import type { MembershipRepository } from '../ports/membership.repository';
+import type { MembershipEventPublisher } from '../ports/event-publisher';
+import type {
+  MembershipCreateResult,
+  MembershipRepository,
+} from '../ports/membership.repository';
 import type {
   Clock,
   IdGenerator,
@@ -51,16 +55,63 @@ export class InMemoryMembershipRepository implements MembershipRepository {
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  async createIfAbsent(membership: Membership): Promise<Membership> {
+  async createIfAbsent(
+    membership: Membership,
+  ): Promise<MembershipCreateResult> {
     const existing = await this.findByOrganizationAndUser(
       membership.organizationId,
       membership.userId,
     );
     if (existing) {
-      return existing;
+      return { membership: existing, created: false };
     }
     this.memberships.push(membership);
-    return membership;
+    return { membership, created: true };
+  }
+
+  async changeStatus(
+    membershipId: string,
+    to: MembershipStatus,
+    at: Date,
+  ): Promise<Membership> {
+    const index = this.memberships.findIndex(
+      (membership) => membership.id === membershipId,
+    );
+    if (index < 0) {
+      throw new Error(`no membership "${membershipId}" to change`);
+    }
+    const updated: Membership = {
+      ...this.memberships[index],
+      status: to,
+      version: this.memberships[index].version + 1,
+      updatedAt: at,
+    };
+    this.memberships[index] = updated;
+    return updated;
+  }
+}
+
+export class FakeMembershipEventPublisher implements MembershipEventPublisher {
+  readonly created: { membership: Membership; correlationId?: string }[] = [];
+  readonly statusChanged: {
+    membership: Membership;
+    fromStatus: MembershipStatus;
+    correlationId?: string;
+  }[] = [];
+
+  async membershipCreated(
+    membership: Membership,
+    correlationId?: string,
+  ): Promise<void> {
+    this.created.push({ membership, correlationId });
+  }
+
+  async membershipStatusChanged(
+    membership: Membership,
+    fromStatus: MembershipStatus,
+    correlationId?: string,
+  ): Promise<void> {
+    this.statusChanged.push({ membership, fromStatus, correlationId });
   }
 }
 

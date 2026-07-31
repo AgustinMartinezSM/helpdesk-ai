@@ -16,9 +16,11 @@ interface ActiveMembershipResponse {
 }
 
 /**
- * The mint-time resolution endpoint (ADR 0014). auth-service is the only
- * caller; it is deliberately absent from the api-gateway's routing table so
- * a browser has no path to it at all.
+ * The mint-time resolution endpoint (ADR 0014). auth-service is its only
+ * caller — though no longer the only internal caller of this service: the
+ * verification surface tickets-service uses lives in the sibling
+ * organization-scoped controller. All of it is deliberately absent from the
+ * api-gateway's routing table so a browser has no path to it at all.
  *
  * A user with no membership answers 200 with nulls rather than 404. The
  * distinction matters: "this user belongs nowhere" is a real, expected answer

@@ -29,6 +29,9 @@
       "path": "../../libs/configuration/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/security/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/messaging/tsconfig.lib.json"
     }
   ]

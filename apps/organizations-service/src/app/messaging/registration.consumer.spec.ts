@@ -5,6 +5,7 @@ import type {
 } from '@helpdesk-ai/messaging';
 import { userRegisteredV1 } from '@helpdesk-ai/messaging';
 import {
+  FakeMembershipEventPublisher,
   FixedClock,
   InMemoryMembershipRepository,
   InMemoryOrganizationRepository,
@@ -46,6 +47,7 @@ function buildConsumer() {
   });
   const memberships = new InMemoryMembershipRepository();
   const messaging = new CapturingMessagingClient();
+  const events = new FakeMembershipEventPublisher();
   const consumer = new RegistrationConsumer(
     messaging as unknown as MessagingClient,
     new EnsureMembershipUseCase(
@@ -53,16 +55,18 @@ function buildConsumer() {
       memberships,
       new FixedClock(new Date('2026-07-30T12:00:05.000Z')),
       new SequentialIdGenerator(),
+      events,
     ),
   );
-  return { organizations, memberships, messaging, consumer };
+  return { organizations, memberships, messaging, events, consumer };
 }
 
-function envelope(roles: string[]) {
+function envelope(roles: string[], correlationId?: string) {
   return {
     id: '7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f',
     type: 'user.registered.v1',
     occurredAt: '2026-07-30T12:00:00.000Z',
+    ...(correlationId ? { correlationId } : {}),
     payload: {
       userId: USER_ID,
       email: 'ada@example.com',
@@ -101,13 +105,27 @@ describe('RegistrationConsumer', () => {
   });
 
   it('stays idempotent across redelivery', async () => {
-    const { messaging, memberships, consumer } = buildConsumer();
+    const { messaging, memberships, events, consumer } = buildConsumer();
     await consumer.start();
 
     await messaging.subscription?.handler(envelope(['user']));
     await messaging.subscription?.handler(envelope(['user']));
 
     expect(memberships.memberships).toHaveLength(1);
+    // And so does what it announces: one membership, one created event.
+    expect(events.created).toHaveLength(1);
+  });
+
+  it('threads the envelope correlation id into the published event', async () => {
+    const { messaging, events, consumer } = buildConsumer();
+    await consumer.start();
+
+    await messaging.subscription?.handler(envelope(['user'], 'req-abc'));
+
+    // The registration and the membership it caused group under one trace,
+    // which is the only thing that joins them in the audit trail.
+    expect(events.created).toHaveLength(1);
+    expect(events.created[0].correlationId).toBe('req-abc');
   });
 
   it('closes its messaging client on shutdown', async () => {

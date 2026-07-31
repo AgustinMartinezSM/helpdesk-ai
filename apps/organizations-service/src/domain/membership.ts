@@ -73,3 +73,34 @@ export function roleTemplateFromGlobalRoles(roles: string[]): RoleTemplate {
 export function grantsAccess(membership: Membership): boolean {
   return membership.status === 'active';
 }
+
+/**
+ * Allowed status transitions, as data so a spec can walk every edge.
+ *
+ * There are no self-loops: "suspend an already-suspended member" means the
+ * operator's picture of the row is stale, and confirming it with a success
+ * would keep it stale. Refusing forces a re-read — and avoids a version bump
+ * that would invalidate every outstanding token over a non-change.
+ *
+ * `deactivated` is terminal. Whether a deactivated member can be reinstated
+ * — and with which role, after how long, decided by whom — is a product
+ * decision deferred to the people-management sprint. Until it is made, "no
+ * way back" is the recoverable default: a new membership can always be
+ * created deliberately, while an accidental reactivation restores access
+ * silently.
+ */
+export const MEMBERSHIP_STATUS_TRANSITIONS: Readonly<
+  Record<MembershipStatus, readonly MembershipStatus[]>
+> = {
+  invited: ['active', 'deactivated'],
+  active: ['suspended', 'deactivated'],
+  suspended: ['active', 'deactivated'],
+  deactivated: [],
+};
+
+export function canTransitionMembershipStatus(
+  from: MembershipStatus,
+  to: MembershipStatus,
+): boolean {
+  return MEMBERSHIP_STATUS_TRANSITIONS[from].includes(to);
+}

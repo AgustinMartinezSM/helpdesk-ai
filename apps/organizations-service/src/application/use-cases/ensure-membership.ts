@@ -4,6 +4,7 @@ import {
 } from '../../domain/membership';
 import { BOOTSTRAP_ORGANIZATION_SLUG } from '../../domain/organization';
 import { OrganizationNotFoundError } from '../../domain/errors';
+import type { MembershipEventPublisher } from '../ports/event-publisher';
 import type { MembershipRepository } from '../ports/membership.repository';
 import type {
   Clock,
@@ -15,6 +16,8 @@ export interface EnsureMembershipInput {
   userId: string;
   /** The global roles auth-service stated in the event. */
   roles: string[];
+  /** Correlation id of the registration event, threaded onto what we emit. */
+  correlationId?: string;
 }
 
 /**
@@ -37,6 +40,7 @@ export class EnsureMembershipUseCase {
     private readonly memberships: MembershipRepository,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
+    private readonly events: MembershipEventPublisher,
   ) {}
 
   async execute(input: EnsureMembershipInput): Promise<Membership> {
@@ -51,7 +55,7 @@ export class EnsureMembershipUseCase {
     }
 
     const now = this.clock.now();
-    return this.memberships.createIfAbsent({
+    const { membership, created } = await this.memberships.createIfAbsent({
       id: this.ids.next(),
       organizationId: organization.id,
       userId: input.userId,
@@ -63,5 +67,13 @@ export class EnsureMembershipUseCase {
       createdAt: now,
       updatedAt: now,
     });
+
+    // Only when this delivery inserted the row: delivery is at-least-once,
+    // and a replay that re-announced the membership would hand every
+    // consumer a duplicate fact to deduplicate on their own.
+    if (created) {
+      await this.events.membershipCreated(membership, input.correlationId);
+    }
+    return membership;
   }
 }

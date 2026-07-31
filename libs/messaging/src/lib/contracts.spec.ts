@@ -2,6 +2,10 @@ import {
   aiSuggestionCreatedV1,
   aiSuggestionCreatedV2,
   eventEnvelopeSchema,
+  membershipCreatedV1,
+  membershipStatusChangedV1,
+  MissingTenantContextError,
+  requireEnvelopeOrganization,
   ticketAssignedV1,
   ticketAssignedV2,
   ticketCommentAddedV1,
@@ -236,5 +240,107 @@ describe('v2 contracts', () => {
     const contracts = await import('./contracts.js');
     expect(Object.keys(contracts)).not.toContain('userRegisteredV2');
     expect(userRegisteredV1.type).toBe('user.registered.v1');
+  });
+});
+
+describe('membership contracts', () => {
+  const MEMBERSHIP_ID = '9d0c1b2a-3e4f-4a5b-8c6d-7e8f9a0b1c2d';
+  const USER_ID = '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111';
+
+  const validCreatedPayload = {
+    membershipId: MEMBERSHIP_ID,
+    organizationId: ORGANIZATION_ID,
+    userId: USER_ID,
+    roleTemplate: 'agent',
+    status: 'active',
+    createdAt: '2026-07-30T12:00:00.000Z',
+  };
+
+  const validStatusChangedPayload = {
+    membershipId: MEMBERSHIP_ID,
+    organizationId: ORGANIZATION_ID,
+    userId: USER_ID,
+    fromStatus: 'active',
+    toStatus: 'suspended',
+    version: 2,
+    changedAt: '2026-07-30T12:00:00.000Z',
+  };
+
+  it('accepts a valid membership.created.v1 payload', () => {
+    expect(
+      membershipCreatedV1.payloadSchema.safeParse(validCreatedPayload).success,
+    ).toBe(true);
+  });
+
+  it('rejects a membership.created.v1 payload with an empty role template', () => {
+    expect(
+      membershipCreatedV1.payloadSchema.safeParse({
+        ...validCreatedPayload,
+        roleTemplate: '',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('does not constrain the role template to a vocabulary', () => {
+    // The vocabulary is deliberately unfrozen: it is an open decision in the
+    // handoff, and an enum here would make settling it a breaking change.
+    expect(
+      membershipCreatedV1.payloadSchema.safeParse({
+        ...validCreatedPayload,
+        roleTemplate: 'a_template_invented_after_this_contract_shipped',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts a valid membership.status-changed.v1 payload', () => {
+    expect(
+      membershipStatusChangedV1.payloadSchema.safeParse(
+        validStatusChangedPayload,
+      ).success,
+    ).toBe(true);
+  });
+
+  it.each([0, -1, 1.5])(
+    'rejects a membership.status-changed.v1 payload with version %p',
+    (version) => {
+      // Versions start at 1 and only ever increment; anything else is a
+      // publisher bug, not a state a consumer should have to interpret.
+      expect(
+        membershipStatusChangedV1.payloadSchema.safeParse({
+          ...validStatusChangedPayload,
+          version,
+        }).success,
+      ).toBe(false);
+    },
+  );
+});
+
+describe('requireEnvelopeOrganization', () => {
+  const envelope = {
+    id: '7c1f0b7e-4d29-4b7e-8a3f-9a1b2c3d4e5f',
+    type: 'membership.created.v1',
+    occurredAt: '2026-07-30T12:00:00.000Z',
+    payload: {},
+  };
+
+  it('returns the organization when the envelope carries one', () => {
+    expect(
+      requireEnvelopeOrganization({
+        ...envelope,
+        organizationId: ORGANIZATION_ID,
+      }),
+    ).toBe(ORGANIZATION_ID);
+  });
+
+  it('throws MissingTenantContextError when it is absent', () => {
+    // Inside a subscribe handler this throw is what dead-letters the
+    // delivery: a tenantless tenant-carrying event must become an
+    // inspectable dead letter, never an unowned row.
+    expect(() => requireEnvelopeOrganization(envelope)).toThrow(
+      MissingTenantContextError,
+    );
+    expect(() => requireEnvelopeOrganization(envelope)).toThrow(
+      'membership.created.v1',
+    );
   });
 });

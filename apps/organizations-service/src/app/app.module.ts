@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import { MessagingClient } from '@helpdesk-ai/messaging';
 import { Logger, ObservabilityModule } from '@helpdesk-ai/observability';
+import { EVENT_PUBLISHER } from '../application/ports/event-publisher';
+import type { MembershipEventPublisher } from '../application/ports/event-publisher';
 import { MEMBERSHIP_REPOSITORY } from '../application/ports/membership.repository';
 import type { MembershipRepository } from '../application/ports/membership.repository';
 import {
@@ -13,19 +15,23 @@ import {
   type IdGenerator,
   type OrganizationRepository,
 } from '../application/ports/organization.repository';
+import { ChangeMembershipStatusUseCase } from '../application/use-cases/change-membership-status';
 import { EnsureMembershipUseCase } from '../application/use-cases/ensure-membership';
+import { GetMembershipUseCase } from '../application/use-cases/get-membership';
 import { ResolveActiveMembershipUseCase } from '../application/use-cases/resolve-active-membership';
 import {
   APP_ENV,
   SERVICE_NAME,
   type OrganizationsServiceEnv,
 } from '../config/env';
+import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-event-publisher';
 import { PrismaMembershipRepository } from '../infrastructure/prisma/prisma-membership.repository';
 import { PrismaOrganizationRepository } from '../infrastructure/prisma/prisma-organization.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { UuidGenerator } from '../infrastructure/uuid-generator';
 import { HealthController } from './health/health.controller';
 import { InternalMembershipsController } from './internal/internal-memberships.controller';
+import { InternalOrganizationMembershipsController } from './internal/internal-organization-memberships.controller';
 import { InternalServiceGuard } from './internal/internal-service.guard';
 import { RegistrationConsumer } from './messaging/registration.consumer';
 
@@ -50,7 +56,11 @@ export class AppModule {
           logLevel: env.LOG_LEVEL,
         }),
       ],
-      controllers: [HealthController, InternalMembershipsController],
+      controllers: [
+        HealthController,
+        InternalMembershipsController,
+        InternalOrganizationMembershipsController,
+      ],
       providers: [
         { provide: APP_ENV, useValue: env },
         { provide: CLOCK, useClass: SystemClock },
@@ -82,20 +92,54 @@ export class AppModule {
           inject: [Logger],
         },
         {
+          // Shares the service's one MessagingClient with the consumer: the
+          // adapter publishes on its own channel, and shutdown ownership
+          // stays with RegistrationConsumer.
+          provide: EVENT_PUBLISHER,
+          useFactory: (messaging: MessagingClient, logger: Logger) =>
+            new RabbitMqEventPublisher(messaging, logger),
+          inject: [MessagingClient, Logger],
+        },
+        {
           provide: EnsureMembershipUseCase,
           useFactory: (
             organizations: OrganizationRepository,
             memberships: MembershipRepository,
             clock: Clock,
             ids: IdGenerator,
+            events: MembershipEventPublisher,
           ) =>
-            new EnsureMembershipUseCase(organizations, memberships, clock, ids),
+            new EnsureMembershipUseCase(
+              organizations,
+              memberships,
+              clock,
+              ids,
+              events,
+            ),
           inject: [
             ORGANIZATION_REPOSITORY,
             MEMBERSHIP_REPOSITORY,
             CLOCK,
             ID_GENERATOR,
+            EVENT_PUBLISHER,
           ],
+        },
+        {
+          provide: ChangeMembershipStatusUseCase,
+          useFactory: (
+            memberships: MembershipRepository,
+            clock: Clock,
+            events: MembershipEventPublisher,
+          ) => new ChangeMembershipStatusUseCase(memberships, clock, events),
+          inject: [MEMBERSHIP_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+        },
+        {
+          provide: GetMembershipUseCase,
+          useFactory: (
+            memberships: MembershipRepository,
+            organizations: OrganizationRepository,
+          ) => new GetMembershipUseCase(memberships, organizations),
+          inject: [MEMBERSHIP_REPOSITORY, ORGANIZATION_REPOSITORY],
         },
         {
           provide: ResolveActiveMembershipUseCase,

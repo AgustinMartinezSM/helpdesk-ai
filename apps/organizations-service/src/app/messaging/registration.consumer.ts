@@ -57,6 +57,9 @@ export class RegistrationConsumer {
         await this.ensureMembership.execute({
           userId: event.payload.userId,
           roles: event.payload.roles,
+          // Threaded through to membership.created.v1: the registration and
+          // the membership it caused should group under one trace.
+          correlationId: event.correlationId,
         });
       },
     });

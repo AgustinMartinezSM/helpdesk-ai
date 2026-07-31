@@ -68,6 +68,34 @@ export type ContractEnvelope<TContract> =
     ? EventEnvelope<TType, TPayload>
     : never;
 
+/**
+ * Raised by `requireEnvelopeOrganization` when a tenant-carrying event
+ * arrives without a tenant on its envelope.
+ */
+export class MissingTenantContextError extends Error {
+  constructor(type: string) {
+    super(`event "${type}" carries no organizationId on its envelope`);
+    this.name = 'MissingTenantContextError';
+  }
+}
+
+/**
+ * Consume-side guard for tenant-carrying events.
+ *
+ * The envelope schema cannot require a tenant — it is shared with every v1
+ * message still on the bus — so the requirement lives where the consumer
+ * knows the contract it subscribed to is tenant-carrying. Throwing rather
+ * than returning undefined is the point: inside a subscribe handler the
+ * throw rejects the delivery to the DLQ, so a tenantless envelope becomes an
+ * inspectable dead letter instead of a projected row no organization owns.
+ */
+export function requireEnvelopeOrganization(envelope: EventEnvelope): string {
+  if (!envelope.organizationId) {
+    throw new MissingTenantContextError(envelope.type);
+  }
+  return envelope.organizationId;
+}
+
 // ---------------------------------------------------------------------------
 // Contracts. Status/priority vocabularies are duplicated from the owning
 // service's domain ON PURPOSE: a contract is the public agreement between
@@ -195,4 +223,51 @@ export const aiSuggestionCreatedV1 = defineEvent(
 export const aiSuggestionCreatedV2 = defineEvent(
   'ai.suggestion.created.v2',
   aiSuggestionCreatedPayload,
+);
+
+// ---------------------------------------------------------------------------
+// Membership events. Born tenant-carrying: no consumer predates them, so
+// there is no v1/v2 compatibility window to manage — ".v1" names the first
+// version of a tenant-carrying contract, not a tenantless past. The envelope
+// organizationId is required on the publish path exactly as for the ticket
+// v2 contracts (ADR 0005 amendment), and consumers reject its absence with
+// `requireEnvelopeOrganization`.
+//
+// The organization ALSO appears in the payload, unlike the ticket contracts.
+// Not a contradiction: a membership IS an (organization, user) edge, so the
+// organization is the subject of the fact, not merely the scope of its
+// delivery. The envelope copy is for consumers that route on tenancy without
+// knowing this schema; the payload copy is the fact itself.
+//
+// roleTemplate and status are min-1 strings, not enums, on purpose: the
+// role-template vocabulary is still an open question (see the pending
+// decisions in docs/handoffs/CURRENT-HANDOFF.md), and freezing today's
+// provisional names into a contract enum would turn settling it into a
+// breaking contract change.
+// ---------------------------------------------------------------------------
+
+export const membershipCreatedV1 = defineEvent(
+  'membership.created.v1',
+  z.object({
+    membershipId: z.uuid(),
+    organizationId: z.uuid(),
+    userId: z.uuid(),
+    roleTemplate: z.string().min(1),
+    status: z.string().min(1),
+    createdAt: z.iso.datetime(),
+  }),
+);
+
+export const membershipStatusChangedV1 = defineEvent(
+  'membership.status-changed.v1',
+  z.object({
+    membershipId: z.uuid(),
+    organizationId: z.uuid(),
+    userId: z.uuid(),
+    fromStatus: z.string().min(1),
+    toStatus: z.string().min(1),
+    /** Post-transition membership version; compares against the `mv` claim. */
+    version: z.number().int().positive(),
+    changedAt: z.iso.datetime(),
+  }),
 );

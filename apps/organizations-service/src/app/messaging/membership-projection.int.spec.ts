@@ -11,11 +11,19 @@
  * so assertions target only rows created by this run's random identifiers.
  */
 import { randomUUID } from 'node:crypto';
-import { MessagingClient, userRegisteredV1 } from '@helpdesk-ai/messaging';
+import {
+  MessagingClient,
+  membershipCreatedV1,
+  membershipStatusChangedV1,
+  userRegisteredV1,
+  type ContractEnvelope,
+} from '@helpdesk-ai/messaging';
 import { SystemClock } from '../../application/ports/organization.repository';
+import { ChangeMembershipStatusUseCase } from '../../application/use-cases/change-membership-status';
 import { EnsureMembershipUseCase } from '../../application/use-cases/ensure-membership';
 import { ResolveActiveMembershipUseCase } from '../../application/use-cases/resolve-active-membership';
 import { BOOTSTRAP_ORGANIZATION_SLUG } from '../../domain/organization';
+import { RabbitMqEventPublisher } from '../../infrastructure/messaging/rabbitmq-event-publisher';
 import { PrismaMembershipRepository } from '../../infrastructure/prisma/prisma-membership.repository';
 import { PrismaOrganizationRepository } from '../../infrastructure/prisma/prisma-organization.repository';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -52,9 +60,16 @@ describe('membership provisioning (real broker, real database)', () => {
   let organizations: PrismaOrganizationRepository;
   let memberships: PrismaMembershipRepository;
   let resolveActiveMembership: ResolveActiveMembershipUseCase;
+  let changeMembershipStatus: ChangeMembershipStatusUseCase;
   let publisherClient: MessagingClient;
   let consumerClient: MessagingClient;
   let consumer: RegistrationConsumer;
+  const membershipCreatedEvents: ContractEnvelope<
+    typeof membershipCreatedV1
+  >[] = [];
+  const membershipStatusChangedEvents: ContractEnvelope<
+    typeof membershipStatusChangedV1
+  >[] = [];
 
   beforeAll(async () => {
     prisma = new PrismaService(databaseUrl as string);
@@ -78,6 +93,12 @@ describe('membership provisioning (real broker, real database)', () => {
       serviceName: 'organizations-service-int-publisher',
     });
 
+    const events = new RabbitMqEventPublisher(publisherClient);
+    changeMembershipStatus = new ChangeMembershipStatusUseCase(
+      memberships,
+      new SystemClock(),
+      events,
+    );
     consumer = new RegistrationConsumer(
       consumerClient,
       new EnsureMembershipUseCase(
@@ -85,9 +106,29 @@ describe('membership provisioning (real broker, real database)', () => {
         memberships,
         new SystemClock(),
         new UuidGenerator(),
+        events,
       ),
     );
     await consumer.start();
+
+    // A durable capture queue for what THIS service publishes. Like the
+    // consumer queue above it persists on the shared local broker, so every
+    // assertion targets only this run's random identifiers.
+    await consumerClient.subscribe({
+      queue: 'organizations-service.int-membership-events',
+      contracts: [membershipCreatedV1, membershipStatusChangedV1],
+      handler: async (event) => {
+        if (event.type === membershipCreatedV1.type) {
+          membershipCreatedEvents.push(
+            event as ContractEnvelope<typeof membershipCreatedV1>,
+          );
+        } else {
+          membershipStatusChangedEvents.push(
+            event as ContractEnvelope<typeof membershipStatusChangedV1>,
+          );
+        }
+      },
+    });
   });
 
   afterAll(async () => {
@@ -152,11 +193,89 @@ describe('membership provisioning (real broker, real database)', () => {
     );
     expect(resolved.organizationId).toBe(bootstrap?.id);
     expect(resolved.membershipVersion).toBe(1);
-    // Empty until the permission evaluator exists; see ADR 0015.
-    expect(resolved.permissions).toEqual([]);
+    // The code map's answer for a requester — the first evaluator increment
+    // (ADR 0015); seeded rows are still pending.
+    expect(resolved.permissions).toContain('tickets.read_own');
   });
 
   it('leaves a user with no membership unresolved rather than guessing', async () => {
     expect(await resolveActiveMembership.execute(randomUUID())).toBeNull();
+  });
+
+  it('announces a consumed registration as membership.created.v1, tenant on the envelope', async () => {
+    const userId = randomUUID();
+    await publisherClient.publish(userRegisteredV1, {
+      userId,
+      email: `${randomUUID()}@example.com`,
+      roles: ['user', 'agent'],
+      registeredAt: '2026-07-30T12:00:00.000Z',
+    });
+
+    const announced = await waitFor(async () => {
+      return (
+        membershipCreatedEvents.find(
+          (event) => event.payload.userId === userId,
+        ) ?? null
+      );
+    });
+
+    // The whole round trip: consumed from the broker, projected, and
+    // announced back onto it with the bootstrap organization stamped where
+    // tenancy-routing consumers read it — the envelope.
+    const bootstrap = await organizations.findBySlug(
+      BOOTSTRAP_ORGANIZATION_SLUG,
+    );
+    expect(announced.organizationId).toBe(bootstrap?.id);
+    expect(announced.payload.organizationId).toBe(bootstrap?.id);
+    expect(announced.payload.roleTemplate).toBe('agent');
+    expect(announced.payload.status).toBe('active');
+  });
+
+  it('publishes the suspension, stops resolving, and resolves again on reinstatement', async () => {
+    const userId = randomUUID();
+    await publisherClient.publish(userRegisteredV1, {
+      userId,
+      email: `${randomUUID()}@example.com`,
+      roles: ['user'],
+      registeredAt: '2026-07-30T12:00:00.000Z',
+    });
+    const created = await waitFor(() =>
+      resolveActiveMembership.execute(userId),
+    );
+    const organizationId = created.organizationId;
+
+    await changeMembershipStatus.execute({
+      organizationId,
+      userId,
+      to: 'suspended',
+    });
+
+    const suspended = await waitFor(async () => {
+      return (
+        membershipStatusChangedEvents.find(
+          (event) => event.payload.userId === userId,
+        ) ?? null
+      );
+    });
+    expect(suspended.organizationId).toBe(organizationId);
+    expect(suspended.payload.fromStatus).toBe('active');
+    expect(suspended.payload.toStatus).toBe('suspended');
+    expect(suspended.payload.version).toBe(2);
+
+    // A suspended membership resolves to nothing: the next token this user
+    // gets carries no organization.
+    expect(await resolveActiveMembership.execute(userId)).toBeNull();
+
+    await changeMembershipStatus.execute({
+      organizationId,
+      userId,
+      to: 'active',
+    });
+
+    const reinstated = await resolveActiveMembership.execute(userId);
+    expect(reinstated?.organizationId).toBe(organizationId);
+    // Bumped twice since creation: any token minted before the suspension
+    // still says mv 1 and is detectably stale.
+    expect(reinstated?.membershipVersion).toBe(3);
   });
 });

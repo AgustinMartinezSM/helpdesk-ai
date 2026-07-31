@@ -1,4 +1,5 @@
 import { grantsAccess } from '../../domain/membership';
+import { permissionsForTemplate } from '../../domain/permissions';
 import { isActive } from '../../domain/organization';
 import type { MembershipRepository } from '../ports/membership.repository';
 import type { OrganizationRepository } from '../ports/organization.repository';
@@ -8,12 +9,12 @@ export interface ResolvedMembership {
   /**
    * Permission keys for this person in that organization.
    *
-   * Empty for now, and honestly so: role templates are still plain strings,
-   * and the template-to-permission rows ADR 0015 requires arrive with the
-   * evaluator in the read-path phase. Emitting an empty set means a call site
-   * that starts checking permissions denies, which is the safe direction to
-   * be wrong in. Inventing permissions here to make the claim look finished
-   * would be the unsafe one.
+   * Resolved from the role template by the code map in
+   * src/domain/permissions.ts — the first increment of the evaluator
+   * ADR 0015 asks for. The seeded template rows it ultimately wants are
+   * still pending on the vocabulary questions in the handoff; when they
+   * land, the map becomes a database read and this claim does not change
+   * shape.
    */
   permissions: string[];
   /** Value of the `mv` claim (ADR 0014). */
@@ -54,7 +55,7 @@ export class ResolveActiveMembershipUseCase {
       }
       return {
         organizationId: membership.organizationId,
-        permissions: [],
+        permissions: [...permissionsForTemplate(membership.roleTemplate)],
         membershipVersion: membership.version,
       };
     }
