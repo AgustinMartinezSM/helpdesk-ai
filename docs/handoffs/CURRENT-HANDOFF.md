@@ -3,9 +3,12 @@
 **Date:** 2026-07-30
 **Sprint:** 9.4 — Write paths and the first scoped reads (in progress)
 **Repository:** `C:\Proyectos\helpdesk-ai`
-**Branch:** `main` at `75b2bbb` — fast-forwarded from
-`feat/s9-5-tenant-writes` (no merge commit, no rewritten history) and pushed.
-Working tree clean, and **remote CI is green** on the first attempt.
+**Branch:** `main`, pushed, remote CI green. Everything below is merged.
+
+No commit sha here on purpose. This line has gone stale four times in one
+sprint — a handoff that names the tip is wrong the moment anything lands, and
+a wrong sha reads as authoritative. `git log --oneline -10` is the source of
+truth; this file is for the things git cannot tell you.
 
 Read `docs/progress/SPRINT-009.4.md` first, then `SPRINT-009.3.md`. This file
 is the operational summary of both.
@@ -76,10 +79,11 @@ lifecycle events. Audit's tenant column for those rows comes from R4's
 per-type map, permanently.
 
 **A v2 is skipped, not faked, when the caller has no organization**, and the
-skip is logged with the contract and subject id. This is routine, not an edge
-case: resolution fails open, so a token minted during an organizations-service
-outage carries no tenant. **The skip count is the metric that says whether
-phase 6 can start rejecting.** Watch it.
+skip is logged with the contract and subject id. This stays routine even now
+that resolution fails closed, because "belongs to no organization" is still a
+real answer that mints a token — it is the state of an account waiting for its
+membership. What changed in Sprint 9.4 is that an organizations-service
+outage no longer produces a tenant-less token at all; it produces no token.
 
 **The audit trail now records two rows per fact.** The firehose binds `#` so
 it gets both versions, and the id-keyed dedupe cannot collapse two envelopes.
@@ -87,11 +91,13 @@ This runs until phase 8 stops publishing v1. Both publishes share a
 `correlationId`, which is the only thing that groups them. Anything counting
 audit rows per logical fact double-counts across the window.
 
-## Phase 4 — the columns exist and nothing reads them
+## Phase 4 — the columns exist (nothing read them _at the time_)
 
 Eight tables across five services gained a nullable `organization_id`, and
-every row that existed was backfilled to the bootstrap organization. No domain
-type, no repository mapper and no API response mentions the column.
+every row that existed was backfilled to the bootstrap organization. At that
+point no domain type, repository mapper or API response mentioned the column
+— that was the checkpoint. Sprint 9.4 changed it for tickets-service and
+ai-service; the other three still do not read theirs.
 
 ### Three things to know before phase 5 or 7
 
@@ -125,13 +131,11 @@ both child tables at once makes a cartesian product. What caught it was the
 checks contradicting each other, not the check itself. If you extend this
 script, keep the checks overlapping.
 
-### Debt phase 3 handed to phase 4, now moved to phase 6
+### Debt phase 3 handed to phase 4 — discharged in Sprint 9.4
 
-The organization on a ticket event is the **caller's**, not the **ticket's**.
-The column now exists, so the two are separable — but nothing compares them,
-because no write path sets the column. The reconciliation belongs to phase 6,
-where writes take the organization from the actor's claim and a mismatch
-becomes something that can be detected and refused.
+A ticket event used to carry the **caller's** organization because the ticket
+had none. It has one now, the two are compared, and a mutation from outside
+the ticket's organization is refused. See the Sprint 9.4 section.
 
 ## Sprint 9.2 — closed and merged
 
@@ -207,13 +211,12 @@ runs remotely. `CONTRIBUTING.md` now carries the checklist.
 
 ## Work incomplete / deliberately deferred
 
-- **R9's shared fixture module was not written.** Phase 0 asked for one that
-  creates two organizations and scopes teardown. What exists is
-  `apps/tickets-service/src/testing/fixtures.ts`, which is one service's
-  fixtures and creates no organizations. There is nothing to scope teardown by
-  until the tables have `organization_id`, so this belongs to the backfill
-  phase — but it must exist before any suite becomes two-tenant, because every
-  integration suite still calls an unfiltered `deleteMany()`.
+- **R9 is done for tickets-service, and nowhere else.**
+  `apps/tickets-service/src/testing/fixtures.ts` now exports
+  `TEST_ORGANIZATION` and `OTHER_ORGANIZATION`, and the two-organization
+  isolation test uses both. Every other integration suite still declares
+  inline builders and still calls an unfiltered `deleteMany()`, so each one
+  needs the same treatment before it can become two-tenant.
 - **`mv` is emitted and never checked.** Nothing re-validates a membership
   version. ADR 0014's re-validation idea also has an unresolved tension with
   its own rule that downstream services never call organizations-service
@@ -240,10 +243,14 @@ runs remotely. `CONTRIBUTING.md` now carries the checklist.
   product decision; the provider-notice failure path still drops the
   conservative disclosure instead of defaulting to it.
 
-## Decisions made this sprint
+## Decisions made in Sprint 9.2 (a record of what was decided then)
+
+Several of these have since been superseded — read the Sprint 9.4 section
+above for the current behaviour, not this list.
 
 - Membership resolution is a synchronous call at mint time (ADR 0014 already
-  decided this); it fails open until the claims decide something.
+  decided this); it failed open until the claims decided something.
+  **Superseded in 9.4:** it now fails closed on uncertainty.
 - Existing users are reconciled by an operator script, not by an auto-
   provisioning path inside authentication.
 - `perms` is emitted empty rather than filled with invented permissions.
@@ -396,21 +403,35 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Phases 3 and 4 are done and merged: `main` is at `e3ecbc5`, pushed, and
-> remote CI is green. Five v2 contracts carry the organization on the envelope
-> and nothing consumes them; eight tables have a backfilled `organization_id`
-> and nothing reads it. Continue with phase 5, the read paths: make the
-> repository
-> scope a **required** argument so a missing one is a compile error, delete
-> `isStaff`/`isAdmin` rather than changing their signature — including the
-> duplicate `Actor` copies in tickets-service and users-service, which have to
-> go in the same change or they drift — and enumerate the use cases against
-> the check so `AssignTicketUseCase` is not missed, since it is the one path
-> that never calls `canView`. The phase 0 isolation tests must pass at the
-> end. Read the Sprint 9.3 section of this handoff first, particularly that
-> rows written from now until phase 6 have a null organization, that
-> `user_profiles` and `user_snapshots` have no column on purpose, and that
-> membership resolution still fails open.
+> Continue the HelpDesk AI tenancy migration. Everything through phase 4 is
+> merged and pushed on `main` with remote CI green, plus phase 6's write half
+> and phase 5's read half for tickets-service only. Read
+> `docs/progress/SPRINT-009.4.md` and then the Sprint 9.4 section of
+> `docs/handoffs/CURRENT-HANDOFF.md` before touching anything — the plan's
+> phase order was deliberately inverted and the reason matters.
+>
+> Next: finish phase 5. Scope the users-service directory, the audit filter,
+> and all five analytics aggregates — R5 requires the five to land in one
+> commit, because a partial change leaves a dashboard mixing scoped and
+> unscoped numbers, which is worse than either. Then delete `isStaff` and
+> `isAdmin` rather than changing their signature, together with the duplicate
+> `Actor` copies in `tickets-service/src/domain/ticket.ts` and
+> `users-service/src/domain/user-profile.ts`, in one change or they drift.
+> Enumerate the use cases against the check so `AssignTicketUseCase` is not
+> missed — it is the one path that never calls `canView`.
+>
+> Four things that are true now and were not two sprints ago, so do not
+> reason from older documents: membership resolution **fails closed on
+> uncertainty** and answers 503, while "belongs to no organization" is a real
+> answer that still mints a token and is refused at the write; every write in
+> tickets-service and ai-service already takes the organization from the
+> token; tickets reads are already scoped; and `user_profiles` and
+> `user_snapshots` have no organization column on purpose.
+>
+> Do not start phase 7. `NOT NULL` is the first step a code revert cannot
+> undo, and it needs the backfill re-run first — not just the verification —
+> because every row written between phase 4 and phase 6 has a null
+> organization.
 
 ## Repository isolation
 
