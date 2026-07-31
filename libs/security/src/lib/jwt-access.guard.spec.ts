@@ -6,7 +6,6 @@ import { JwtAccessGuard, type AccessTokenPayload } from './jwt-access.guard.js';
 const claims: AccessTokenPayload = {
   sub: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
   email: 'ada@example.com',
-  roles: ['user'],
 };
 
 interface TestRequest {

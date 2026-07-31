@@ -79,7 +79,6 @@ describe('Notifications HTTP API (fakes, real JWT verification)', () => {
     requesterToken = await jwt.signAsync(
       {
         email: 'ada@example.com',
-        roles: ['user'],
         org: ORGANIZATION,
         perms: [],
       },
@@ -88,14 +87,13 @@ describe('Notifications HTTP API (fakes, real JWT verification)', () => {
     agentToken = await jwt.signAsync(
       {
         email: 'agent@example.com',
-        roles: ['agent'],
         org: ORGANIZATION,
         perms: [],
       },
       { subject: AGENT },
     );
     tenantlessToken = await jwt.signAsync(
-      { email: 'limbo@example.com', roles: ['user'] },
+      { email: 'limbo@example.com' },
       { subject: REQUESTER },
     );
 

@@ -134,7 +134,6 @@ describe('AI HTTP API (fakes, real JWT verification)', () => {
     requesterToken = await jwt.signAsync(
       {
         email: 'ada@example.com',
-        roles: ['user'],
         org: TEST_ORGANIZATION,
         // Member-shaped, deliberately without the internal-workspace key.
         perms: [PERMISSIONS.ORGANIZATION_READ, PERMISSIONS.TICKETS_READ_OWN],
@@ -144,7 +143,6 @@ describe('AI HTTP API (fakes, real JWT verification)', () => {
     agentToken = await jwt.signAsync(
       {
         email: 'agent@example.com',
-        roles: ['agent'],
         org: TEST_ORGANIZATION,
         perms: [PERMISSIONS.TICKETS_NOTE_INTERNAL],
       },

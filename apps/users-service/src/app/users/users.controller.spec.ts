@@ -73,7 +73,6 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     userToken = await jwt.signAsync(
       {
         email: 'ada@example.com',
-        roles: ['user'],
         // Member-shaped, deliberately without people.read.
         perms: [PERMISSIONS.ORGANIZATION_READ],
       },
@@ -82,7 +81,6 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     agentToken = await jwt.signAsync(
       {
         email: 'agent@example.com',
-        roles: ['agent'],
         org: ORG_A,
         perms: [PERMISSIONS.PEOPLE_READ],
       },
@@ -92,7 +90,6 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     secondOrgAgentToken = await jwt.signAsync(
       {
         email: 'rival-agent@example.com',
-        roles: ['agent'],
         org: ORG_B,
         perms: [PERMISSIONS.PEOPLE_READ],
       },
@@ -103,7 +100,6 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     tenantlessAgentToken = await jwt.signAsync(
       {
         email: 'floating-agent@example.com',
-        roles: ['agent'],
         perms: [PERMISSIONS.PEOPLE_READ],
       },
       { subject: '55555555-5555-4555-8555-555555555555' },
@@ -118,14 +114,13 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     return { authorization: `Bearer ${token}` };
   }
 
-  async function project(userId: string, email: string, roles: string[]) {
+  async function project(userId: string, email: string) {
     await new RegisterUserProfileUseCase(
       profiles,
       new FixedClock(new Date('2026-07-28T12:00:05.000Z')),
     ).execute({
       userId,
       email,
-      roles,
       registeredAt: new Date('2026-07-28T12:00:00.000Z'),
     });
   }
@@ -144,7 +139,7 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
       .set(asBearer(userToken))
       .expect(404);
 
-    await project(USER_ID, 'ada@example.com', ['user']);
+    await project(USER_ID, 'ada@example.com');
 
     const response = await request(app.getHttpServer())
       .get('/users/me')
@@ -155,13 +150,12 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
       userId: USER_ID,
       email: 'ada@example.com',
       displayName: 'ada',
-      roles: ['user'],
       registeredAt: '2026-07-28T12:00:00.000Z',
     });
   });
 
   it('restricts the directory to people.read holders in an organization', async () => {
-    await project(AGENT_ID, 'agent@example.com', ['agent']);
+    await project(AGENT_ID, 'agent@example.com');
     for (const userId of [USER_ID, AGENT_ID]) {
       await memberships.applyCreated({
         organizationId: ORG_A,

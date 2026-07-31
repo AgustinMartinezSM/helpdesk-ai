@@ -5,6 +5,7 @@ import {
   HttpCode,
   Post,
   Req,
+  UnauthorizedException,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,10 @@ import {
   RefreshTokenReuseError,
 } from '../../domain/errors';
 import type { Session } from '../../application/session.service';
+import {
+  GetIdentityUseCase,
+  type IdentityOutput,
+} from '../../application/use-cases/get-identity';
 import { LoginUseCase } from '../../application/use-cases/login';
 import { LogoutUseCase } from '../../application/use-cases/logout';
 import { RefreshSessionUseCase } from '../../application/use-cases/refresh-session';
@@ -58,6 +63,7 @@ export class AuthController {
     private readonly loginUseCase: LoginUseCase,
     private readonly refreshSession: RefreshSessionUseCase,
     private readonly logoutUseCase: LogoutUseCase,
+    private readonly getIdentity: GetIdentityUseCase,
     private readonly logger: Logger,
   ) {}
 
@@ -119,13 +125,19 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAccessGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Identity claims of the presented access token' })
-  me(@Req() request: { user: AccessTokenPayload }): {
-    id: string;
-    email: string;
-    roles: string[];
-  } {
-    const { sub, email, roles } = request.user;
-    return { id: sub, email, roles };
+  @ApiOperation({ summary: 'Identity of the authenticated account' })
+  async me(
+    @Req() request: { user: AccessTokenPayload },
+  ): Promise<IdentityOutput> {
+    // The token proves who is asking; the user row supplies what the answer
+    // says. Since phase 8 the token carries no roles claim, so the response's
+    // role names — unchanged in shape, apps/web renders them — are loaded
+    // rather than echoed. A token whose account is gone gets a 401, not an
+    // identity reconstructed from stale claims.
+    const identity = await this.getIdentity.execute(request.user.sub);
+    if (!identity) {
+      throw new UnauthorizedException();
+    }
+    return identity;
   }
 }

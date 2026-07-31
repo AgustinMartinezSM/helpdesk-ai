@@ -4,15 +4,14 @@ export interface AccessTokenClaims {
   /** User id (JWT `sub`). */
   sub: string;
   email: string;
-  roles: string[];
   /**
    * Tenant context (ADR 0014). Optional because a user with no membership
-   * still gets a token: every account that predates organizations-service is
-   * in that state until the backfill runs, and refusing to sign for them
-   * would break login for a claim nothing reads yet.
+   * still gets a token: belonging nowhere is a real answer, and the write
+   * paths downstream are what refuse it, with a reason.
    *
-   * `roles` stays alongside `perms` as a compatibility claim and is removed
-   * once every call site reads permissions instead.
+   * No `roles` here — phase 8 removed the compatibility claim once every
+   * call site read permissions instead. The product's role names live on
+   * the user row and travel in the session response, not in the token.
    */
   org?: string;
   perms?: string[];

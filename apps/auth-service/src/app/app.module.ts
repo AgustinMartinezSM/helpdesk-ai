@@ -30,6 +30,7 @@ import {
   type UserRepository,
 } from '../application/ports/user.repository';
 import { SessionService } from '../application/session.service';
+import { GetIdentityUseCase } from '../application/use-cases/get-identity';
 import { LoginUseCase } from '../application/use-cases/login';
 import { LogoutUseCase } from '../application/use-cases/logout';
 import { RefreshSessionUseCase } from '../application/use-cases/refresh-session';
@@ -203,6 +204,11 @@ export class AppModule {
           useFactory: (refreshTokens: RefreshTokenRepository, clock: Clock) =>
             new LogoutUseCase(refreshTokens, clock),
           inject: [REFRESH_TOKEN_REPOSITORY, CLOCK],
+        },
+        {
+          provide: GetIdentityUseCase,
+          useFactory: (users: UserRepository) => new GetIdentityUseCase(users),
+          inject: [USER_REPOSITORY],
         },
         JwtAccessGuard,
       ],

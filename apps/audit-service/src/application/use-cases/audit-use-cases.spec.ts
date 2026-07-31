@@ -22,20 +22,17 @@ const OTHER_ORGANIZATION = '00000000-0000-4000-8000-0000000000ff';
 
 const ADMIN: Actor = {
   id: '44444444-4444-4444-8444-444444444444',
-  roles: ['admin'],
   organizationId: TEST_ORGANIZATION,
   permissions: new Set([PERMISSIONS.AUDIT_READ]),
 };
 /** Same grant, no tenant: the state between registering and belonging. */
 const ADMIN_WITHOUT_ORG: Actor = {
   id: '55555555-5555-4555-8555-555555555555',
-  roles: ['admin'],
   permissions: new Set([PERMISSIONS.AUDIT_READ]),
 };
 /** Agent-shaped grants: real workspace keys, none of them audit.read. */
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
-  roles: ['agent'],
   organizationId: TEST_ORGANIZATION,
   permissions: new Set([
     PERMISSIONS.TICKETS_READ_ALL,
@@ -44,7 +41,6 @@ const AGENT: Actor = {
 };
 const USER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
-  roles: ['user'],
   organizationId: TEST_ORGANIZATION,
   permissions: new Set([PERMISSIONS.ORGANIZATION_READ]),
 };

@@ -68,7 +68,6 @@ describe('Audit HTTP API (fakes, real JWT verification)', () => {
     adminToken = await jwt.signAsync(
       {
         email: 'root@example.com',
-        roles: ['admin'],
         org: TEST_ORGANIZATION,
         perms: [PERMISSIONS.AUDIT_READ],
       },
@@ -79,7 +78,6 @@ describe('Audit HTTP API (fakes, real JWT verification)', () => {
     agentToken = await jwt.signAsync(
       {
         email: 'agent@example.com',
-        roles: ['agent'],
         org: TEST_ORGANIZATION,
         perms: [
           PERMISSIONS.TICKETS_READ_ALL,
@@ -92,7 +90,6 @@ describe('Audit HTTP API (fakes, real JWT verification)', () => {
     orglessAdminToken = await jwt.signAsync(
       {
         email: 'limbo@example.com',
-        roles: ['admin'],
         perms: [PERMISSIONS.AUDIT_READ],
       },
       { subject: '55555555-5555-4555-8555-555555555555' },
@@ -100,7 +97,6 @@ describe('Audit HTTP API (fakes, real JWT verification)', () => {
     foreignAdminToken = await jwt.signAsync(
       {
         email: 'other-root@example.com',
-        roles: ['admin'],
         org: OTHER_ORGANIZATION,
         perms: [PERMISSIONS.AUDIT_READ],
       },

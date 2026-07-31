@@ -43,10 +43,11 @@ export class RegistrationConsumer {
       queue: USER_REGISTERED_QUEUE,
       contracts: [userRegisteredV1],
       handler: async (event) => {
+        // payload.roles is deliberately ignored: the contract still carries
+        // it, but the projection stopped storing roles in phase 8.
         await this.registerProfile.execute({
           userId: event.payload.userId,
           email: event.payload.email,
-          roles: event.payload.roles,
           registeredAt: new Date(event.payload.registeredAt),
         });
       },

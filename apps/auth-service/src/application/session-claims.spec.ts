@@ -52,14 +52,13 @@ describe('SessionService tenant claims', () => {
     expect(tokenIssuer.lastClaims).toEqual({
       sub: user.id,
       email: user.email,
-      roles: user.roles,
       org: ORGANIZATION_ID,
       perms: [],
       mv: 3,
     });
   });
 
-  it('keeps roles alongside the tenant claims as a compatibility claim', async () => {
+  it('mints no roles claim, while the session response keeps user.roles', async () => {
     const { sessions, tokenIssuer } = buildSessions(
       FakeMembershipResolver.resolving({
         organizationId: ORGANIZATION_ID,
@@ -68,12 +67,19 @@ describe('SessionService tenant claims', () => {
       }),
     );
 
-    await sessions.issueSession(user);
+    const session = await sessions.issueSession(user);
 
-    // Every authorization call site still reads roles; removing the claim is
-    // the last step of the migration, not this one.
-    expect(tokenIssuer.lastClaims?.roles).toEqual(['user', 'agent']);
+    // Phase 8 removed the compatibility claim: authorization reads perms.
+    // The response contract is a separate thing and survives byte-for-byte —
+    // the product's role names come from the user row, and the web renders
+    // them from here, never from the token.
+    expect('roles' in (tokenIssuer.lastClaims ?? {})).toBe(false);
     expect(tokenIssuer.lastClaims?.perms).toEqual(['tickets.read_own']);
+    expect(session.user).toEqual({
+      id: user.id,
+      email: user.email,
+      roles: ['user', 'agent'],
+    });
   });
 
   it('omits the tenant claims entirely for a user with no membership', async () => {
@@ -86,7 +92,6 @@ describe('SessionService tenant claims', () => {
     expect(tokenIssuer.lastClaims).toEqual({
       sub: user.id,
       email: user.email,
-      roles: user.roles,
     });
     expect('org' in (tokenIssuer.lastClaims ?? {})).toBe(false);
     // Belonging nowhere is a real answer, not a fault. It is the state of

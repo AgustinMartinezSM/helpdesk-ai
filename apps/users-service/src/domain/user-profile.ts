@@ -9,7 +9,6 @@ export interface UserProfile {
   readonly userId: string;
   readonly email: string;
   readonly displayName: string;
-  readonly roles: string[];
   /** When the user registered, as stated by the event. */
   readonly registeredAt: Date;
   readonly createdAt: Date;

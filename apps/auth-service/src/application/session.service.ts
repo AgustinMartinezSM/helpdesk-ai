@@ -56,7 +56,6 @@ export class SessionService {
       await this.tokenIssuer.issueAccessToken({
         sub: user.id,
         email: user.email,
-        roles: user.roles,
         ...(membership && {
           org: membership.organizationId,
           perms: membership.permissions,
@@ -83,6 +82,9 @@ export class SessionService {
       expiresInSeconds,
       refreshToken: composeRefreshToken(id, secret),
       refreshTokenId: id,
+      // `roles` here is response data, not a claim: since phase 8 the token
+      // carries none, but the web still renders the product's role names, so
+      // they come from the user row — the only place they live now.
       user: { id: user.id, email: user.email, roles: [...user.roles] },
     };
   }

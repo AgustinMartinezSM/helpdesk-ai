@@ -295,15 +295,18 @@ describe('comment notifications', () => {
 });
 
 describe('notification queries', () => {
+  // Empty permission sets on purpose: no endpoint here gates on a grant,
+  // only on the organization — and an Actor cannot be built without
+  // deciding its permissions anyway.
   const actor: Actor = {
     id: REQUESTER,
-    roles: ['user'],
     organizationId: ORG_A,
+    permissions: new Set(),
   };
   const stranger: Actor = {
     id: AGENT,
-    roles: ['agent'],
     organizationId: ORG_A,
+    permissions: new Set(),
   };
 
   it('lists own notifications newest first and marks them read once', async () => {
@@ -365,8 +368,8 @@ describe('notification queries', () => {
     // notification is earned in a tenant, not owned across them.
     const elsewhere: Actor = {
       id: REQUESTER,
-      roles: ['user'],
       organizationId: ORG_B,
+      permissions: new Set(),
     };
     const list = new ListMyNotificationsUseCase(ctx.notifications);
     expect(await list.execute(elsewhere, 50)).toEqual([]);
@@ -384,7 +387,7 @@ describe('notification queries', () => {
 
   it('refuses an actor whose token carries no organization', async () => {
     const ctx = buildContext();
-    const tenantless: Actor = { id: REQUESTER, roles: ['user'] };
+    const tenantless: Actor = { id: REQUESTER, permissions: new Set() };
 
     const list = new ListMyNotificationsUseCase(ctx.notifications);
     await expect(list.execute(tenantless, 50)).rejects.toBeInstanceOf(

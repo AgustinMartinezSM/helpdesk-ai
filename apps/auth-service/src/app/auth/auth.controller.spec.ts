@@ -1,4 +1,5 @@
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
@@ -99,6 +100,13 @@ describe('Auth HTTP API (fakes, no database)', () => {
       .expect(200);
     expect(login.body.accessToken).toBeTruthy();
     expect(login.body.refreshToken).toBeTruthy();
+    // The response still names roles; the token no longer does (phase 8).
+    // Everything role-shaped a client sees comes from the user row.
+    expect(login.body.user).toMatchObject({ roles: ['user'] });
+    const claims = app
+      .get(JwtService)
+      .decode<Record<string, unknown>>(login.body.accessToken);
+    expect(claims).not.toHaveProperty('roles');
 
     const me = await request(app.getHttpServer())
       .get('/auth/me')

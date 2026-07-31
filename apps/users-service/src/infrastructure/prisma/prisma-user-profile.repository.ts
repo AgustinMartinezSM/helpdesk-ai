@@ -17,7 +17,6 @@ export class PrismaUserProfileRepository implements UserProfileRepository {
     const data = {
       email: profile.email,
       displayName: profile.displayName,
-      roles: profile.roles,
       registeredAt: profile.registeredAt,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
@@ -52,7 +51,6 @@ function toDomain(row: UserProfileRow): UserProfile {
     userId: row.userId,
     email: row.email,
     displayName: row.displayName,
-    roles: [...row.roles],
     registeredAt: row.registeredAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

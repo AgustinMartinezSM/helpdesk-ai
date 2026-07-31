@@ -5,31 +5,39 @@ import type { PermissionKey } from './permissions.js';
  * token claims. As of the permission migration this is the only Actor: the
  * domain-local copies tickets-service and users-service carried are deleted,
  * so every authorization call site goes through this one shape.
+ *
+ * This is the final shape of the tenancy migration. `roles` is gone with the
+ * token's compatibility claim (phase 8): authorization reads permissions, and
+ * the product's role names live in auth-service's user model, not here.
  */
 export interface Actor {
   readonly id: string;
-  readonly roles: string[];
   /**
-   * Tenant context (ADR 0014). Still optional: a token minted before
-   * organizations-service existed carries no organization, and neither does
-   * one minted for a user who belongs to no organization yet. Making these
-   * required is the enforcement phase — the point at which the compiler
-   * starts pointing at every call site that has not been updated.
+   * Tenant context (ADR 0014). Deliberately still optional at the end of the
+   * migration: a token for an account that belongs to no organization yet is
+   * a real minted state — registration and membership creation race, and the
+   * product preserves that window rather than pretending it away. The refusal
+   * lives in requireOrganization at the domain boundary, not in the type.
    */
   readonly organizationId?: string;
-  readonly permissions?: ReadonlySet<string>;
+  /**
+   * Required on purpose — the enforcement payoff of phase 8: an Actor cannot
+   * be built without deciding its permissions. An empty set is a decision
+   * (an unprivileged caller), not a forgotten field.
+   */
+  readonly permissions: ReadonlySet<string>;
 }
 
 /**
- * Whether the token granted this permission. An absent set denies — the safe
- * direction while tokens minted before the permission claim rolls out are
- * still live.
+ * Whether the token granted this permission. An empty set denies everything,
+ * which is what an absent `perms` claim becomes at the controller boundary —
+ * a token loses capabilities rather than gaining them.
  */
 export function hasPermission(
   actor: Actor,
   permission: PermissionKey,
 ): boolean {
-  return actor.permissions?.has(permission) ?? false;
+  return actor.permissions.has(permission);
 }
 
 /**

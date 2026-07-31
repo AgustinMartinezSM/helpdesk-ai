@@ -27,7 +27,6 @@ export class JwtTokenIssuer implements TokenIssuer {
     const token = await this.jwt.signAsync(
       {
         email: claims.email,
-        roles: claims.roles,
         ...(claims.org !== undefined && { org: claims.org }),
         ...(claims.perms !== undefined && { perms: claims.perms }),
         ...(claims.mv !== undefined && { mv: claims.mv }),

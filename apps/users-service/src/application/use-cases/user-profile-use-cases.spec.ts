@@ -31,13 +31,11 @@ const ORG_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 // on the missing key, not on an empty token.
 const USER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
-  roles: ['user'],
   organizationId: ORG_A,
   permissions: new Set([PERMISSIONS.ORGANIZATION_READ]),
 };
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
-  roles: ['agent'],
   organizationId: ORG_A,
   permissions: new Set([PERMISSIONS.PEOPLE_READ]),
 };
@@ -45,14 +43,12 @@ const AGENT: Actor = {
 // registering and the membership projection catching up.
 const TENANTLESS_AGENT: Actor = {
   id: '55555555-5555-4555-8555-555555555555',
-  roles: ['agent'],
   permissions: new Set([PERMISSIONS.PEOPLE_READ]),
 };
 
 const REGISTRATION = {
   userId: USER.id,
   email: 'ada.lovelace@example.com',
-  roles: ['user'],
   registeredAt: new Date('2026-07-28T12:00:00.000Z'),
 };
 
@@ -106,7 +102,6 @@ describe('RegisterUserProfileUseCase', () => {
       userId: USER.id,
       email: 'ada.lovelace@example.com',
       displayName: 'ada.lovelace',
-      roles: ['user'],
       registeredAt: REGISTRATION.registeredAt,
       createdAt: ctx.clock.now(),
       updatedAt: ctx.clock.now(),
@@ -245,7 +240,6 @@ describe('profile queries', () => {
     await ctx.register.execute({
       userId: outsiderId,
       email: 'ada.lovelace@rival.example.com',
-      roles: ['user'],
       registeredAt: new Date('2026-07-28T12:00:00.000Z'),
     });
     await joinOrganization(ctx, ORG_A, USER.id);

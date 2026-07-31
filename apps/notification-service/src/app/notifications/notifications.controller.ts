@@ -30,7 +30,6 @@ interface AuthenticatedRequest {
 function actorOf(req: AuthenticatedRequest): Actor {
   return {
     id: req.user.sub,
-    roles: req.user.roles,
     // The queries call requireOrganization on this: a token minted without
     // a tenant answers 403 via the filter, never an unscoped read. perms
     // stays along for the ride — no endpoint here gates on a permission.

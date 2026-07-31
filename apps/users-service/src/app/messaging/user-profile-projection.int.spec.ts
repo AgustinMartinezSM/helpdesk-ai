@@ -153,7 +153,6 @@ describe('user profile projection (real broker, real database)', () => {
     const profile = await waitFor(() => repository.findByUserId(userId));
     expect(profile.email).toBe(email);
     expect(profile.displayName).toBe(email.split('@')[0]);
-    expect(profile.roles).toEqual(['user']);
     expect(profile.registeredAt).toEqual(new Date('2026-07-28T12:00:00.000Z'));
 
     // Redelivery must not duplicate or corrupt the projection.

@@ -80,7 +80,6 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
     userToken = await jwt.signAsync(
       {
         email: 'user@x.com',
-        roles: ['user'],
         org: TEST_ORGANIZATION,
         perms: requesterPerms,
       },
@@ -89,7 +88,6 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
     otherToken = await jwt.signAsync(
       {
         email: 'other@x.com',
-        roles: ['user'],
         org: TEST_ORGANIZATION,
         perms: requesterPerms,
       },
@@ -98,7 +96,6 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
     agentToken = await jwt.signAsync(
       {
         email: 'agent@x.com',
-        roles: ['agent'],
         org: TEST_ORGANIZATION,
         perms: agentPerms,
       },

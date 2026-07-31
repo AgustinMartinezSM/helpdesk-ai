@@ -45,19 +45,16 @@ const AGENT_PERMISSIONS = [
 
 const REQUESTER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
-  roles: ['user'],
   organizationId: TEST_ORGANIZATION,
   permissions: new Set(REQUESTER_PERMISSIONS),
 };
 const OTHER_USER: Actor = {
   id: '22222222-2222-4222-8222-222222222222',
-  roles: ['user'],
   organizationId: TEST_ORGANIZATION,
   permissions: new Set(REQUESTER_PERMISSIONS),
 };
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
-  roles: ['agent'],
   organizationId: TEST_ORGANIZATION,
   permissions: new Set(AGENT_PERMISSIONS),
 };
@@ -68,17 +65,18 @@ const AGENT: Actor = {
  */
 const FOREIGN_AGENT: Actor = {
   id: '44444444-4444-4444-8444-444444444444',
-  roles: ['agent'],
   organizationId: OTHER_ORGANIZATION,
   permissions: new Set(AGENT_PERMISSIONS),
 };
 /**
  * Authenticated, but between registering and getting a membership — such a
- * token carries neither an organization nor resolved permissions.
+ * token carries neither an organization nor resolved permissions. The empty
+ * set is what actorOf builds from the absent perms claim, and it is a
+ * decision: this caller can do nothing, not "anything until proven".
  */
 const TENANTLESS_USER: Actor = {
   id: '55555555-5555-4555-8555-555555555555',
-  roles: ['user'],
+  permissions: new Set(),
 };
 
 function buildContext() {

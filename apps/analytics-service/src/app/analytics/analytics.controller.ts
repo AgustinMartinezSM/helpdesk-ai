@@ -16,7 +16,6 @@ interface AuthenticatedRequest {
 function actorOf(req: AuthenticatedRequest): Actor {
   return {
     id: req.user.sub,
-    roles: req.user.roles,
     // Both undefined/empty on a token minted without a tenant. Read from the
     // payload the guard already verified — no second decoding.
     organizationId: req.user.org,

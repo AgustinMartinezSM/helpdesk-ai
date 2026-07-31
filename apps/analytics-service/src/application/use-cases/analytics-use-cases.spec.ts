@@ -22,26 +22,22 @@ const ORG_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 const ADMIN: Actor = {
   id: '44444444-4444-4444-8444-444444444444',
-  roles: ['admin'],
   organizationId: ORG_A,
   permissions: new Set([PERMISSIONS.ANALYTICS_READ]),
 };
 const ADMIN_B: Actor = {
   id: '55555555-5555-4555-8555-555555555555',
-  roles: ['admin'],
   organizationId: ORG_B,
   permissions: new Set([PERMISSIONS.ANALYTICS_READ]),
 };
 /** Right permission, no tenant: the state between registering and joining. */
 const TENANTLESS_ADMIN: Actor = {
   id: '66666666-6666-4666-8666-666666666666',
-  roles: ['admin'],
   permissions: new Set([PERMISSIONS.ANALYTICS_READ]),
 };
 /** Agent-shaped grants: real workspace keys, none of them analytics.read. */
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
-  roles: ['agent'],
   organizationId: ORG_A,
   permissions: new Set([
     PERMISSIONS.TICKETS_READ_ALL,
@@ -50,7 +46,6 @@ const AGENT: Actor = {
 };
 const USER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
-  roles: ['user'],
   organizationId: ORG_A,
   permissions: new Set([PERMISSIONS.ORGANIZATION_READ]),
 };

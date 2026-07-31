@@ -45,7 +45,6 @@ interface AuthenticatedRequest {
 function actorOf(req: AuthenticatedRequest): Actor {
   return {
     id: req.user.sub,
-    roles: req.user.roles,
     // Undefined whenever the token was minted without a tenant. Read here
     // rather than decoded anywhere else: the guard already verified this
     // token, and a second place that decides what a valid token looks like

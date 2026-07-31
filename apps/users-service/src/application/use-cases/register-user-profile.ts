@@ -10,7 +10,6 @@ import type {
 export interface RegisterUserProfileInput {
   userId: string;
   email: string;
-  roles: string[];
   registeredAt: Date;
 }
 
@@ -34,7 +33,6 @@ export class RegisterUserProfileUseCase {
       userId: input.userId,
       email: input.email,
       displayName: existing?.displayName ?? displayNameFromEmail(input.email),
-      roles: [...input.roles],
       registeredAt: input.registeredAt,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,

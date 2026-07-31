@@ -20,7 +20,6 @@ model UserProfile {
   userId       String   @id @map("user_id") @db.Uuid
   email        String   @unique
   displayName  String   @map("display_name")
-  roles        String[]
   registeredAt DateTime @map("registered_at") @db.Timestamptz(3)
   createdAt    DateTime @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @map("updated_at") @db.Timestamptz(3)

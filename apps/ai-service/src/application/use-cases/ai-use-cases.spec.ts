@@ -40,7 +40,6 @@ const TEST_ORGANIZATION = '00000000-0000-4000-8000-000000000001';
 
 const staff: Actor = {
   id: randomUUID(),
-  roles: ['agent'],
   organizationId: TEST_ORGANIZATION,
   permissions: new Set([PERMISSIONS.TICKETS_NOTE_INTERNAL]),
 };
@@ -48,7 +47,6 @@ const staff: Actor = {
 // rejects on the missing grant, not on an empty token.
 const requester: Actor = {
   id: REQUESTER_ID,
-  roles: ['user'],
   organizationId: TEST_ORGANIZATION,
   permissions: new Set([
     PERMISSIONS.ORGANIZATION_READ,
@@ -62,7 +60,6 @@ const requester: Actor = {
  */
 const tenantlessStaff: Actor = {
   id: randomUUID(),
-  roles: ['agent'],
   permissions: new Set([PERMISSIONS.TICKETS_NOTE_INTERNAL]),
 };
 

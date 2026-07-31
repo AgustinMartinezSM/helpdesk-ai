@@ -19,7 +19,6 @@ interface AuthenticatedRequest {
 function actorOf(req: AuthenticatedRequest): Actor {
   return {
     id: req.user.sub,
-    roles: req.user.roles,
     // Both undefined/empty on a token minted without a tenant. Read from the
     // payload the guard already verified — no second decoding.
     organizationId: req.user.org,
@@ -32,7 +31,6 @@ interface UserProfileResponse {
   userId: string;
   email: string;
   displayName: string;
-  roles: string[];
   registeredAt: string;
 }
 
@@ -41,7 +39,6 @@ function toResponse(profile: UserProfile): UserProfileResponse {
     userId: profile.userId,
     email: profile.email,
     displayName: profile.displayName,
-    roles: profile.roles,
     registeredAt: profile.registeredAt.toISOString(),
   };
 }

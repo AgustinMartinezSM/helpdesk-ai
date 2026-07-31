@@ -9,16 +9,18 @@ import { JwtService } from '@nestjs/jwt';
 /**
  * Claims carried by an access token minted by auth-service.
  *
- * The tenant claims are optional, and every service currently ignores them.
- * They are absent from a token minted before organizations-service existed,
- * and from one minted for a user who belongs to no organization yet — so a
- * reader must treat "no organization" as a state to handle rather than an
- * impossibility. They become required once the read paths are scoped.
+ * No `roles` claim: that was the compatibility claim phase 8 owed, and it is
+ * paid. Authorization reads `perms`; the product's role names live in
+ * auth-service's user model and travel in its HTTP responses, not in the
+ * token.
+ *
+ * The tenant claims stay optional — a token for an account that belongs to
+ * no organization yet is a real minted state, so a reader must treat "no
+ * organization" as a state to handle rather than an impossibility.
  */
 export interface AccessTokenPayload {
   sub: string;
   email: string;
-  roles: string[];
   /** Active organization id (ADR 0014). */
   org?: string;
   /** Resolved permission keys for this person in that organization. */

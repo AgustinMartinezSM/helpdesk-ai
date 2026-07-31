@@ -87,7 +87,6 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
     adminToken = await jwt.signAsync(
       {
         email: 'root@example.com',
-        roles: ['admin'],
         org: ORG,
         perms: [PERMISSIONS.ANALYTICS_READ],
       },
@@ -100,7 +99,6 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
     tenantlessAdminToken = await jwt.signAsync(
       {
         email: 'root@example.com',
-        roles: ['admin'],
         perms: [PERMISSIONS.ANALYTICS_READ],
       },
       { subject: '44444444-4444-4444-8444-444444444444' },
@@ -110,7 +108,6 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
     agentToken = await jwt.signAsync(
       {
         email: 'agent@example.com',
-        roles: ['agent'],
         org: ORG,
         perms: [
           PERMISSIONS.TICKETS_READ_ALL,
@@ -120,7 +117,7 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
       { subject: '33333333-3333-4333-8333-333333333333' },
     );
     userToken = await jwt.signAsync(
-      { email: 'ada@example.com', roles: ['user'], org: ORG },
+      { email: 'ada@example.com', org: ORG },
       { subject: '11111111-1111-4111-8111-111111111111' },
     );
   });
