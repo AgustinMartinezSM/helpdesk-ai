@@ -257,9 +257,8 @@ organizations' lifecycle events on a real broker — and remotely, run
 `30642812316` on `7d19d22`, green on its first attempt. Phases 7 and 8: the
 full gate and all nine suites again after the constraints and the cleanup,
 now also proving the not-null net, the queue unbind against a pre-seeded
-stale binding, and that a legacy v1-typed publish is never delivered. The
-remote result for the final tip is recorded in its own docs commit, as
-usual. The only CI annotation throughout is the known `pnpm/action-setup@v4`
+stale binding, and that a legacy v1-typed publish is never delivered. Remotely for the final tip: GitHub Actions run `30665125897` on `d37a5b4`,
+green on its first attempt. The only CI annotation throughout is the known `pnpm/action-setup@v4`
 Node 20 deprecation warning, still tracked as its own maintenance item.
 
 ## Documentation
