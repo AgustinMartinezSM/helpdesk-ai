@@ -1,4 +1,9 @@
-import type { Membership, MembershipStatus } from '../../domain/membership';
+import type { Branch, OperationalStation } from '../../domain/branch';
+import type {
+  Membership,
+  MembershipStatus,
+  RoleTemplate,
+} from '../../domain/membership';
 
 export const EVENT_PUBLISHER = Symbol('EVENT_PUBLISHER');
 
@@ -27,4 +32,39 @@ export interface MembershipEventPublisher {
     fromStatus: MembershipStatus,
     correlationId?: string,
   ): Promise<void>;
+  /**
+   * `membership` is the post-change row (template, bumped version);
+   * `fromTemplate` is what it was before.
+   */
+  membershipRoleChanged(
+    membership: Membership,
+    fromTemplate: RoleTemplate,
+    correlationId?: string,
+  ): Promise<void>;
 }
+
+/**
+ * Outbound structure events (branches and stations — Sprint 9.5, D4).
+ * Everything the membership contract above says holds: best-effort after
+ * the commit, born tenant-carrying, the row itself supplies the tenant.
+ *
+ * Departments publish nothing, on purpose: no consumer exists, and a
+ * contract nobody reads is a promise nobody keeps.
+ */
+export interface StructureEventPublisher {
+  branchCreated(branch: Branch, correlationId?: string): Promise<void>;
+  /** The branch as it stands after the update — archive included. */
+  branchUpdated(branch: Branch, correlationId?: string): Promise<void>;
+  stationCreated(
+    station: OperationalStation,
+    correlationId?: string,
+  ): Promise<void>;
+  stationUpdated(
+    station: OperationalStation,
+    correlationId?: string,
+  ): Promise<void>;
+}
+
+/** What the one wired publisher adapter provides under EVENT_PUBLISHER. */
+export type OrganizationEventPublisher = MembershipEventPublisher &
+  StructureEventPublisher;

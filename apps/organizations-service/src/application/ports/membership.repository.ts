@@ -1,4 +1,8 @@
-import type { Membership, MembershipStatus } from '../../domain/membership';
+import type {
+  Membership,
+  MembershipStatus,
+  RoleTemplate,
+} from '../../domain/membership';
 
 export const MEMBERSHIP_REPOSITORY = Symbol('MEMBERSHIP_REPOSITORY');
 
@@ -39,4 +43,24 @@ export interface MembershipRepository {
     to: MembershipStatus,
     at: Date,
   ): Promise<Membership>;
+  /**
+   * Sets the role template with the same atomic version bump as
+   * changeStatus, for the same reason: a role change rewrites what the
+   * `perms` claim should say, so every outstanding token must become
+   * detectably stale in the same statement that changes the row.
+   */
+  changeRoleTemplate(
+    membershipId: string,
+    to: RoleTemplate,
+    at: Date,
+  ): Promise<Membership>;
+  /**
+   * Lookup by membership id, scoped by organization at the port so a
+   * foreign membership and a nonexistent one answer alike. Station creation
+   * validates its responsible manager through this.
+   */
+  findByOrganizationAndId(
+    organizationId: string,
+    membershipId: string,
+  ): Promise<Membership | null>;
 }

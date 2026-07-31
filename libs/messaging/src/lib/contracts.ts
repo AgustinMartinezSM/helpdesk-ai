@@ -246,3 +246,106 @@ export const membershipStatusChangedV1 = defineEvent(
     changedAt: z.iso.datetime(),
   }),
 );
+
+/**
+ * A membership's role template changed. Everything the membership block
+ * above says holds here too: born tenant-carrying, organization on the
+ * envelope AND in the payload, templates as min-1 strings because the
+ * vocabulary is still unfrozen.
+ *
+ * Both templates travel so a consumer can project the change without
+ * re-reading the row — the same reason status-changed carries both statuses.
+ */
+export const membershipRoleChangedV1 = defineEvent(
+  'membership.role-changed.v1',
+  z.object({
+    membershipId: z.uuid(),
+    organizationId: z.uuid(),
+    userId: z.uuid(),
+    fromTemplate: z.string().min(1),
+    toTemplate: z.string().min(1),
+    /** Post-change membership version; compares against the `mv` claim. */
+    version: z.number().int().positive(),
+    changedAt: z.iso.datetime(),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Branch and station events (ADR 0016). Born tenant-carrying, exactly like
+// the membership contracts above: no consumer predates them, ".v1" names the
+// first version of a tenant-carrying contract, the envelope organizationId is
+// required on the publish path, and consumers reject its absence with
+// `requireEnvelopeOrganization`.
+//
+// The organization ALSO appears in the payload, for the membership reason: a
+// branch belongs to exactly one organization by construction, and the
+// consumer these exist for — tickets-service's `branch_refs`/`station_refs`
+// projection — keys every row by tenant, so the payload states the fact
+// rather than making the projector reach for the envelope.
+//
+// `code`, `status` (and `area`) are min-1 strings, not enums, for the
+// role-template reason: the place vocabulary is service-internal, and
+// freezing today's words into the contract would turn renaming one into a
+// breaking contract change.
+//
+// There is one `updated` contract per subject, not a lifecycle family
+// (`archived`, `renamed`, ...), on purpose: an archive IS an update to
+// `status`, and the consumers project last-write state — they replace their
+// row with whatever the event says, so distinct routing keys per kind of
+// change would multiply contracts without telling anyone anything the
+// payload does not already say.
+// ---------------------------------------------------------------------------
+
+export const branchCreatedV1 = defineEvent(
+  'branch.created.v1',
+  z.object({
+    branchId: z.uuid(),
+    organizationId: z.uuid(),
+    code: z.string().min(1),
+    name: z.string().min(1),
+    status: z.string().min(1),
+    timezone: z.string().min(1).optional(),
+    createdAt: z.iso.datetime(),
+  }),
+);
+
+export const branchUpdatedV1 = defineEvent(
+  'branch.updated.v1',
+  z.object({
+    branchId: z.uuid(),
+    organizationId: z.uuid(),
+    code: z.string().min(1),
+    name: z.string().min(1),
+    status: z.string().min(1),
+    timezone: z.string().min(1).optional(),
+    updatedAt: z.iso.datetime(),
+  }),
+);
+
+export const stationCreatedV1 = defineEvent(
+  'station.created.v1',
+  z.object({
+    stationId: z.uuid(),
+    branchId: z.uuid(),
+    organizationId: z.uuid(),
+    code: z.string().min(1),
+    name: z.string().min(1),
+    area: z.string().min(1).optional(),
+    status: z.string().min(1),
+    createdAt: z.iso.datetime(),
+  }),
+);
+
+export const stationUpdatedV1 = defineEvent(
+  'station.updated.v1',
+  z.object({
+    stationId: z.uuid(),
+    branchId: z.uuid(),
+    organizationId: z.uuid(),
+    code: z.string().min(1),
+    name: z.string().min(1),
+    area: z.string().min(1).optional(),
+    status: z.string().min(1),
+    updatedAt: z.iso.datetime(),
+  }),
+);

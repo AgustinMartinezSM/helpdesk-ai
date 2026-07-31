@@ -2,6 +2,7 @@ import { grantsAccess } from '../../domain/membership';
 import { permissionsForTemplate } from '../../domain/permissions';
 import { isActive } from '../../domain/organization';
 import type { MembershipRepository } from '../ports/membership.repository';
+import type { BranchMembershipRepository } from '../ports/structure.repository';
 import type { OrganizationRepository } from '../ports/organization.repository';
 
 export interface ResolvedMembership {
@@ -19,6 +20,16 @@ export interface ResolvedMembership {
   permissions: string[];
   /** Value of the `mv` claim (ADR 0014). */
   membershipVersion: number;
+  /**
+   * Branch ids this membership covers, minted as the `br` claim next to
+   * `perms` (Sprint 9.5, D2). Always present, possibly empty — auth-service
+   * parses exactly this name and shape, so both are FROZEN.
+   *
+   * Archived branches are INCLUDED: a manager keeps seeing the history of a
+   * store that closed. Archival hides a branch from pickers, never from the
+   * people who covered it.
+   */
+  branchIds: string[];
 }
 
 /**
@@ -37,6 +48,7 @@ export class ResolveActiveMembershipUseCase {
   constructor(
     private readonly memberships: MembershipRepository,
     private readonly organizations: OrganizationRepository,
+    private readonly branchMemberships: BranchMembershipRepository,
   ) {}
 
   async execute(userId: string): Promise<ResolvedMembership | null> {
@@ -57,6 +69,7 @@ export class ResolveActiveMembershipUseCase {
         organizationId: membership.organizationId,
         permissions: [...permissionsForTemplate(membership.roleTemplate)],
         membershipVersion: membership.version,
+        branchIds: await this.branchMemberships.listBranchIds(membership.id),
       };
     }
 

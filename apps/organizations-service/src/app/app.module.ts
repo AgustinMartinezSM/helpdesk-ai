@@ -3,7 +3,7 @@ import type { DynamicModule } from '@nestjs/common';
 import { MessagingClient } from '@helpdesk-ai/messaging';
 import { Logger, ObservabilityModule } from '@helpdesk-ai/observability';
 import { EVENT_PUBLISHER } from '../application/ports/event-publisher';
-import type { MembershipEventPublisher } from '../application/ports/event-publisher';
+import type { OrganizationEventPublisher } from '../application/ports/event-publisher';
 import { MEMBERSHIP_REPOSITORY } from '../application/ports/membership.repository';
 import type { MembershipRepository } from '../application/ports/membership.repository';
 import {
@@ -15,23 +15,47 @@ import {
   type IdGenerator,
   type OrganizationRepository,
 } from '../application/ports/organization.repository';
+import {
+  BRANCH_MEMBERSHIP_REPOSITORY,
+  BRANCH_REPOSITORY,
+  DEPARTMENT_REPOSITORY,
+  STATION_REPOSITORY,
+  type BranchMembershipRepository,
+  type BranchRepository,
+  type DepartmentRepository,
+  type OperationalStationRepository,
+} from '../application/ports/structure.repository';
+import { AssignBranchMembershipUseCase } from '../application/use-cases/assign-branch-membership';
+import { ChangeMembershipRoleUseCase } from '../application/use-cases/change-membership-role';
 import { ChangeMembershipStatusUseCase } from '../application/use-cases/change-membership-status';
+import { CreateBranchUseCase } from '../application/use-cases/create-branch';
+import { CreateDepartmentUseCase } from '../application/use-cases/create-department';
+import { CreateStationUseCase } from '../application/use-cases/create-station';
 import { EnsureMembershipUseCase } from '../application/use-cases/ensure-membership';
 import { GetMembershipUseCase } from '../application/use-cases/get-membership';
+import { RemoveBranchMembershipUseCase } from '../application/use-cases/remove-branch-membership';
 import { ResolveActiveMembershipUseCase } from '../application/use-cases/resolve-active-membership';
+import { UpdateBranchUseCase } from '../application/use-cases/update-branch';
+import { UpdateDepartmentUseCase } from '../application/use-cases/update-department';
+import { UpdateStationUseCase } from '../application/use-cases/update-station';
 import {
   APP_ENV,
   SERVICE_NAME,
   type OrganizationsServiceEnv,
 } from '../config/env';
 import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-event-publisher';
+import { PrismaBranchMembershipRepository } from '../infrastructure/prisma/prisma-branch-membership.repository';
+import { PrismaBranchRepository } from '../infrastructure/prisma/prisma-branch.repository';
+import { PrismaDepartmentRepository } from '../infrastructure/prisma/prisma-department.repository';
 import { PrismaMembershipRepository } from '../infrastructure/prisma/prisma-membership.repository';
+import { PrismaOperationalStationRepository } from '../infrastructure/prisma/prisma-operational-station.repository';
 import { PrismaOrganizationRepository } from '../infrastructure/prisma/prisma-organization.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { UuidGenerator } from '../infrastructure/uuid-generator';
 import { HealthController } from './health/health.controller';
 import { InternalMembershipsController } from './internal/internal-memberships.controller';
 import { InternalOrganizationMembershipsController } from './internal/internal-organization-memberships.controller';
+import { InternalOrganizationStructureController } from './internal/internal-organization-structure.controller';
 import { InternalServiceGuard } from './internal/internal-service.guard';
 import { RegistrationConsumer } from './messaging/registration.consumer';
 
@@ -60,6 +84,7 @@ export class AppModule {
         HealthController,
         InternalMembershipsController,
         InternalOrganizationMembershipsController,
+        InternalOrganizationStructureController,
       ],
       providers: [
         { provide: APP_ENV, useValue: env },
@@ -79,6 +104,30 @@ export class AppModule {
           provide: MEMBERSHIP_REPOSITORY,
           useFactory: (prisma: PrismaService) =>
             new PrismaMembershipRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: BRANCH_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaBranchRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: DEPARTMENT_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaDepartmentRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: STATION_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaOperationalStationRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: BRANCH_MEMBERSHIP_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaBranchMembershipRepository(prisma),
           inject: [PrismaService],
         },
         {
@@ -107,7 +156,7 @@ export class AppModule {
             memberships: MembershipRepository,
             clock: Clock,
             ids: IdGenerator,
-            events: MembershipEventPublisher,
+            events: OrganizationEventPublisher,
           ) =>
             new EnsureMembershipUseCase(
               organizations,
@@ -129,8 +178,17 @@ export class AppModule {
           useFactory: (
             memberships: MembershipRepository,
             clock: Clock,
-            events: MembershipEventPublisher,
+            events: OrganizationEventPublisher,
           ) => new ChangeMembershipStatusUseCase(memberships, clock, events),
+          inject: [MEMBERSHIP_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+        },
+        {
+          provide: ChangeMembershipRoleUseCase,
+          useFactory: (
+            memberships: MembershipRepository,
+            clock: Clock,
+            events: OrganizationEventPublisher,
+          ) => new ChangeMembershipRoleUseCase(memberships, clock, events),
           inject: [MEMBERSHIP_REPOSITORY, CLOCK, EVENT_PUBLISHER],
         },
         {
@@ -138,16 +196,171 @@ export class AppModule {
           useFactory: (
             memberships: MembershipRepository,
             organizations: OrganizationRepository,
-          ) => new GetMembershipUseCase(memberships, organizations),
-          inject: [MEMBERSHIP_REPOSITORY, ORGANIZATION_REPOSITORY],
+            branchMemberships: BranchMembershipRepository,
+          ) =>
+            new GetMembershipUseCase(
+              memberships,
+              organizations,
+              branchMemberships,
+            ),
+          inject: [
+            MEMBERSHIP_REPOSITORY,
+            ORGANIZATION_REPOSITORY,
+            BRANCH_MEMBERSHIP_REPOSITORY,
+          ],
         },
         {
           provide: ResolveActiveMembershipUseCase,
           useFactory: (
             memberships: MembershipRepository,
             organizations: OrganizationRepository,
-          ) => new ResolveActiveMembershipUseCase(memberships, organizations),
-          inject: [MEMBERSHIP_REPOSITORY, ORGANIZATION_REPOSITORY],
+            branchMemberships: BranchMembershipRepository,
+          ) =>
+            new ResolveActiveMembershipUseCase(
+              memberships,
+              organizations,
+              branchMemberships,
+            ),
+          inject: [
+            MEMBERSHIP_REPOSITORY,
+            ORGANIZATION_REPOSITORY,
+            BRANCH_MEMBERSHIP_REPOSITORY,
+          ],
+        },
+        {
+          provide: CreateBranchUseCase,
+          useFactory: (
+            organizations: OrganizationRepository,
+            branches: BranchRepository,
+            clock: Clock,
+            ids: IdGenerator,
+            events: OrganizationEventPublisher,
+          ) =>
+            new CreateBranchUseCase(
+              organizations,
+              branches,
+              clock,
+              ids,
+              events,
+            ),
+          inject: [
+            ORGANIZATION_REPOSITORY,
+            BRANCH_REPOSITORY,
+            CLOCK,
+            ID_GENERATOR,
+            EVENT_PUBLISHER,
+          ],
+        },
+        {
+          provide: UpdateBranchUseCase,
+          useFactory: (
+            branches: BranchRepository,
+            clock: Clock,
+            events: OrganizationEventPublisher,
+          ) => new UpdateBranchUseCase(branches, clock, events),
+          inject: [BRANCH_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+        },
+        {
+          provide: CreateDepartmentUseCase,
+          useFactory: (
+            branches: BranchRepository,
+            departments: DepartmentRepository,
+            clock: Clock,
+            ids: IdGenerator,
+          ) => new CreateDepartmentUseCase(branches, departments, clock, ids),
+          inject: [
+            BRANCH_REPOSITORY,
+            DEPARTMENT_REPOSITORY,
+            CLOCK,
+            ID_GENERATOR,
+          ],
+        },
+        {
+          provide: UpdateDepartmentUseCase,
+          useFactory: (departments: DepartmentRepository, clock: Clock) =>
+            new UpdateDepartmentUseCase(departments, clock),
+          inject: [DEPARTMENT_REPOSITORY, CLOCK],
+        },
+        {
+          provide: CreateStationUseCase,
+          useFactory: (
+            branches: BranchRepository,
+            stations: OperationalStationRepository,
+            memberships: MembershipRepository,
+            clock: Clock,
+            ids: IdGenerator,
+            events: OrganizationEventPublisher,
+          ) =>
+            new CreateStationUseCase(
+              branches,
+              stations,
+              memberships,
+              clock,
+              ids,
+              events,
+            ),
+          inject: [
+            BRANCH_REPOSITORY,
+            STATION_REPOSITORY,
+            MEMBERSHIP_REPOSITORY,
+            CLOCK,
+            ID_GENERATOR,
+            EVENT_PUBLISHER,
+          ],
+        },
+        {
+          provide: UpdateStationUseCase,
+          useFactory: (
+            stations: OperationalStationRepository,
+            memberships: MembershipRepository,
+            clock: Clock,
+            events: OrganizationEventPublisher,
+          ) => new UpdateStationUseCase(stations, memberships, clock, events),
+          inject: [
+            STATION_REPOSITORY,
+            MEMBERSHIP_REPOSITORY,
+            CLOCK,
+            EVENT_PUBLISHER,
+          ],
+        },
+        {
+          provide: AssignBranchMembershipUseCase,
+          useFactory: (
+            memberships: MembershipRepository,
+            branches: BranchRepository,
+            branchMemberships: BranchMembershipRepository,
+            clock: Clock,
+          ) =>
+            new AssignBranchMembershipUseCase(
+              memberships,
+              branches,
+              branchMemberships,
+              clock,
+            ),
+          inject: [
+            MEMBERSHIP_REPOSITORY,
+            BRANCH_REPOSITORY,
+            BRANCH_MEMBERSHIP_REPOSITORY,
+            CLOCK,
+          ],
+        },
+        {
+          provide: RemoveBranchMembershipUseCase,
+          useFactory: (
+            memberships: MembershipRepository,
+            branches: BranchRepository,
+            branchMemberships: BranchMembershipRepository,
+          ) =>
+            new RemoveBranchMembershipUseCase(
+              memberships,
+              branches,
+              branchMemberships,
+            ),
+          inject: [
+            MEMBERSHIP_REPOSITORY,
+            BRANCH_REPOSITORY,
+            BRANCH_MEMBERSHIP_REPOSITORY,
+          ],
         },
         {
           provide: RegistrationConsumer,

@@ -7,8 +7,18 @@ import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
 import { MEMBERSHIP_REPOSITORY } from '../../application/ports/membership.repository';
 import { ORGANIZATION_REPOSITORY } from '../../application/ports/organization.repository';
 import {
-  FakeMembershipEventPublisher,
+  BRANCH_MEMBERSHIP_REPOSITORY,
+  BRANCH_REPOSITORY,
+  DEPARTMENT_REPOSITORY,
+  STATION_REPOSITORY,
+} from '../../application/ports/structure.repository';
+import {
+  FakeOrganizationEventPublisher,
+  InMemoryBranchMembershipRepository,
+  InMemoryBranchRepository,
+  InMemoryDepartmentRepository,
   InMemoryMembershipRepository,
+  InMemoryOperationalStationRepository,
   InMemoryOrganizationRepository,
 } from '../../application/testing/fakes';
 import { permissionsForTemplate } from '../../domain/permissions';
@@ -49,7 +59,11 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
   let app: INestApplication;
   const organizations = new InMemoryOrganizationRepository();
   const memberships = new InMemoryMembershipRepository();
-  const events = new FakeMembershipEventPublisher();
+  const branches = new InMemoryBranchRepository();
+  const departments = new InMemoryDepartmentRepository();
+  const stations = new InMemoryOperationalStationRepository();
+  const branchMemberships = new InMemoryBranchMembershipRepository();
+  const events = new FakeOrganizationEventPublisher();
 
   beforeAll(async () => {
     const env = validateEnv(organizationsServiceEnvSchema, TEST_ENV);
@@ -61,6 +75,14 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
       .useValue(organizations)
       .overrideProvider(MEMBERSHIP_REPOSITORY)
       .useValue(memberships)
+      .overrideProvider(BRANCH_REPOSITORY)
+      .useValue(branches)
+      .overrideProvider(DEPARTMENT_REPOSITORY)
+      .useValue(departments)
+      .overrideProvider(STATION_REPOSITORY)
+      .useValue(stations)
+      .overrideProvider(BRANCH_MEMBERSHIP_REPOSITORY)
+      .useValue(branchMemberships)
       .overrideProvider(EVENT_PUBLISHER)
       .useValue(events)
       // Replacing the client keeps the suite broker-free: the real one owns
@@ -95,7 +117,16 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
 
   beforeEach(() => {
     memberships.memberships.length = 0;
+    branches.branches.length = 0;
+    departments.departments.length = 0;
+    stations.stations.length = 0;
+    branchMemberships.edges.length = 0;
     events.statusChanged.length = 0;
+    events.roleChanged.length = 0;
+    events.branchesCreated.length = 0;
+    events.branchesUpdated.length = 0;
+    events.stationsCreated.length = 0;
+    events.stationsUpdated.length = 0;
   });
 
   afterAll(async () => {
@@ -143,6 +174,7 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
       permissions: expect.arrayContaining([...permissionsForTemplate('agent')]),
       membershipVersion: 1,
       organizationStatus: 'active',
+      branchIds: [],
     });
   });
 
@@ -194,6 +226,9 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
       organizationId: null,
       permissions: [],
       membershipVersion: null,
+      // Frozen shape: even the no-membership answer carries the empty
+      // array, because auth-service parses exactly `branchIds: string[]`.
+      branchIds: [],
     });
   });
 
@@ -242,8 +277,197 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
 
     expect(response.body.organizationId).toBe(ORGANIZATION_ID);
     expect(response.body.membershipVersion).toBe(1);
+    expect(response.body.branchIds).toEqual([]);
     expect(new Set(response.body.permissions)).toEqual(
       permissionsForTemplate('agent'),
     );
+  });
+
+  describe('structure surface', () => {
+    it('rejects every structure route without the service credential', async () => {
+      await request(app.getHttpServer())
+        .post(`/internal/organizations/${ORGANIZATION_ID}/branches`)
+        .send({ code: 'store-12', name: 'Store 12' })
+        .expect(401);
+      await request(app.getHttpServer())
+        .patch(
+          `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/role`,
+        )
+        .send({ roleTemplate: 'branch_manager' })
+        .expect(401);
+
+      expect(branches.branches).toHaveLength(0);
+      expect(events.branchesCreated).toHaveLength(0);
+    });
+
+    async function createBranch(code = 'store-12') {
+      const response = await request(app.getHttpServer())
+        .post(`/internal/organizations/${ORGANIZATION_ID}/branches`)
+        .set(asService())
+        .send({ code, name: `Branch ${code}`, timezone: 'UTC' })
+        .expect(201);
+      return response.body as { branchId: string };
+    }
+
+    it('creates a branch, publishes it, and answers 409 on the duplicate code', async () => {
+      const created = await createBranch();
+
+      expect(created.branchId).toBeDefined();
+      expect(events.branchesCreated).toHaveLength(1);
+
+      await request(app.getHttpServer())
+        .post(`/internal/organizations/${ORGANIZATION_ID}/branches`)
+        .set(asService())
+        .send({ code: 'store-12', name: 'Another' })
+        .expect(409);
+      expect(events.branchesCreated).toHaveLength(1);
+    });
+
+    it('archives a branch through PATCH and publishes the update', async () => {
+      const created = await createBranch();
+
+      const archived = await request(app.getHttpServer())
+        .patch(
+          `/internal/organizations/${ORGANIZATION_ID}/branches/${created.branchId}`,
+        )
+        .set(asService())
+        .send({ status: 'archived' })
+        .expect(200);
+
+      expect(archived.body.status).toBe('archived');
+      expect(events.branchesUpdated).toHaveLength(1);
+    });
+
+    it('answers 400 for a word that is not a branch status', async () => {
+      const created = await createBranch();
+
+      await request(app.getHttpServer())
+        .patch(
+          `/internal/organizations/${ORGANIZATION_ID}/branches/${created.branchId}`,
+        )
+        .set(asService())
+        .send({ status: 'closed' })
+        .expect(400);
+    });
+
+    it('answers 404 for a branch of another organization', async () => {
+      const created = await createBranch();
+      const OTHER_ORG = '33333333-3333-4333-8333-333333333333';
+
+      // Foreign and nonexistent must be the same 404: confirming existence
+      // is the leak.
+      await request(app.getHttpServer())
+        .patch(
+          `/internal/organizations/${OTHER_ORG}/branches/${created.branchId}`,
+        )
+        .set(asService())
+        .send({ name: 'Probe' })
+        .expect(404);
+      expect(events.branchesUpdated).toHaveLength(0);
+    });
+
+    it('creates departments and stations under the branch', async () => {
+      const created = await createBranch();
+
+      await request(app.getHttpServer())
+        .post(
+          `/internal/organizations/${ORGANIZATION_ID}/branches/${created.branchId}/departments`,
+        )
+        .set(asService())
+        .send({ name: 'Electronics' })
+        .expect(201);
+
+      const station = await request(app.getHttpServer())
+        .post(
+          `/internal/organizations/${ORGANIZATION_ID}/branches/${created.branchId}/stations`,
+        )
+        .set(asService())
+        .send({ code: 'cashier-2', name: 'Cashier station 2' })
+        .expect(201);
+
+      // Stations announce themselves (tickets-service projects them);
+      // departments stay silent (no consumer exists).
+      expect(events.stationsCreated).toHaveLength(1);
+      expect(station.body.stationId).toBeDefined();
+
+      await request(app.getHttpServer())
+        .patch(
+          `/internal/organizations/${ORGANIZATION_ID}/stations/${station.body.stationId}`,
+        )
+        .set(asService())
+        .send({ status: 'archived' })
+        .expect(200);
+      expect(events.stationsUpdated).toHaveLength(1);
+    });
+
+    it('assigns and removes a branch idempotently, reflected in resolution', async () => {
+      memberships.memberships.push(membership());
+      const created = await createBranch();
+      const edge = `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/branches/${created.branchId}`;
+
+      await request(app.getHttpServer()).put(edge).set(asService()).expect(204);
+      // Idempotent: the second PUT converges on the same edge.
+      await request(app.getHttpServer()).put(edge).set(asService()).expect(204);
+      expect(branchMemberships.edges).toHaveLength(1);
+
+      const resolved = await request(app.getHttpServer())
+        .get(`/internal/memberships/${USER_ID}/active`)
+        .set(asService())
+        .expect(200);
+      expect(resolved.body.branchIds).toEqual([created.branchId]);
+
+      await request(app.getHttpServer())
+        .delete(edge)
+        .set(asService())
+        .expect(204);
+      await request(app.getHttpServer())
+        .delete(edge)
+        .set(asService())
+        .expect(204);
+      expect(branchMemberships.edges).toHaveLength(0);
+    });
+
+    it('changes a role template, bumps the version, and refuses the self-loop', async () => {
+      memberships.memberships.push(membership());
+
+      const changed = await request(app.getHttpServer())
+        .patch(
+          `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/role`,
+        )
+        .set(asService())
+        .send({ roleTemplate: 'branch_manager' })
+        .expect(200);
+
+      expect(changed.body).toEqual({
+        roleTemplate: 'branch_manager',
+        version: 2,
+      });
+      expect(events.roleChanged).toHaveLength(1);
+      expect(events.roleChanged[0].fromTemplate).toBe('agent');
+
+      // "Already there" is a stale caller, not a success (409), and must
+      // not bump the version over a non-change.
+      await request(app.getHttpServer())
+        .patch(
+          `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/role`,
+        )
+        .set(asService())
+        .send({ roleTemplate: 'branch_manager' })
+        .expect(409);
+      expect(memberships.memberships[0].version).toBe(2);
+    });
+
+    it('answers 400 for a word that is not a role template', async () => {
+      memberships.memberships.push(membership());
+
+      await request(app.getHttpServer())
+        .patch(
+          `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/role`,
+        )
+        .set(asService())
+        .send({ roleTemplate: 'superuser' })
+        .expect(400);
+      expect(events.roleChanged).toHaveLength(0);
+    });
   });
 });

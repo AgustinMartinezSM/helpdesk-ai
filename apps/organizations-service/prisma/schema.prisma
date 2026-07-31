@@ -26,6 +26,7 @@ model Organization {
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
 
   memberships Membership[]
+  branches    Branch[]
 
   @@map("organizations")
 }
@@ -56,7 +57,122 @@ model Membership {
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
 
+  branchMemberships     BranchMembership[]
+  departmentMemberships DepartmentMembership[]
+  responsibleFor        OperationalStation[]
+
   @@unique([organizationId, userId])
   @@index([userId])
   @@map("memberships")
+}
+
+// A branch is a SCOPE (ADR 0016): it constrains what a person may see, so it
+// is an authorization input and lives in this database next to memberships,
+// where the edges below are enforceable foreign keys (ADR 0013).
+model Branch {
+  id String @id @db.Uuid
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Stable operator-facing key, unique per organization; never globally —
+  // every chain has a "store-1".
+  code   String
+  name   String
+  status String
+
+  // IANA zone name, nullable: a single-site organization inherits nothing
+  // from an unset zone, and inventing one would be wrong more often than
+  // helpful.
+  timezone String?
+  address  String?
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  departments       Department[]
+  stations          OperationalStation[]
+  branchMemberships BranchMembership[]
+
+  @@unique([organizationId, code])
+  @@map("branches")
+}
+
+// Departments exist per ADR 0016's shape but nothing keys on them yet —
+// routing will (Sprint 9.11). Rows and memberships only, no behavior.
+model Department {
+  id String @id @db.Uuid
+
+  branchId String @map("branch_id") @db.Uuid
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  name   String
+  status String
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  departmentMemberships DepartmentMembership[]
+
+  @@unique([branchId, name])
+  @@map("departments")
+}
+
+// An operational station is CONTEXT, never a principal (ADR 0016/0017): it
+// authenticates nothing, holds no credential, and never appears as an actor.
+// It is a registered place a request can name — the till, not the cashier.
+model OperationalStation {
+  id String @id @db.Uuid
+
+  branchId String @map("branch_id") @db.Uuid
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  code String
+  name String
+  area String?
+
+  // Who answers for the place, not who acts as it. SET NULL: losing the
+  // responsible manager must never take the station down with them.
+  responsibleMembershipId String?     @map("responsible_membership_id") @db.Uuid
+  responsibleMembership   Membership? @relation(fields: [responsibleMembershipId], references: [id], onDelete: SetNull)
+
+  status String
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([branchId, code])
+  @@map("operational_stations")
+}
+
+// Membership × branch, the join ADR 0016 chose over a branch_id column: a
+// regional manager covers several stores without duplicate memberships.
+// Deliberately WITHOUT the scope qualifier column the ADR was unsure about
+// (Sprint 9.5, D3): the role template carries the meaning — branch_manager ×
+// branch set = manages; agent/requester × branch set = works at. The ADR
+// amendment recording this outcome lands with the sprint's docs pass.
+model BranchMembership {
+  membershipId String     @map("membership_id") @db.Uuid
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  branchId String @map("branch_id") @db.Uuid
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@id([membershipId, branchId])
+  @@map("branch_memberships")
+}
+
+model DepartmentMembership {
+  membershipId String     @map("membership_id") @db.Uuid
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  departmentId String     @map("department_id") @db.Uuid
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@id([membershipId, departmentId])
+  @@map("department_memberships")
 }

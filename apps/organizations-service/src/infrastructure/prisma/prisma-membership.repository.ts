@@ -92,6 +92,33 @@ export class PrismaMembershipRepository implements MembershipRepository {
     });
     return toDomain(row);
   }
+
+  async changeRoleTemplate(
+    membershipId: string,
+    to: RoleTemplate,
+    at: Date,
+  ): Promise<Membership> {
+    // Same one-statement shape as changeStatus, for the same reason: the
+    // bump makes every outstanding token's `perms` snapshot detectably
+    // stale in the very statement that changes what it should say.
+    const row = await this.prisma.membership.update({
+      where: { id: membershipId },
+      data: { roleTemplate: to, version: { increment: 1 }, updatedAt: at },
+    });
+    return toDomain(row);
+  }
+
+  async findByOrganizationAndId(
+    organizationId: string,
+    membershipId: string,
+  ): Promise<Membership | null> {
+    // Scoped at the query so a foreign membership and a nonexistent one
+    // produce the same null — the port's no-existence-leak contract.
+    const row = await this.prisma.membership.findFirst({
+      where: { id: membershipId, organizationId },
+    });
+    return row ? toDomain(row) : null;
+  }
 }
 
 function toDomain(row: MembershipRow): Membership {

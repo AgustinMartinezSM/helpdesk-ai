@@ -1,10 +1,15 @@
 import {
   aiSuggestionCreatedV2,
+  branchCreatedV1,
+  branchUpdatedV1,
   eventEnvelopeSchema,
   membershipCreatedV1,
+  membershipRoleChangedV1,
   membershipStatusChangedV1,
   MissingTenantContextError,
   requireEnvelopeOrganization,
+  stationCreatedV1,
+  stationUpdatedV1,
   ticketAssignedV2,
   ticketCommentAddedV2,
   ticketCreatedV2,
@@ -313,6 +318,174 @@ describe('membership contracts', () => {
       ).toBe(false);
     },
   );
+
+  const validRoleChangedPayload = {
+    membershipId: MEMBERSHIP_ID,
+    organizationId: ORGANIZATION_ID,
+    userId: USER_ID,
+    fromTemplate: 'requester',
+    toTemplate: 'branch_manager',
+    version: 2,
+    changedAt: '2026-07-31T12:00:00.000Z',
+  };
+
+  it('accepts a valid membership.role-changed.v1 payload', () => {
+    expect(
+      membershipRoleChangedV1.payloadSchema.safeParse(validRoleChangedPayload)
+        .success,
+    ).toBe(true);
+  });
+
+  it('does not constrain either role template to a vocabulary', () => {
+    // Same unfrozen vocabulary as membership.created.v1: an enum here would
+    // make settling the template names a breaking contract change.
+    expect(
+      membershipRoleChangedV1.payloadSchema.safeParse({
+        ...validRoleChangedPayload,
+        toTemplate: 'a_template_invented_after_this_contract_shipped',
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(['fromTemplate', 'toTemplate'])(
+    'rejects a membership.role-changed.v1 payload with an empty %s',
+    (field) => {
+      expect(
+        membershipRoleChangedV1.payloadSchema.safeParse({
+          ...validRoleChangedPayload,
+          [field]: '',
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it.each([0, -1, 1.5])(
+    'rejects a membership.role-changed.v1 payload with version %p',
+    (version) => {
+      expect(
+        membershipRoleChangedV1.payloadSchema.safeParse({
+          ...validRoleChangedPayload,
+          version,
+        }).success,
+      ).toBe(false);
+    },
+  );
+});
+
+describe('branch and station contracts', () => {
+  const BRANCH_ID = '3a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+  const STATION_ID = '4b2c3d4e-5f6a-4b7c-8d8e-0f1a2b3c4d5e';
+
+  const validBranchCreatedPayload = {
+    branchId: BRANCH_ID,
+    organizationId: ORGANIZATION_ID,
+    code: 'store-12',
+    name: 'Store 12',
+    status: 'active',
+    timezone: 'America/Argentina/Buenos_Aires',
+    createdAt: '2026-07-31T12:00:00.000Z',
+  };
+
+  const validStationCreatedPayload = {
+    stationId: STATION_ID,
+    branchId: BRANCH_ID,
+    organizationId: ORGANIZATION_ID,
+    code: 'cashier-2',
+    name: 'Cashier station 2',
+    area: 'checkout',
+    status: 'active',
+    createdAt: '2026-07-31T12:00:00.000Z',
+  };
+
+  it('accepts a valid branch.created.v1 payload, with or without timezone', () => {
+    expect(
+      branchCreatedV1.payloadSchema.safeParse(validBranchCreatedPayload)
+        .success,
+    ).toBe(true);
+    const { timezone, ...withoutTimezone } = validBranchCreatedPayload;
+    expect(
+      branchCreatedV1.payloadSchema.safeParse(withoutTimezone).success,
+    ).toBe(true);
+  });
+
+  it('rejects a branch.created.v1 payload with an empty code', () => {
+    expect(
+      branchCreatedV1.payloadSchema.safeParse({
+        ...validBranchCreatedPayload,
+        code: '',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('carries an archive as branch.updated.v1, not a lifecycle contract', () => {
+    // One updated contract covers rename, status and timezone changes: an
+    // archive IS an update to status, and consumers project last-write
+    // state — a separate archived routing key would say nothing the payload
+    // does not.
+    const archived = branchUpdatedV1.payloadSchema.safeParse({
+      branchId: BRANCH_ID,
+      organizationId: ORGANIZATION_ID,
+      code: 'store-12',
+      name: 'Store 12',
+      status: 'archived',
+      updatedAt: '2026-07-31T13:00:00.000Z',
+    });
+    expect(branchUpdatedV1.type).toBe('branch.updated.v1');
+    expect(archived.success).toBe(true);
+  });
+
+  it('does not constrain the status to a vocabulary', () => {
+    // The place vocabulary is the owning service's internal concern; an enum
+    // here would make renaming a status a breaking contract change.
+    expect(
+      branchUpdatedV1.payloadSchema.safeParse({
+        ...validBranchCreatedPayload,
+        createdAt: undefined,
+        updatedAt: '2026-07-31T13:00:00.000Z',
+        status: 'a_status_invented_after_this_contract_shipped',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts a valid station.created.v1 payload, with or without area', () => {
+    expect(
+      stationCreatedV1.payloadSchema.safeParse(validStationCreatedPayload)
+        .success,
+    ).toBe(true);
+    const { area, ...withoutArea } = validStationCreatedPayload;
+    expect(stationCreatedV1.payloadSchema.safeParse(withoutArea).success).toBe(
+      true,
+    );
+  });
+
+  it('rejects a station payload that loses its branch or organization', () => {
+    // A station is context under a branch under a tenant; a consumer given
+    // either id alone could not place the row.
+    const { branchId, ...withoutBranch } = validStationCreatedPayload;
+    expect(
+      stationCreatedV1.payloadSchema.safeParse(withoutBranch).success,
+    ).toBe(false);
+    const { organizationId, ...withoutOrganization } =
+      validStationCreatedPayload;
+    expect(
+      stationUpdatedV1.payloadSchema.safeParse({
+        ...withoutOrganization,
+        createdAt: undefined,
+        updatedAt: '2026-07-31T13:00:00.000Z',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts a valid station.updated.v1 payload', () => {
+    const { createdAt, ...base } = validStationCreatedPayload;
+    expect(
+      stationUpdatedV1.payloadSchema.safeParse({
+        ...base,
+        status: 'archived',
+        updatedAt: '2026-07-31T13:00:00.000Z',
+      }).success,
+    ).toBe(true);
+  });
 });
 
 describe('requireEnvelopeOrganization', () => {

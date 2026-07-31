@@ -14,8 +14,9 @@ import {
 import { permissionsForTemplate } from '../../domain/permissions';
 import type { Organization } from '../../domain/organization';
 import {
-  FakeMembershipEventPublisher,
+  FakeOrganizationEventPublisher,
   FixedClock,
+  InMemoryBranchMembershipRepository,
   InMemoryMembershipRepository,
   InMemoryOrganizationRepository,
   SequentialIdGenerator,
@@ -44,8 +45,9 @@ function organization(overrides: Partial<Organization> = {}): Organization {
 function buildContext() {
   const organizations = new InMemoryOrganizationRepository();
   const memberships = new InMemoryMembershipRepository();
+  const branchMemberships = new InMemoryBranchMembershipRepository();
   const clock = new FixedClock(new Date('2026-07-30T12:00:00.000Z'));
-  const events = new FakeMembershipEventPublisher();
+  const events = new FakeOrganizationEventPublisher();
   const ensureMembership = new EnsureMembershipUseCase(
     organizations,
     memberships,
@@ -58,14 +60,20 @@ function buildContext() {
     clock,
     events,
   );
-  const getMembership = new GetMembershipUseCase(memberships, organizations);
+  const getMembership = new GetMembershipUseCase(
+    memberships,
+    organizations,
+    branchMemberships,
+  );
   const resolveActiveMembership = new ResolveActiveMembershipUseCase(
     memberships,
     organizations,
+    branchMemberships,
   );
   return {
     organizations,
     memberships,
+    branchMemberships,
     clock,
     events,
     ensureMembership,
@@ -163,6 +171,28 @@ describe('permissionsForTemplate', () => {
     // Reads everything, changes nothing — the matrix's whole idea of it.
     const auditor = permissionsForTemplate('auditor');
     expect(writeShapedTicketKeys.filter((key) => auditor.has(key))).toEqual([]);
+  });
+
+  it('grants the branch-scoped read to the branch manager alone', () => {
+    // tickets.read_branch is meaningless without a branch set to scope it,
+    // and branch_manager is the only template whose reach is branch-shaped.
+    // Desk/team managers must NOT inherit it — their scope is team- and
+    // queue-shaped keys that do not exist yet — and admins/agents hold the
+    // wider read_all instead.
+    const holders = ROLE_TEMPLATES.filter((template) =>
+      permissionsForTemplate(template).has(PERMISSIONS.TICKETS_READ_BRANCH),
+    );
+    expect(holders).toEqual(['branch_manager']);
+  });
+
+  it('keeps the branch manager off the organization-wide read', () => {
+    // The whole point of the template: their visibility is the branch set,
+    // not the tenant.
+    expect(
+      permissionsForTemplate('branch_manager').has(
+        PERMISSIONS.TICKETS_READ_ALL,
+      ),
+    ).toBe(false);
   });
 
   it.each(ROLE_TEMPLATES)(
@@ -440,6 +470,10 @@ describe('ResolveActiveMembershipUseCase', () => {
 
     expect(resolved?.organizationId).toBe(BOOTSTRAP_ID);
     expect(resolved?.membershipVersion).toBe(1);
+    // Present and empty, never absent: the field name and the
+    // always-present-possibly-empty shape are frozen for auth-service's
+    // parser (Sprint 9.5, D2).
+    expect(resolved?.branchIds).toEqual([]);
   });
 
   it.each([

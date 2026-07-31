@@ -5,9 +5,18 @@ import {
   type ExceptionFilter,
 } from '@nestjs/common';
 import {
+  BranchNotFoundError,
+  DepartmentNotFoundError,
+  DuplicateBranchCodeError,
+  DuplicateDepartmentNameError,
+  DuplicateStationCodeError,
   InvalidMembershipTransitionError,
+  InvalidRoleTemplateError,
   MembershipNotFoundError,
   OrganizationDomainError,
+  OrganizationNotFoundError,
+  SameRoleTemplateError,
+  StationNotFoundError,
 } from '../../domain/errors';
 
 interface JsonResponse {
@@ -39,13 +48,34 @@ function describe(exception: OrganizationDomainError): {
   status: number;
   error: string;
 } {
-  if (exception instanceof MembershipNotFoundError) {
+  if (
+    exception instanceof MembershipNotFoundError ||
+    exception instanceof OrganizationNotFoundError ||
+    exception instanceof BranchNotFoundError ||
+    exception instanceof DepartmentNotFoundError ||
+    exception instanceof StationNotFoundError
+  ) {
+    // Foreign and nonexistent answer alike: the not-found errors are built
+    // scoped, so a guessed id from another organization gets this same 404.
     return { status: HttpStatus.NOT_FOUND, error: 'Not Found' };
   }
-  if (exception instanceof InvalidMembershipTransitionError) {
+  if (
+    exception instanceof InvalidMembershipTransitionError ||
+    exception instanceof SameRoleTemplateError ||
+    exception instanceof DuplicateBranchCodeError ||
+    exception instanceof DuplicateDepartmentNameError ||
+    exception instanceof DuplicateStationCodeError
+  ) {
     // The row exists; its current state refuses the move. 409 tells the
     // caller to re-read rather than retry the same request.
     return { status: HttpStatus.CONFLICT, error: 'Conflict' };
+  }
+  if (exception instanceof InvalidRoleTemplateError) {
+    // Normally unreachable over HTTP — the DTO already refuses unknown
+    // templates — but the use case guards non-HTTP callers, and if a DTO
+    // regression ever lets a word through, it is still the request that was
+    // wrong, not the server.
+    return { status: HttpStatus.BAD_REQUEST, error: 'Bad Request' };
   }
   return {
     status: HttpStatus.INTERNAL_SERVER_ERROR,

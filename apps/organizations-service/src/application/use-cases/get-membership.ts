@@ -3,6 +3,7 @@ import { MembershipNotFoundError } from '../../domain/errors';
 import { permissionsForTemplate } from '../../domain/permissions';
 import type { OrganizationStatus } from '../../domain/organization';
 import type { MembershipRepository } from '../ports/membership.repository';
+import type { BranchMembershipRepository } from '../ports/structure.repository';
 import type { OrganizationRepository } from '../ports/organization.repository';
 
 export interface MembershipView {
@@ -13,6 +14,12 @@ export interface MembershipView {
   permissions: string[];
   membershipVersion: number;
   organizationStatus: OrganizationStatus;
+  /**
+   * Branch ids this membership covers, archived branches included — the
+   * same always-present-possibly-empty `branchIds: string[]` shape the
+   * mint-time resolution returns, FROZEN for the same caller-side parser.
+   */
+  branchIds: string[];
 }
 
 /**
@@ -35,6 +42,7 @@ export class GetMembershipUseCase {
   constructor(
     private readonly memberships: MembershipRepository,
     private readonly organizations: OrganizationRepository,
+    private readonly branchMemberships: BranchMembershipRepository,
   ) {}
 
   async execute(
@@ -68,6 +76,7 @@ export class GetMembershipUseCase {
       permissions: [...permissionsForTemplate(membership.roleTemplate)],
       membershipVersion: membership.version,
       organizationStatus: organization.status,
+      branchIds: await this.branchMemberships.listBranchIds(membership.id),
     };
   }
 }

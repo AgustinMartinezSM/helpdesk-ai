@@ -13,6 +13,13 @@ interface ActiveMembershipResponse {
   organizationId: string | null;
   permissions: string[];
   membershipVersion: number | null;
+  /**
+   * Branch ids for the `br` claim (Sprint 9.5, D2). The name and the
+   * always-present-possibly-empty shape are FROZEN — auth-service parses
+   * exactly `branchIds: string[]`, so even the no-membership answer carries
+   * an empty array rather than a null.
+   */
+  branchIds: string[];
 }
 
 /**
@@ -47,6 +54,7 @@ export class InternalMembershipsController {
         organizationId: null,
         permissions: [],
         membershipVersion: null,
+        branchIds: [],
       };
     }
 
@@ -54,6 +62,7 @@ export class InternalMembershipsController {
       organizationId: resolved.organizationId,
       permissions: resolved.permissions,
       membershipVersion: resolved.membershipVersion,
+      branchIds: resolved.branchIds,
     };
   }
 }

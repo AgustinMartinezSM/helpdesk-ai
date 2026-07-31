@@ -24,6 +24,11 @@ const BRANCH_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
   PERMISSIONS.ORGANIZATION_READ,
   PERMISSIONS.TICKETS_CREATE,
   PERMISSIONS.TICKETS_READ_OWN,
+  // The branch-scoped read (ADR 0015): visibility over the branches the
+  // membership covers — the `br` claim supplies which ones — plus their own
+  // tickets, and nothing organization-wide. First key in the map whose reach
+  // depends on a claim beyond `perms` itself.
+  PERMISSIONS.TICKETS_READ_BRANCH,
   PERMISSIONS.TICKETS_ASSIGN_SELF,
   PERMISSIONS.TICKETS_REPLY_PUBLIC,
   PERMISSIONS.TICKETS_NOTE_INTERNAL,
@@ -31,12 +36,20 @@ const BRANCH_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Both desk and team managers are the branch-manager set plus assigning
- * others; the matrix distinguishes them only through team- and queue-scoped
- * keys that have no feature to check them yet.
+ * Desk and team managers are no longer a spread of the branch-manager set:
+ * that shorthand ended the moment branch_manager gained a branch-scoped key.
+ * Their reach is team- and queue-shaped in the matrix, and those keys have
+ * no feature to check them yet — inheriting `tickets.read_branch` here would
+ * silently promise branch semantics the matrix never gave them.
  */
 const DESK_AND_TEAM_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
-  ...BRANCH_MANAGER_PERMISSIONS,
+  PERMISSIONS.ORGANIZATION_READ,
+  PERMISSIONS.TICKETS_CREATE,
+  PERMISSIONS.TICKETS_READ_OWN,
+  PERMISSIONS.TICKETS_ASSIGN_SELF,
+  PERMISSIONS.TICKETS_REPLY_PUBLIC,
+  PERMISSIONS.TICKETS_NOTE_INTERNAL,
+  PERMISSIONS.TICKETS_CHANGE_STATUS,
   PERMISSIONS.TICKETS_ASSIGN_AGENT,
 ]);
 

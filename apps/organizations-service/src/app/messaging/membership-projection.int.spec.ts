@@ -24,6 +24,7 @@ import { EnsureMembershipUseCase } from '../../application/use-cases/ensure-memb
 import { ResolveActiveMembershipUseCase } from '../../application/use-cases/resolve-active-membership';
 import { BOOTSTRAP_ORGANIZATION_SLUG } from '../../domain/organization';
 import { RabbitMqEventPublisher } from '../../infrastructure/messaging/rabbitmq-event-publisher';
+import { PrismaBranchMembershipRepository } from '../../infrastructure/prisma/prisma-branch-membership.repository';
 import { PrismaMembershipRepository } from '../../infrastructure/prisma/prisma-membership.repository';
 import { PrismaOrganizationRepository } from '../../infrastructure/prisma/prisma-organization.repository';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -78,6 +79,7 @@ describe('membership provisioning (real broker, real database)', () => {
     resolveActiveMembership = new ResolveActiveMembershipUseCase(
       memberships,
       organizations,
+      new PrismaBranchMembershipRepository(prisma),
     );
     // Only memberships are wiped. The bootstrap organization comes from a
     // migration, and `migrate deploy` will not re-insert it on the next run —

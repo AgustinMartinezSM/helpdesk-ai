@@ -20,11 +20,17 @@ export const PERMISSIONS = {
   /** Own requests only; the requester's default visibility. */
   TICKETS_READ_OWN: 'tickets.read_own',
   /**
-   * Every ticket in the organization. Branch- and team-scoped reads
-   * (`tickets.read_branch`, `tickets.read_team`) replace this for agents
-   * once branches and teams exist; until then this is the staff read.
+   * Every ticket in the organization. The team-scoped read
+   * (`tickets.read_team`) replaces this for agents once teams exist; until
+   * then this is the staff read.
    */
   TICKETS_READ_ALL: 'tickets.read_all',
+  /**
+   * Tickets of the branches the actor's membership covers, plus their own.
+   * The branch set rides the `br` claim; an actor holding this key with an
+   * empty set sees only their own requests — absence denies.
+   */
+  TICKETS_READ_BRANCH: 'tickets.read_branch',
   TICKETS_ASSIGN_SELF: 'tickets.assign_self',
   /** Assigning someone else, or unassigning. */
   TICKETS_ASSIGN_AGENT: 'tickets.assign_agent',

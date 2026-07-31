@@ -5,7 +5,7 @@ import type {
 } from '@helpdesk-ai/messaging';
 import { userRegisteredV1 } from '@helpdesk-ai/messaging';
 import {
-  FakeMembershipEventPublisher,
+  FakeOrganizationEventPublisher,
   FixedClock,
   InMemoryMembershipRepository,
   InMemoryOrganizationRepository,
@@ -47,7 +47,7 @@ function buildConsumer() {
   });
   const memberships = new InMemoryMembershipRepository();
   const messaging = new CapturingMessagingClient();
-  const events = new FakeMembershipEventPublisher();
+  const events = new FakeOrganizationEventPublisher();
   const consumer = new RegistrationConsumer(
     messaging as unknown as MessagingClient,
     new EnsureMembershipUseCase(
