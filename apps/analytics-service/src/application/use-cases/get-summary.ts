@@ -1,4 +1,9 @@
-import { hasPermission, PERMISSIONS, type Actor } from '@helpdesk-ai/security';
+import {
+  hasPermission,
+  PERMISSIONS,
+  requireOrganization,
+  type Actor,
+} from '@helpdesk-ai/security';
 import { ForbiddenAnalyticsActionError } from '../../domain/errors';
 import type { AnalyticsSummary, DailyCount } from '../../domain/analytics';
 import type {
@@ -14,10 +19,14 @@ function utcDayOf(date: Date): string {
 }
 
 /**
- * analytics.read gates the dashboard: it aggregates the whole desk, not one
- * user. Per the approved matrix (docs/architecture/tenancy-target-state.md)
- * that key belongs to admins, owners and auditors — agents, who used to see
- * this as generic staff, deliberately lose it.
+ * analytics.read gates the dashboard: it aggregates a whole organization,
+ * not one user. Per the approved matrix
+ * (docs/architecture/tenancy-target-state.md) that key belongs to admins,
+ * owners and auditors — agents, who used to see this as generic staff,
+ * deliberately lose it. The organization comes from the token, never from
+ * the request: all five aggregates take it as a required scope in one
+ * coherent step, because a dashboard mixing scoped and unscoped numbers
+ * would be worse than either.
  */
 export class GetAnalyticsSummaryUseCase {
   constructor(
@@ -30,6 +39,7 @@ export class GetAnalyticsSummaryUseCase {
     if (!hasPermission(actor, PERMISSIONS.ANALYTICS_READ)) {
       throw new ForbiddenAnalyticsActionError();
     }
+    const organizationId = requireOrganization(actor);
 
     const now = this.clock.now();
     const startOfToday = new Date(
@@ -39,11 +49,11 @@ export class GetAnalyticsSummaryUseCase {
 
     const [totalTickets, byStatus, byPriority, perDay, totalUsers] =
       await Promise.all([
-        this.tickets.total(),
-        this.tickets.countByStatus(),
-        this.tickets.countByPriority(),
-        this.tickets.createdPerDaySince(from),
-        this.users.total(),
+        this.tickets.total(organizationId),
+        this.tickets.countByStatus(organizationId),
+        this.tickets.countByPriority(organizationId),
+        this.tickets.createdPerDaySince(organizationId, from),
+        this.users.total(organizationId),
       ]);
 
     // Zero-fill the window so the dashboard always gets seven points.

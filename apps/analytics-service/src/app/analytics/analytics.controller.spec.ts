@@ -24,9 +24,12 @@ const TEST_ENV = {
   JWT_ACCESS_SECRET: 'test-secret-0123456789abcdef0123456789abcdef',
 };
 
+const ORG = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
 describe('Analytics HTTP API (fakes, real JWT verification)', () => {
   let app: INestApplication;
   let adminToken: string;
+  let tenantlessAdminToken: string;
   let agentToken: string;
   let userToken: string;
 
@@ -37,6 +40,7 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
 
     await tickets.applyCreated({
       ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
+      organizationId: ORG,
       status: 'open',
       priority: 'medium',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
@@ -45,6 +49,12 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
     await users.applyRegistered({
       userId: '11111111-1111-4111-8111-111111111111',
       registeredAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+    // The membership stamp is what makes the account count under the org.
+    await users.applyMembershipCreated({
+      userId: '11111111-1111-4111-8111-111111111111',
+      organizationId: ORG,
+      createdAt: new Date('2026-07-28T12:00:01.000Z'),
     });
 
     const moduleRef = await Test.createTestingModule({
@@ -78,6 +88,19 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
       {
         email: 'root@example.com',
         roles: ['admin'],
+        org: ORG,
+        perms: [PERMISSIONS.ANALYTICS_READ],
+      },
+      { subject: '44444444-4444-4444-8444-444444444444' },
+    );
+    // Right permission, no organization: the state of an account between
+    // registering and its membership event landing. The dashboard has no
+    // tenant to scope to, so this must refuse rather than aggregate nothing
+    // — or worse, everything.
+    tenantlessAdminToken = await jwt.signAsync(
+      {
+        email: 'root@example.com',
+        roles: ['admin'],
         perms: [PERMISSIONS.ANALYTICS_READ],
       },
       { subject: '44444444-4444-4444-8444-444444444444' },
@@ -88,6 +111,7 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
       {
         email: 'agent@example.com',
         roles: ['agent'],
+        org: ORG,
         perms: [
           PERMISSIONS.TICKETS_READ_ALL,
           PERMISSIONS.TICKETS_NOTE_INTERNAL,
@@ -96,7 +120,7 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
       { subject: '33333333-3333-4333-8333-333333333333' },
     );
     userToken = await jwt.signAsync(
-      { email: 'ada@example.com', roles: ['user'] },
+      { email: 'ada@example.com', roles: ['user'], org: ORG },
       { subject: '11111111-1111-4111-8111-111111111111' },
     );
   });
@@ -119,6 +143,13 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
     await request(app.getHttpServer())
       .get('/analytics/summary')
       .set('authorization', `Bearer ${agentToken}`)
+      .expect(403);
+  });
+
+  it('refuses analytics.read holders whose token carries no organization', async () => {
+    await request(app.getHttpServer())
+      .get('/analytics/summary')
+      .set('authorization', `Bearer ${tenantlessAdminToken}`)
       .expect(403);
   });
 

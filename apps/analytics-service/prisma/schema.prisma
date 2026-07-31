@@ -30,11 +30,13 @@ model TicketSnapshot {
   lastEventAt DateTime  @map("last_event_at") @db.Timestamptz(3)
 
   /// Tenant this snapshot belongs to (ADR 0012). An opaque identifier, never
-  /// a foreign key (ADR 0003). Nullable for now: populated by a backfill and
-  /// read by nothing until the aggregates take a required scope.
+  /// a foreign key (ADR 0003). Still nullable in the column even though every
+  /// aggregate now requires a scope: rows written before the backfill carry
+  /// the bootstrap literal, and a v2 event may correct it under the LWW guard.
   organizationId String? @map("organization_id") @db.Uuid
 
   @@index([status])
+  @@index([organizationId])
   @@map("ticket_snapshots")
 }
 
@@ -42,5 +44,11 @@ model UserSnapshot {
   userId       String   @id @map("user_id") @db.Uuid
   registeredAt DateTime @map("registered_at") @db.Timestamptz(3)
 
+  /// Tenant this user counts under (ADR 0012). Nullable because registration
+  /// is anonymous — the membership.created event stamps it moments later —
+  /// and a null row simply falls out of every scoped aggregate until then.
+  organizationId String? @map("organization_id") @db.Uuid
+
+  @@index([organizationId])
   @@map("user_snapshots")
 }

@@ -1,5 +1,6 @@
 import type { DailyCount } from '../../domain/analytics';
 import type {
+  ApplyMembershipCreated,
   ApplyTicketCreated,
   ApplyTicketStatusChanged,
   TicketSnapshotRepository,
@@ -17,14 +18,17 @@ export class PrismaTicketSnapshotRepository implements TicketSnapshotRepository 
    * older event can only backfill missing metadata, never regress status.
    * Ties (identical occurredAt) resolve to the later arrival on purpose:
    * with the per-queue serialized consumer that is publication order.
+   * organization_id rides the same guard as status rather than COALESCE:
+   * a v2 event is the ticket's truth and may correct a value the migration
+   * backfilled to the bootstrap literal.
    */
   async applyCreated(input: ApplyTicketCreated): Promise<void> {
     await this.prisma.$executeRaw`
       INSERT INTO ticket_snapshots
-        (ticket_id, status, priority, created_at, resolved_at, last_event_at)
+        (ticket_id, organization_id, status, priority, created_at, resolved_at, last_event_at)
       VALUES
-        (${input.ticketId}::uuid, ${input.status}, ${input.priority},
-         ${input.createdAt}, NULL, ${input.occurredAt})
+        (${input.ticketId}::uuid, ${input.organizationId}::uuid, ${input.status},
+         ${input.priority}, ${input.createdAt}, NULL, ${input.occurredAt})
       ON CONFLICT (ticket_id) DO UPDATE SET
         priority = COALESCE(ticket_snapshots.priority, EXCLUDED.priority),
         created_at = COALESCE(ticket_snapshots.created_at, EXCLUDED.created_at),
@@ -34,6 +38,9 @@ export class PrismaTicketSnapshotRepository implements TicketSnapshotRepository 
         resolved_at = CASE
           WHEN ticket_snapshots.last_event_at <= EXCLUDED.last_event_at
           THEN EXCLUDED.resolved_at ELSE ticket_snapshots.resolved_at END,
+        organization_id = CASE
+          WHEN ticket_snapshots.last_event_at <= EXCLUDED.last_event_at
+          THEN EXCLUDED.organization_id ELSE ticket_snapshots.organization_id END,
         last_event_at = GREATEST(ticket_snapshots.last_event_at, EXCLUDED.last_event_at)
     `;
   }
@@ -42,10 +49,10 @@ export class PrismaTicketSnapshotRepository implements TicketSnapshotRepository 
     const resolvedAt = input.toStatus === 'resolved' ? input.changedAt : null;
     await this.prisma.$executeRaw`
       INSERT INTO ticket_snapshots
-        (ticket_id, status, priority, created_at, resolved_at, last_event_at)
+        (ticket_id, organization_id, status, priority, created_at, resolved_at, last_event_at)
       VALUES
-        (${input.ticketId}::uuid, ${input.toStatus}, NULL, NULL,
-         ${resolvedAt}, ${input.occurredAt})
+        (${input.ticketId}::uuid, ${input.organizationId}::uuid, ${input.toStatus},
+         NULL, NULL, ${resolvedAt}, ${input.occurredAt})
       ON CONFLICT (ticket_id) DO UPDATE SET
         status = CASE
           WHEN ticket_snapshots.last_event_at <= EXCLUDED.last_event_at
@@ -53,17 +60,21 @@ export class PrismaTicketSnapshotRepository implements TicketSnapshotRepository 
         resolved_at = CASE
           WHEN ticket_snapshots.last_event_at <= EXCLUDED.last_event_at
           THEN EXCLUDED.resolved_at ELSE ticket_snapshots.resolved_at END,
+        organization_id = CASE
+          WHEN ticket_snapshots.last_event_at <= EXCLUDED.last_event_at
+          THEN EXCLUDED.organization_id ELSE ticket_snapshots.organization_id END,
         last_event_at = GREATEST(ticket_snapshots.last_event_at, EXCLUDED.last_event_at)
     `;
   }
 
-  async total(): Promise<number> {
-    return this.prisma.ticketSnapshot.count();
+  async total(organizationId: string): Promise<number> {
+    return this.prisma.ticketSnapshot.count({ where: { organizationId } });
   }
 
-  async countByStatus(): Promise<Record<string, number>> {
+  async countByStatus(organizationId: string): Promise<Record<string, number>> {
     const groups = await this.prisma.ticketSnapshot.groupBy({
       by: ['status'],
+      where: { organizationId },
       _count: { _all: true },
     });
     return Object.fromEntries(
@@ -71,10 +82,12 @@ export class PrismaTicketSnapshotRepository implements TicketSnapshotRepository 
     );
   }
 
-  async countByPriority(): Promise<Record<string, number>> {
+  async countByPriority(
+    organizationId: string,
+  ): Promise<Record<string, number>> {
     const groups = await this.prisma.ticketSnapshot.groupBy({
       by: ['priority'],
-      where: { priority: { not: null } },
+      where: { organizationId, priority: { not: null } },
       _count: { _all: true },
     });
     return Object.fromEntries(
@@ -82,9 +95,12 @@ export class PrismaTicketSnapshotRepository implements TicketSnapshotRepository 
     );
   }
 
-  async createdPerDaySince(from: Date): Promise<DailyCount[]> {
+  async createdPerDaySince(
+    organizationId: string,
+    from: Date,
+  ): Promise<DailyCount[]> {
     const rows = await this.prisma.ticketSnapshot.findMany({
-      where: { createdAt: { gte: from } },
+      where: { organizationId, createdAt: { gte: from } },
       select: { createdAt: true },
     });
     const buckets = new Map<string, number>();
@@ -105,14 +121,32 @@ export class PrismaUserSnapshotRepository implements UserSnapshotRepository {
     userId: string;
     registeredAt: Date;
   }): Promise<void> {
-    // skipDuplicates compiles to ON CONFLICT DO NOTHING on the primary key.
+    // skipDuplicates compiles to ON CONFLICT DO NOTHING on the primary key —
+    // which also means it can never clobber an organization a membership
+    // event already stamped (see applyMembershipCreated).
     await this.prisma.userSnapshot.createMany({
       data: [{ userId: input.userId, registeredAt: input.registeredAt }],
       skipDuplicates: true,
     });
   }
 
-  async total(): Promise<number> {
-    return this.prisma.userSnapshot.count();
+  async applyMembershipCreated(input: ApplyMembershipCreated): Promise<void> {
+    // upsert keyed on the primary key compiles to a single INSERT .. ON
+    // CONFLICT DO UPDATE. The create path exists for a lost or late
+    // registration event: registeredAt is then the membership time, the
+    // honest nearby value (see the port contract).
+    await this.prisma.userSnapshot.upsert({
+      where: { userId: input.userId },
+      create: {
+        userId: input.userId,
+        registeredAt: input.createdAt,
+        organizationId: input.organizationId,
+      },
+      update: { organizationId: input.organizationId },
+    });
+  }
+
+  async total(organizationId: string): Promise<number> {
+    return this.prisma.userSnapshot.count({ where: { organizationId } });
   }
 }

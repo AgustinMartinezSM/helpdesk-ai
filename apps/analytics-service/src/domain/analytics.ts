@@ -13,6 +13,28 @@ export interface TicketSnapshot {
   readonly resolvedAt: Date | null;
   /** Envelope occurredAt of the newest applied event — the LWW guard. */
   readonly lastEventAt: Date;
+  /**
+   * Tenant this snapshot belongs to (ADR 0012). Nullable only for rows that
+   * predate the backfill; every v2 event carries one and may correct a
+   * backfilled value under the same LWW guard as status.
+   */
+  readonly organizationId: string | null;
+}
+
+/**
+ * One row per registered account. Kept minimal on purpose: the dashboard
+ * only ever counts these, so the projection stores exactly what the scoped
+ * count needs.
+ */
+export interface UserSnapshot {
+  readonly userId: string;
+  readonly registeredAt: Date;
+  /**
+   * Null between registering and the membership event arriving — registration
+   * is anonymous by design, so the tenant is stamped by membership.created.
+   * A null row falls out of every scoped count until then.
+   */
+  readonly organizationId: string | null;
 }
 
 export interface DailyCount {
@@ -21,6 +43,7 @@ export interface DailyCount {
   readonly count: number;
 }
 
+/** Every figure below is scoped to one organization — never the whole desk. */
 export interface AnalyticsSummary {
   readonly totalTickets: number;
   readonly byStatus: Record<string, number>;

@@ -14,6 +14,7 @@ export class ApplyTicketCreatedUseCase {
 
   async execute(input: {
     ticketId: string;
+    organizationId: string;
     status: string;
     priority: string;
     createdAt: Date;
@@ -28,6 +29,7 @@ export class ApplyTicketStatusChangedUseCase {
 
   async execute(input: {
     ticketId: string;
+    organizationId: string;
     toStatus: string;
     changedAt: Date;
     occurredAt: Date;
@@ -41,5 +43,25 @@ export class ApplyUserRegisteredUseCase {
 
   async execute(input: { userId: string; registeredAt: Date }): Promise<void> {
     await this.users.applyRegistered(input);
+  }
+}
+
+/**
+ * Stamps the tenant onto the user's snapshot when a membership is created.
+ * Creating the row when registration never arrived (or is still in flight)
+ * is deliberate: a lost registration event must not lose the member from
+ * the organization's count. registeredAt is then the membership time — the
+ * honest nearby value — and applyRegistered's do-nothing-on-conflict will
+ * not overwrite it if the registration event shows up later.
+ */
+export class ApplyMembershipCreatedUseCase {
+  constructor(private readonly users: UserSnapshotRepository) {}
+
+  async execute(input: {
+    userId: string;
+    organizationId: string;
+    createdAt: Date;
+  }): Promise<void> {
+    await this.users.applyMembershipCreated(input);
   }
 }

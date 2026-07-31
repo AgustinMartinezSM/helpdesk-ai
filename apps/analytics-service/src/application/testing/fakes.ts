@@ -1,5 +1,10 @@
-import type { DailyCount, TicketSnapshot } from '../../domain/analytics';
 import type {
+  DailyCount,
+  TicketSnapshot,
+  UserSnapshot,
+} from '../../domain/analytics';
+import type {
+  ApplyMembershipCreated,
   ApplyTicketCreated,
   ApplyTicketStatusChanged,
   Clock,
@@ -11,6 +16,9 @@ import type {
  * Deterministic in-memory test doubles. The snapshot fake mirrors the SQL
  * semantics exactly (LWW guard with <=, COALESCE backfill) so use-case
  * specs exercise the same rules the real repository enforces atomically.
+ * Every aggregate filters by organizationId the way the real WHERE clauses
+ * do — deliberately, so a unit suite cannot pass against a read that leaks
+ * another tenant's rows.
  */
 
 export class InMemoryTicketSnapshotRepository implements TicketSnapshotRepository {
@@ -21,6 +29,7 @@ export class InMemoryTicketSnapshotRepository implements TicketSnapshotRepositor
     if (!existing) {
       this.snapshots.set(input.ticketId, {
         ticketId: input.ticketId,
+        organizationId: input.organizationId,
         status: input.status,
         priority: input.priority,
         createdAt: input.createdAt,
@@ -36,6 +45,8 @@ export class InMemoryTicketSnapshotRepository implements TicketSnapshotRepositor
       createdAt: existing.createdAt ?? input.createdAt,
       status: wins ? input.status : existing.status,
       resolvedAt: wins ? null : existing.resolvedAt,
+      // Like status, not like priority: a newer event may correct the tenant.
+      organizationId: wins ? input.organizationId : existing.organizationId,
       lastEventAt: new Date(
         Math.max(existing.lastEventAt.getTime(), input.occurredAt.getTime()),
       ),
@@ -48,6 +59,7 @@ export class InMemoryTicketSnapshotRepository implements TicketSnapshotRepositor
     if (!existing) {
       this.snapshots.set(input.ticketId, {
         ticketId: input.ticketId,
+        organizationId: input.organizationId,
         status: input.toStatus,
         priority: null,
         createdAt: null,
@@ -61,27 +73,36 @@ export class InMemoryTicketSnapshotRepository implements TicketSnapshotRepositor
       ...existing,
       status: wins ? input.toStatus : existing.status,
       resolvedAt: wins ? resolvedAt : existing.resolvedAt,
+      organizationId: wins ? input.organizationId : existing.organizationId,
       lastEventAt: new Date(
         Math.max(existing.lastEventAt.getTime(), input.occurredAt.getTime()),
       ),
     });
   }
 
-  async total(): Promise<number> {
-    return this.snapshots.size;
+  private scoped(organizationId: string): TicketSnapshot[] {
+    return [...this.snapshots.values()].filter(
+      (snapshot) => snapshot.organizationId === organizationId,
+    );
   }
 
-  async countByStatus(): Promise<Record<string, number>> {
+  async total(organizationId: string): Promise<number> {
+    return this.scoped(organizationId).length;
+  }
+
+  async countByStatus(organizationId: string): Promise<Record<string, number>> {
     const counts: Record<string, number> = {};
-    for (const snapshot of this.snapshots.values()) {
+    for (const snapshot of this.scoped(organizationId)) {
       counts[snapshot.status] = (counts[snapshot.status] ?? 0) + 1;
     }
     return counts;
   }
 
-  async countByPriority(): Promise<Record<string, number>> {
+  async countByPriority(
+    organizationId: string,
+  ): Promise<Record<string, number>> {
     const counts: Record<string, number> = {};
-    for (const snapshot of this.snapshots.values()) {
+    for (const snapshot of this.scoped(organizationId)) {
       if (snapshot.priority) {
         counts[snapshot.priority] = (counts[snapshot.priority] ?? 0) + 1;
       }
@@ -89,9 +110,12 @@ export class InMemoryTicketSnapshotRepository implements TicketSnapshotRepositor
     return counts;
   }
 
-  async createdPerDaySince(from: Date): Promise<DailyCount[]> {
+  async createdPerDaySince(
+    organizationId: string,
+    from: Date,
+  ): Promise<DailyCount[]> {
     const buckets = new Map<string, number>();
-    for (const snapshot of this.snapshots.values()) {
+    for (const snapshot of this.scoped(organizationId)) {
       if (snapshot.createdAt && snapshot.createdAt >= from) {
         const day = snapshot.createdAt.toISOString().slice(0, 10);
         buckets.set(day, (buckets.get(day) ?? 0) + 1);
@@ -104,19 +128,45 @@ export class InMemoryTicketSnapshotRepository implements TicketSnapshotRepositor
 }
 
 export class InMemoryUserSnapshotRepository implements UserSnapshotRepository {
-  readonly users = new Map<string, Date>();
+  readonly users = new Map<string, UserSnapshot>();
 
   async applyRegistered(input: {
     userId: string;
     registeredAt: Date;
   }): Promise<void> {
+    // Mirrors ON CONFLICT DO NOTHING: never overwrites, in particular not an
+    // organization a membership event already stamped.
     if (!this.users.has(input.userId)) {
-      this.users.set(input.userId, input.registeredAt);
+      this.users.set(input.userId, {
+        userId: input.userId,
+        registeredAt: input.registeredAt,
+        organizationId: null,
+      });
     }
   }
 
-  async total(): Promise<number> {
-    return this.users.size;
+  async applyMembershipCreated(input: ApplyMembershipCreated): Promise<void> {
+    const existing = this.users.get(input.userId);
+    if (existing) {
+      this.users.set(input.userId, {
+        ...existing,
+        organizationId: input.organizationId,
+      });
+      return;
+    }
+    // Create path: the registration event was lost or is late, so the
+    // membership time stands in for registeredAt (see the port contract).
+    this.users.set(input.userId, {
+      userId: input.userId,
+      registeredAt: input.createdAt,
+      organizationId: input.organizationId,
+    });
+  }
+
+  async total(organizationId: string): Promise<number> {
+    return [...this.users.values()].filter(
+      (user) => user.organizationId === organizationId,
+    ).length;
   }
 }
 

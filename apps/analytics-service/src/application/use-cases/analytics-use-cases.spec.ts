@@ -1,4 +1,8 @@
-import { PERMISSIONS, type Actor } from '@helpdesk-ai/security';
+import {
+  NoOrganizationContextError,
+  PERMISSIONS,
+  type Actor,
+} from '@helpdesk-ai/security';
 import { ForbiddenAnalyticsActionError } from '../../domain/errors';
 import {
   FixedClock,
@@ -6,14 +10,31 @@ import {
   InMemoryUserSnapshotRepository,
 } from '../testing/fakes';
 import {
+  ApplyMembershipCreatedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
   ApplyUserRegisteredUseCase,
 } from './apply-events';
 import { GetAnalyticsSummaryUseCase } from './get-summary';
 
+const ORG_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const ORG_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
 const ADMIN: Actor = {
   id: '44444444-4444-4444-8444-444444444444',
+  roles: ['admin'],
+  organizationId: ORG_A,
+  permissions: new Set([PERMISSIONS.ANALYTICS_READ]),
+};
+const ADMIN_B: Actor = {
+  id: '55555555-5555-4555-8555-555555555555',
+  roles: ['admin'],
+  organizationId: ORG_B,
+  permissions: new Set([PERMISSIONS.ANALYTICS_READ]),
+};
+/** Right permission, no tenant: the state between registering and joining. */
+const TENANTLESS_ADMIN: Actor = {
+  id: '66666666-6666-4666-8666-666666666666',
   roles: ['admin'],
   permissions: new Set([PERMISSIONS.ANALYTICS_READ]),
 };
@@ -21,6 +42,7 @@ const ADMIN: Actor = {
 const AGENT: Actor = {
   id: '33333333-3333-4333-8333-333333333333',
   roles: ['agent'],
+  organizationId: ORG_A,
   permissions: new Set([
     PERMISSIONS.TICKETS_READ_ALL,
     PERMISSIONS.TICKETS_NOTE_INTERNAL,
@@ -29,6 +51,7 @@ const AGENT: Actor = {
 const USER: Actor = {
   id: '11111111-1111-4111-8111-111111111111',
   roles: ['user'],
+  organizationId: ORG_A,
   permissions: new Set([PERMISSIONS.ORGANIZATION_READ]),
 };
 
@@ -45,6 +68,7 @@ function buildContext() {
     applyCreated: new ApplyTicketCreatedUseCase(tickets),
     applyStatus: new ApplyTicketStatusChangedUseCase(tickets),
     applyUser: new ApplyUserRegisteredUseCase(users),
+    applyMembership: new ApplyMembershipCreatedUseCase(users),
     summary: new GetAnalyticsSummaryUseCase(tickets, users, clock),
   };
 }
@@ -55,6 +79,7 @@ describe('ticket snapshot projection', () => {
 
     await ctx.applyCreated.execute({
       ticketId: TICKET,
+      organizationId: ORG_A,
       status: 'open',
       priority: 'high',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
@@ -62,6 +87,7 @@ describe('ticket snapshot projection', () => {
     });
     await ctx.applyStatus.execute({
       ticketId: TICKET,
+      organizationId: ORG_A,
       toStatus: 'resolved',
       changedAt: new Date('2026-07-28T13:00:00.000Z'),
       occurredAt: new Date('2026-07-28T13:00:00.100Z'),
@@ -70,9 +96,11 @@ describe('ticket snapshot projection', () => {
     let snapshot = ctx.tickets.snapshots.get(TICKET);
     expect(snapshot?.status).toBe('resolved');
     expect(snapshot?.resolvedAt).toEqual(new Date('2026-07-28T13:00:00.000Z'));
+    expect(snapshot?.organizationId).toBe(ORG_A);
 
     await ctx.applyStatus.execute({
       ticketId: TICKET,
+      organizationId: ORG_A,
       toStatus: 'open',
       changedAt: new Date('2026-07-28T14:00:00.000Z'),
       occurredAt: new Date('2026-07-28T14:00:00.100Z'),
@@ -90,6 +118,7 @@ describe('ticket snapshot projection', () => {
     // status-changed first: partial row with unknown priority.
     await ctx.applyStatus.execute({
       ticketId: TICKET,
+      organizationId: ORG_A,
       toStatus: 'in_progress',
       changedAt: new Date('2026-07-28T12:05:00.000Z'),
       occurredAt: new Date('2026-07-28T12:05:00.100Z'),
@@ -99,6 +128,7 @@ describe('ticket snapshot projection', () => {
     // The late created backfills metadata WITHOUT regressing status.
     await ctx.applyCreated.execute({
       ticketId: TICKET,
+      organizationId: ORG_A,
       status: 'open',
       priority: 'urgent',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
@@ -115,6 +145,7 @@ describe('ticket snapshot projection', () => {
     const ctx = buildContext();
     await ctx.applyCreated.execute({
       ticketId: TICKET,
+      organizationId: ORG_A,
       status: 'open',
       priority: 'low',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
@@ -122,6 +153,7 @@ describe('ticket snapshot projection', () => {
     });
     const newer = {
       ticketId: TICKET,
+      organizationId: ORG_A,
       toStatus: 'resolved',
       changedAt: new Date('2026-07-28T13:00:00.000Z'),
       occurredAt: new Date('2026-07-28T13:00:00.100Z'),
@@ -131,6 +163,7 @@ describe('ticket snapshot projection', () => {
     // A stale event replayed later (e.g. DLQ replay) must not regress.
     await ctx.applyStatus.execute({
       ticketId: TICKET,
+      organizationId: ORG_A,
       toStatus: 'in_progress',
       changedAt: new Date('2026-07-28T12:30:00.000Z'),
       occurredAt: new Date('2026-07-28T12:30:00.100Z'),
@@ -153,7 +186,50 @@ describe('user snapshot projection', () => {
     };
     await ctx.applyUser.execute(input);
     await ctx.applyUser.execute(input);
-    expect(await ctx.users.total()).toBe(1);
+    expect(ctx.users.users.size).toBe(1);
+  });
+
+  it('membership stamps the organization onto an existing registration', async () => {
+    const ctx = buildContext();
+    await ctx.applyUser.execute({
+      userId: USER.id,
+      registeredAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+    expect(ctx.users.users.get(USER.id)?.organizationId).toBeNull();
+
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      createdAt: new Date('2026-07-28T12:00:01.000Z'),
+    });
+
+    const row = ctx.users.users.get(USER.id);
+    expect(row?.organizationId).toBe(ORG_A);
+    // The real registration time survives: membership only stamps the tenant.
+    expect(row?.registeredAt).toEqual(new Date('2026-07-28T12:00:00.000Z'));
+  });
+
+  it('membership creates the row when registration was lost, and a late registration cannot undo it', async () => {
+    const ctx = buildContext();
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      createdAt: new Date('2026-07-28T12:00:01.000Z'),
+    });
+
+    // registeredAt is the membership time — the honest nearby value.
+    let row = ctx.users.users.get(USER.id);
+    expect(row?.organizationId).toBe(ORG_A);
+    expect(row?.registeredAt).toEqual(new Date('2026-07-28T12:00:01.000Z'));
+
+    // The registration event finally arriving is DO NOTHING on conflict.
+    await ctx.applyUser.execute({
+      userId: USER.id,
+      registeredAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+    row = ctx.users.users.get(USER.id);
+    expect(row?.organizationId).toBe(ORG_A);
+    expect(row?.registeredAt).toEqual(new Date('2026-07-28T12:00:01.000Z'));
   });
 });
 
@@ -178,10 +254,19 @@ describe('GetAnalyticsSummaryUseCase', () => {
     );
   });
 
+  it('refuses an actor whose token carries no organization', async () => {
+    // The filter maps this to 403: authenticated, entitled to nothing yet.
+    const ctx = buildContext();
+    await expect(ctx.summary.execute(TENANTLESS_ADMIN)).rejects.toBeInstanceOf(
+      NoOrganizationContextError,
+    );
+  });
+
   it('aggregates totals, groupings and a zero-filled 7-day window', async () => {
     const ctx = buildContext();
     await ctx.applyCreated.execute({
       ticketId: TICKET,
+      organizationId: ORG_A,
       status: 'open',
       priority: 'high',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
@@ -189,6 +274,7 @@ describe('GetAnalyticsSummaryUseCase', () => {
     });
     await ctx.applyStatus.execute({
       ticketId: '00000000-0000-4000-8000-000000000009',
+      organizationId: ORG_A,
       toStatus: 'in_progress',
       changedAt: new Date('2026-07-26T09:00:00.000Z'),
       occurredAt: new Date('2026-07-26T09:00:00.100Z'),
@@ -196,6 +282,11 @@ describe('GetAnalyticsSummaryUseCase', () => {
     await ctx.applyUser.execute({
       userId: USER.id,
       registeredAt: new Date('2026-07-27T12:00:00.000Z'),
+    });
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      createdAt: new Date('2026-07-27T12:00:01.000Z'),
     });
 
     const summary = await ctx.summary.execute(ADMIN);
@@ -213,6 +304,82 @@ describe('GetAnalyticsSummaryUseCase', () => {
     expect(summary.createdLast7Days[6]).toEqual({
       day: '2026-07-28',
       count: 1,
+    });
+  });
+
+  it('isolates the two organizations across all five aggregates', async () => {
+    // The foreign tenant's rows use buckets that exist ONLY there ('closed',
+    // 'urgent', 2026-07-25), so a leak shows up as an alien key or day —
+    // by identity, not as an off-by-one in some count.
+    const ctx = buildContext();
+
+    // Organization A: one open/high ticket created on the 28th, one member.
+    await ctx.applyCreated.execute({
+      ticketId: TICKET,
+      organizationId: ORG_A,
+      status: 'open',
+      priority: 'high',
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
+      occurredAt: new Date('2026-07-28T12:00:00.100Z'),
+    });
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      createdAt: new Date('2026-07-27T12:00:00.000Z'),
+    });
+
+    // Organization B: two closed/urgent tickets created on the 25th, two members.
+    for (const [ticketId, userId] of [
+      [
+        '99999999-9999-4999-8999-999999999991',
+        '99999999-9999-4999-8999-999999999901',
+      ],
+      [
+        '99999999-9999-4999-8999-999999999992',
+        '99999999-9999-4999-8999-999999999902',
+      ],
+    ]) {
+      await ctx.applyCreated.execute({
+        ticketId,
+        organizationId: ORG_B,
+        status: 'closed',
+        priority: 'urgent',
+        createdAt: new Date('2026-07-25T12:00:00.000Z'),
+        occurredAt: new Date('2026-07-25T12:00:00.100Z'),
+      });
+      await ctx.applyMembership.execute({
+        userId,
+        organizationId: ORG_B,
+        createdAt: new Date('2026-07-25T12:00:00.000Z'),
+      });
+    }
+
+    const summaryA = await ctx.summary.execute(ADMIN);
+    expect(summaryA.totalTickets).toBe(1);
+    expect(summaryA.byStatus).toEqual({ open: 1 });
+    expect(summaryA.byPriority).toEqual({ high: 1 });
+    expect(summaryA.totalUsers).toBe(1);
+    expect(summaryA.createdLast7Days).toContainEqual({
+      day: '2026-07-25',
+      count: 0,
+    });
+    expect(summaryA.createdLast7Days).toContainEqual({
+      day: '2026-07-28',
+      count: 1,
+    });
+
+    const summaryB = await ctx.summary.execute(ADMIN_B);
+    expect(summaryB.totalTickets).toBe(2);
+    expect(summaryB.byStatus).toEqual({ closed: 2 });
+    expect(summaryB.byPriority).toEqual({ urgent: 2 });
+    expect(summaryB.totalUsers).toBe(2);
+    expect(summaryB.createdLast7Days).toContainEqual({
+      day: '2026-07-25',
+      count: 2,
+    });
+    expect(summaryB.createdLast7Days).toContainEqual({
+      day: '2026-07-28',
+      count: 0,
     });
   });
 });
