@@ -230,8 +230,11 @@ integration suites against real PostgreSQL and RabbitMQ, including the new
 adversarial coverage — audit's tenantless-v2 DLQ proof, analytics'
 two-organization summaries, notification's mismatch dead-letters, users'
 scoped directory end to end, organizations' lifecycle events on a real
-broker. The remote CI result for the pushed tip is recorded in its own
-docs commit, as usual.
+broker. Remotely: GitHub Actions run `30642812316` on `7d19d22` — the full
+gate plus all nine integration suites against real service containers —
+green on its first attempt. The only annotation is the known
+`pnpm/action-setup@v4` Node 20 deprecation warning, still tracked as its own
+maintenance item.
 
 ## Documentation
 
