@@ -3,9 +3,10 @@
  * to the real broker and database runs the full v2 chain — created seeds an
  * org-stamped ref, status-changed and staff comments notify the requester,
  * internal notes never do, assignment notifies the assignee, a redelivered
- * envelope collapses into the notification it already produced, v1 twins
- * are acked without notifying, and a v2 event whose organization
- * contradicts the stored ref dead-letters and creates nothing.
+ * envelope collapses into the notification it already produced, retired
+ * v1-typed events never reach the queue (the phase-8 boot-time unbind),
+ * and a v2 event whose organization contradicts the stored ref
+ * dead-letters and creates nothing.
  *
  * Requires the compose stack (`pnpm infra:up`); run via
  * `nx run @helpdesk-ai/notification-service:test-integration`.
@@ -15,12 +16,14 @@
  * which each run wipes; assertions target this run's random identifiers.
  */
 import { randomUUID } from 'node:crypto';
+import { connect as amqplibConnect } from 'amqplib';
+import type { Channel, ChannelModel } from 'amqplib';
 import {
   MessagingClient,
+  deadLetterQueueOf,
+  defineEvent,
   ticketCommentAddedV2,
-  ticketCreatedV1,
   ticketCreatedV2,
-  ticketStatusChangedV1,
   ticketStatusChangedV2,
   ticketAssignedV2,
 } from '@helpdesk-ai/messaging';
@@ -36,7 +39,10 @@ import {
   PrismaTicketRefRepository,
 } from '../../infrastructure/prisma/prisma-notification.repository';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
-import { TicketEventsConsumer } from './ticket-events.consumer';
+import {
+  TICKET_EVENTS_QUEUE,
+  TicketEventsConsumer,
+} from './ticket-events.consumer';
 
 const databaseUrl = process.env.DATABASE_URL;
 const rabbitmqUrl = process.env.RABBITMQ_URL;
@@ -45,6 +51,21 @@ if (!databaseUrl || !rabbitmqUrl) {
     'DATABASE_URL and RABBITMQ_URL must be set. Run via `nx run @helpdesk-ai/notification-service:test-integration` with the compose stack up.',
   );
 }
+
+const DLQ = deadLetterQueueOf(TICKET_EVENTS_QUEUE);
+
+// Contracts that exist ONLY in this spec: phase 8 deleted the platform's
+// v1 definitions, so publishing these impersonates the one thing that
+// could still emit the types — a legacy producer. Same schemas as the v2s
+// on purpose: the two revisions carried byte-identical payloads.
+const legacyTicketCreatedV1 = defineEvent(
+  'ticket.created.v1',
+  ticketCreatedV2.payloadSchema,
+);
+const legacyTicketStatusChangedV1 = defineEvent(
+  'ticket.status-changed.v1',
+  ticketStatusChangedV2.payloadSchema,
+);
 
 async function waitFor<T>(
   probe: () => Promise<T | null>,
@@ -67,6 +88,8 @@ describe('notification flow (real broker, real database)', () => {
   let prisma: PrismaService;
   let consumerClient: MessagingClient;
   let publisherClient: MessagingClient;
+  let rawConnection: ChannelModel;
+  let rawChannel: Channel;
 
   const organizationId = randomUUID();
   const foreignOrganizationId = randomUUID();
@@ -100,9 +123,18 @@ describe('notification flow (real broker, real database)', () => {
       new NotifyCommentAddedUseCase(deps),
     );
     await consumer.start();
+
+    // Raw side channel to inspect the DLQ. Purged up front: on the shared
+    // local broker the dead letters of earlier runs are noise.
+    rawConnection = await amqplibConnect(rabbitmqUrl as string);
+    rawChannel = await rawConnection.createChannel();
+    await rawChannel.purgeQueue(DLQ);
   });
 
   afterAll(async () => {
+    // The queue and its DLQ stay: they are the service's real durable
+    // topology on the local broker, not fixtures of this suite.
+    await rawConnection.close();
     await publisherClient.close();
     await consumerClient.close();
     await prisma.notification.deleteMany();
@@ -110,10 +142,11 @@ describe('notification flow (real broker, real database)', () => {
     await prisma.$disconnect();
   });
 
-  it('projects the full v2 lifecycle into org-stamped notifications, acking v1 twins and deduping redelivery', async () => {
-    // Both versions of the created fact, the way the platform dual-publishes
-    // during the compatibility window. Only the v2 twin may seed the ref.
-    await publisherClient.publish(ticketCreatedV1, {
+  it('projects the full v2 lifecycle into org-stamped notifications, never seeing retired v1 events, deduping redelivery', async () => {
+    // A legacy v1-typed created event next to the real v2 one. The platform
+    // no longer dual-publishes — this impersonates a legacy producer to
+    // prove the retired binding is gone: only the v2 may seed the ref.
+    const legacyCreated = await publisherClient.publish(legacyTicketCreatedV1, {
       ticketId,
       requesterId,
       title: 'Notification int test',
@@ -141,13 +174,16 @@ describe('notification flow (real broker, real database)', () => {
     );
     expect(ref.organizationId).toBe(organizationId);
 
-    await publisherClient.publish(ticketStatusChangedV1, {
-      ticketId,
-      actorId: agentId,
-      fromStatus: 'open',
-      toStatus: 'in_progress',
-      changedAt: '2026-07-28T12:01:00.000Z',
-    });
+    const legacyStatusChanged = await publisherClient.publish(
+      legacyTicketStatusChangedV1,
+      {
+        ticketId,
+        actorId: agentId,
+        fromStatus: 'open',
+        toStatus: 'in_progress',
+        changedAt: '2026-07-28T12:01:00.000Z',
+      },
+    );
     await publisherClient.publish(
       ticketStatusChangedV2,
       {
@@ -193,8 +229,8 @@ describe('notification flow (real broker, real database)', () => {
     );
 
     // Assignee: exactly one assignment notification. Published last, so on
-    // a prefetch=1 queue its arrival is the fence proving everything above
-    // — including the v1 twins — has been fully handled.
+    // a prefetch=1 queue its arrival is the fence proving everything the
+    // broker enqueued before it has been fully handled.
     const agentRows = await waitFor(async () => {
       const rows = await prisma.notification.findMany({
         where: { userId: agentId },
@@ -206,8 +242,8 @@ describe('notification flow (real broker, real database)', () => {
     expect(agentRows[0].organizationId).toBe(organizationId);
 
     // Requester: status change + public comment, each stamped with the
-    // event's tenant. Exactly two — the v1 status-change twin was acked
-    // without notifying, and the internal note never surfaces.
+    // event's tenant. Exactly two — the legacy v1 events notified nobody,
+    // and the internal note never surfaces.
     const requesterRows = await prisma.notification.findMany({
       where: { userId: requesterId },
       orderBy: { createdAt: 'asc' },
@@ -219,6 +255,33 @@ describe('notification flow (real broker, real database)', () => {
     expect(
       requesterRows.every((row) => row.organizationId === organizationId),
     ).toBe(true);
+
+    // And not because the consumer politely acked the legacy events: it has
+    // no v1 contracts any more, so had the durable queue's old v1 bindings
+    // survived, both deliveries would have failed decode ("no contract
+    // bound") and dead-lettered. Draining the DLQ and finding neither
+    // envelope proves the broker never enqueued them — the boot-time unbind
+    // is the thing under test. Strays from other local activity are drained
+    // and dropped, same caveat as the table wipes.
+    const deadLetteredIds: string[] = [];
+    for (;;) {
+      const message = await rawChannel.get(DLQ, { noAck: true });
+      if (message === false) {
+        break;
+      }
+      try {
+        const body = JSON.parse(message.content.toString('utf-8')) as {
+          id?: string;
+        };
+        if (body.id) {
+          deadLetteredIds.push(body.id);
+        }
+      } catch {
+        // Undecodable strays cannot be the envelopes we published.
+      }
+    }
+    expect(deadLetteredIds).not.toContain(legacyCreated.id);
+    expect(deadLetteredIds).not.toContain(legacyStatusChanged.id);
 
     // Redelivery guarantee against the REAL unique index: adding the same
     // (userId, sourceEventId) pair twice collapses into one row.

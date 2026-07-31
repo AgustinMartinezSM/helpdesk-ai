@@ -56,6 +56,15 @@ export interface EventSubscription<
   queue: string;
   /** Contracts this queue consumes; each type becomes one binding. */
   contracts: readonly TContract[];
+  /**
+   * Routing keys this durable queue was once bound to and must not receive
+   * any more. A durable queue keeps its bindings across deploys, so merely
+   * dropping a contract from `contracts` leaves the old binding delivering —
+   * every such message would then dead-letter as "no contract bound". Each
+   * key listed here is unbound on every boot, right after the live bindings
+   * are asserted.
+   */
+  retiredBindingKeys?: readonly string[];
   /** Unacked message ceiling per consumer (default 10). */
   prefetch?: number;
   /**
@@ -238,6 +247,7 @@ export class MessagingClient {
     await this.startConsumer(
       subscription.queue,
       subscription.contracts.map((contract) => contract.type),
+      subscription.retiredBindingKeys,
       subscription.prefetch,
       (channel, message) =>
         this.deliver(
@@ -264,6 +274,7 @@ export class MessagingClient {
     await this.startConsumer(
       subscription.queue,
       subscription.patterns,
+      undefined,
       subscription.prefetch,
       (channel, message) =>
         this.deliver(
@@ -289,6 +300,7 @@ export class MessagingClient {
   private async startConsumer(
     queue: string,
     bindingKeys: readonly string[],
+    retiredBindingKeys: readonly string[] | undefined,
     prefetch: number | undefined,
     onMessage: (
       channel: ChannelWrapper,
@@ -316,6 +328,15 @@ export class MessagingClient {
         });
         for (const key of bindingKeys) {
           await raw.bindQueue(queue, EVENTS_EXCHANGE, key);
+        }
+        // RabbitMQ's queue.unbind of a non-existent binding is idempotent
+        // (it answers unbind-ok, not a channel error), so every boot
+        // converges the durable queue's bindings to the declared set: live
+        // keys bound above, retired keys removed here. This is the queue
+        // surgery phase 8 owed, done by the client because nothing else
+        // owns the topology.
+        for (const key of retiredBindingKeys ?? []) {
+          await raw.unbindQueue(queue, EVENTS_EXCHANGE, key);
         }
         await raw.prefetch(prefetch ?? 10);
       },

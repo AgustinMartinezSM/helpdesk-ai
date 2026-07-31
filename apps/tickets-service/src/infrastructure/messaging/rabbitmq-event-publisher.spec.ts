@@ -73,82 +73,45 @@ const createdEvent = {
   status: 'open' as const,
   createdAt: new Date('2026-07-30T12:00:00.000Z'),
   traceId: TRACE_ID,
+  organizationId: ORGANIZATION_ID,
 };
 
-describe('RabbitMqEventPublisher — the compatibility pair', () => {
-  it('publishes v1 and v2, differing only in type and tenant', async () => {
+describe('RabbitMqEventPublisher — v2 only', () => {
+  it('publishes exactly one v2 event, tenant and trace on the envelope', async () => {
     const { messaging, publisher } = build();
 
-    await publisher.publishTicketCreated({
-      ...createdEvent,
-      organizationId: ORGANIZATION_ID,
-    });
+    await publisher.publishTicketCreated(createdEvent);
 
-    expect(messaging.typesOf()).toEqual([
-      'ticket.created.v1',
-      'ticket.created.v2',
-    ]);
-
-    const [v1, v2] = messaging.published;
-    // One payload object, handed to both: the two versions cannot describe
-    // the same fact differently.
-    expect(v2.payload).toEqual(v1.payload);
-    expect(v1.options?.organizationId).toBeUndefined();
-    expect(v2.options?.organizationId).toBe(ORGANIZATION_ID);
-  });
-
-  it('gives both versions the same correlation id', async () => {
-    const { messaging, publisher } = build();
-
-    await publisher.publishTicketCreated({
-      ...createdEvent,
-      organizationId: ORGANIZATION_ID,
-    });
-
-    // The audit trail stores both, and this is the only thing that groups
-    // them back into the one request that caused them.
+    // One publish per fact: phase 8 closed the dual-publish window, so a
+    // second v1 copy here would be a regression, not compatibility.
+    expect(messaging.typesOf()).toEqual(['ticket.created.v2']);
+    expect(messaging.published[0].options?.organizationId).toBe(
+      ORGANIZATION_ID,
+    );
     expect(messaging.published[0].options?.correlationId).toBe(TRACE_ID);
-    expect(messaging.published[1].options?.correlationId).toBe(TRACE_ID);
   });
 
   it('keeps the tenant off the payload', async () => {
     const { messaging, publisher } = build();
 
-    await publisher.publishTicketCreated({
-      ...createdEvent,
-      organizationId: ORGANIZATION_ID,
-    });
+    await publisher.publishTicketCreated(createdEvent);
 
-    for (const entry of messaging.published) {
-      expect(entry.payload).not.toHaveProperty('organizationId');
-    }
+    expect(messaging.published[0].payload).not.toHaveProperty('organizationId');
   });
 
-  it('publishes v1 only, and warns, when the caller has no organization', async () => {
-    const { messaging, logger, publisher } = build();
+  it('never warns on the happy path — the skip-and-warn branch is gone', async () => {
+    const { logger, publisher } = build();
 
     await publisher.publishTicketCreated(createdEvent);
 
-    // v1 is unconditional: a caller with no tenant must not lose the event
-    // every consumer reads today.
-    expect(messaging.typesOf()).toEqual(['ticket.created.v1']);
-    expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).toContain('ticket.created.v2');
-    expect(logger.warnings[0]).toContain(TICKET_ID);
-  });
-
-  it('does not warn when the pair went out complete', async () => {
-    const { logger, publisher } = build();
-
-    await publisher.publishTicketCreated({
-      ...createdEvent,
-      organizationId: ORGANIZATION_ID,
-    });
-
+    // The "caller has no organization" skip died with phase 8: the domain
+    // types have required an organization since the write-path phase, so
+    // there is nothing left to warn about.
     expect(logger.warnings).toEqual([]);
+    expect(logger.errors).toEqual([]);
   });
 
-  it('publishes both versions for every ticket event', async () => {
+  it('publishes the v2 revision for every ticket event', async () => {
     const { messaging, publisher } = build();
 
     await publisher.publishTicketStatusChanged({
@@ -176,51 +139,22 @@ describe('RabbitMqEventPublisher — the compatibility pair', () => {
     });
 
     expect(messaging.typesOf()).toEqual([
-      'ticket.status-changed.v1',
       'ticket.status-changed.v2',
-      'ticket.assigned.v1',
       'ticket.assigned.v2',
-      'ticket.comment-added.v1',
       'ticket.comment-added.v2',
     ]);
+    expect(
+      messaging.published.every(
+        (entry) => entry.options?.organizationId === ORGANIZATION_ID,
+      ),
+    ).toBe(true);
   });
 
-  it.each([
-    ['publishTicketStatusChanged', 'ticket.status-changed.v2'],
-    ['publishTicketAssigned', 'ticket.assigned.v2'],
-    ['publishTicketCommentAdded', 'ticket.comment-added.v2'],
-  ] as const)('%s skips its v2 without a tenant', async (method, v2Type) => {
-    const { messaging, logger, publisher } = build();
-    const base = {
-      ticketId: TICKET_ID,
-      actorId: ACTOR_ID,
-      authorId: ACTOR_ID,
-      commentId: COMMENT_ID,
-      assigneeId: null,
-      internal: false,
-      fromStatus: 'open' as const,
-      toStatus: 'in_progress' as const,
-      changedAt: new Date('2026-07-30T12:00:00.000Z'),
-      assignedAt: new Date('2026-07-30T12:00:00.000Z'),
-      addedAt: new Date('2026-07-30T12:00:00.000Z'),
-    };
-
-    await publisher[method](base);
-
-    expect(messaging.typesOf()).toHaveLength(1);
-    expect(messaging.typesOf()[0]).toBe(v2Type.replace('.v2', '.v1'));
-    expect(logger.warnings[0]).toContain(v2Type);
-  });
-
-  it('lets v2 go out even when v1 failed to publish', async () => {
-    const { logger, publisher } = build();
+  it('stays best-effort: a broker failure is logged, never rethrown', async () => {
+    const { logger } = build();
     const failing = {
-      published: [] as RecordedPublish[],
-      async publish(contract: EventContract<string, unknown>) {
-        if (contract.type.endsWith('.v1')) {
-          throw new Error('broker unavailable');
-        }
-        this.published.push({ type: contract.type, payload: null });
+      async publish() {
+        throw new Error('broker unavailable');
       },
       async close() {
         // not used by this spec
@@ -231,19 +165,13 @@ describe('RabbitMqEventPublisher — the compatibility pair', () => {
       logger,
     );
 
-    await isolated.publishTicketCreated({
-      ...createdEvent,
-      organizationId: ORGANIZATION_ID,
-    });
-
-    // Two independent best-effort publishes. One failing must not suppress
-    // the other, or a broker hiccup would silently desynchronise the streams.
-    expect(failing.published.map((entry) => entry.type)).toEqual([
-      'ticket.created.v2',
-    ]);
+    // The mutation already committed when this runs; the request must not
+    // fail because the (single) publish did.
+    await expect(
+      isolated.publishTicketCreated(createdEvent),
+    ).resolves.toBeUndefined();
     expect(logger.errors).toHaveLength(1);
-    expect(logger.errors[0]).toContain('ticket.created.v1');
-    void publisher;
+    expect(logger.errors[0]).toContain('ticket.created.v2');
   });
 
   it('closes its messaging client on shutdown', async () => {

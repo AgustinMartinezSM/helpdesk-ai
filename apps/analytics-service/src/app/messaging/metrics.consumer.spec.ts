@@ -55,60 +55,30 @@ async function startedHandler(ctx: ReturnType<typeof buildConsumer>) {
 }
 
 describe('MetricsConsumer', () => {
-  it('subscribes serialized (prefetch 1) with the v1 contracts still bound and the v2 stream added', async () => {
+  it('subscribes serialized (prefetch 1) to the v2 stream, retiring the v1 binding keys', async () => {
     const ctx = buildConsumer();
     await ctx.consumer.start();
 
     expect(ctx.messaging.subscription?.queue).toBe(METRICS_QUEUE);
     expect(ctx.messaging.subscription?.prefetch).toBe(1);
-    // Pinned in order: the v1 contracts stay listed because the durable
-    // queue's bindings cannot be removed by the client — they are consumed
-    // as no-ops until phase 8 cleans them up with queue surgery.
+    // Pinned in order: dropping a contract here would silently stop
+    // projecting its stream. The v1 contracts are gone — deleted in
+    // phase 8, not consumed as no-ops any more.
     expect(
       ctx.messaging.subscription?.contracts.map((contract) => contract.type),
     ).toEqual([
-      'ticket.created.v1',
       'ticket.created.v2',
-      'ticket.status-changed.v1',
       'ticket.status-changed.v2',
       'user.registered.v1',
       'membership.created.v1',
     ]);
-  });
-
-  it('acknowledges ticket v1 events without touching the projections', async () => {
-    const ctx = buildConsumer();
-    const handler = await startedHandler(ctx);
-
-    // Every v1 fact has a v2 twin since d87e187; applying both would
-    // double-count the ticket under two envelope ids.
-    await handler({
-      id: '00000000-0000-4000-8000-000000000001',
-      type: 'ticket.created.v1',
-      occurredAt: '2026-07-28T12:00:00.100Z',
-      payload: {
-        ticketId: TICKET,
-        requesterId: '11111111-1111-4111-8111-111111111111',
-        title: 'x',
-        priority: 'high',
-        status: 'open',
-        createdAt: '2026-07-28T12:00:00.000Z',
-      },
-    });
-    await handler({
-      id: '00000000-0000-4000-8000-000000000002',
-      type: 'ticket.status-changed.v1',
-      occurredAt: '2026-07-28T13:00:00.100Z',
-      payload: {
-        ticketId: TICKET,
-        actorId: '33333333-3333-4333-8333-333333333333',
-        fromStatus: 'open',
-        toStatus: 'resolved',
-        changedAt: '2026-07-28T13:00:00.000Z',
-      },
-    });
-
-    expect(ctx.tickets.snapshots.size).toBe(0);
+    // Pinned too: dropping a retired key before every environment's durable
+    // queue has booted past this version would leave a stale binding
+    // delivering events that now dead-letter as "no contract bound".
+    expect(ctx.messaging.subscription?.retiredBindingKeys).toEqual([
+      'ticket.created.v1',
+      'ticket.status-changed.v1',
+    ]);
   });
 
   it('applies v2 ticket events under the envelope organization', async () => {

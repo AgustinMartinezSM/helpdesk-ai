@@ -57,7 +57,11 @@ export interface EventEnvelope<
   readonly type: TType;
   readonly occurredAt: string;
   readonly correlationId?: string;
-  /** Tenant this event belongs to. Present on v2 events, absent on v1. */
+  /**
+   * Tenant this event belongs to. Present on every tenant-carrying contract
+   * (the v2s and the membership events); absent on user.registered.v1 and
+   * on the archived legacy v1 envelopes the trail still replays.
+   */
   readonly organizationId?: string;
   readonly payload: TPayload;
 }
@@ -102,12 +106,13 @@ export function requireEnvelopeOrganization(envelope: EventEnvelope): string {
 // services and must not import any one service's internals — a domain
 // refactor that changes these words is a breaking contract change (v2).
 //
-// The v1/v2 pairs below share one payload schema each. Their payloads are
-// identical by construction, not by discipline: the only difference between
-// the two versions is the type string — which is the routing key, so an
-// existing v1 binding never receives a v2 message — and the tenant on the
-// envelope. Copying the schema instead would leave two definitions free to
-// drift during a compatibility window that spans several phases.
+// v2 is the only published revision of the ticket and ai events below.
+// Phase 8 closed the dual-publish compatibility window: the v1 definitions
+// are deleted, nothing publishes their routing keys, and the durable queues
+// unbind them on boot. The type strings keep the `.v2` suffix even so,
+// because renaming a contract in place is exactly what ADR 0005 forbids —
+// the suffix is history (a tenantless v1 once shared the bus), not a
+// promise that a parallel v1 still exists.
 //
 // `user.registered` has no v2, on purpose. Registration is anonymous and the
 // membership that would supply a tenant is created by *consuming* that very
@@ -128,73 +133,49 @@ export const userRegisteredV1 = defineEvent(
 const ticketStatus = z.enum(['open', 'in_progress', 'resolved', 'closed']);
 const ticketPriority = z.enum(['low', 'medium', 'high', 'urgent']);
 
-const ticketCreatedPayload = z.object({
-  ticketId: z.uuid(),
-  requesterId: z.uuid(),
-  title: z.string().min(1),
-  priority: ticketPriority,
-  status: ticketStatus,
-  createdAt: z.iso.datetime(),
-});
-
-export const ticketCreatedV1 = defineEvent(
-  'ticket.created.v1',
-  ticketCreatedPayload,
-);
 export const ticketCreatedV2 = defineEvent(
   'ticket.created.v2',
-  ticketCreatedPayload,
+  z.object({
+    ticketId: z.uuid(),
+    requesterId: z.uuid(),
+    title: z.string().min(1),
+    priority: ticketPriority,
+    status: ticketStatus,
+    createdAt: z.iso.datetime(),
+  }),
 );
 
-const ticketStatusChangedPayload = z.object({
-  ticketId: z.uuid(),
-  actorId: z.uuid(),
-  fromStatus: ticketStatus,
-  toStatus: ticketStatus,
-  changedAt: z.iso.datetime(),
-});
-
-export const ticketStatusChangedV1 = defineEvent(
-  'ticket.status-changed.v1',
-  ticketStatusChangedPayload,
-);
 export const ticketStatusChangedV2 = defineEvent(
   'ticket.status-changed.v2',
-  ticketStatusChangedPayload,
+  z.object({
+    ticketId: z.uuid(),
+    actorId: z.uuid(),
+    fromStatus: ticketStatus,
+    toStatus: ticketStatus,
+    changedAt: z.iso.datetime(),
+  }),
 );
 
-const ticketAssignedPayload = z.object({
-  ticketId: z.uuid(),
-  actorId: z.uuid(),
-  /** Null means the ticket was unassigned. */
-  assigneeId: z.uuid().nullable(),
-  assignedAt: z.iso.datetime(),
-});
-
-export const ticketAssignedV1 = defineEvent(
-  'ticket.assigned.v1',
-  ticketAssignedPayload,
-);
 export const ticketAssignedV2 = defineEvent(
   'ticket.assigned.v2',
-  ticketAssignedPayload,
+  z.object({
+    ticketId: z.uuid(),
+    actorId: z.uuid(),
+    /** Null means the ticket was unassigned. */
+    assigneeId: z.uuid().nullable(),
+    assignedAt: z.iso.datetime(),
+  }),
 );
 
-const ticketCommentAddedPayload = z.object({
-  ticketId: z.uuid(),
-  commentId: z.uuid(),
-  authorId: z.uuid(),
-  internal: z.boolean(),
-  addedAt: z.iso.datetime(),
-});
-
-export const ticketCommentAddedV1 = defineEvent(
-  'ticket.comment-added.v1',
-  ticketCommentAddedPayload,
-);
 export const ticketCommentAddedV2 = defineEvent(
   'ticket.comment-added.v2',
-  ticketCommentAddedPayload,
+  z.object({
+    ticketId: z.uuid(),
+    commentId: z.uuid(),
+    authorId: z.uuid(),
+    internal: z.boolean(),
+    addedAt: z.iso.datetime(),
+  }),
 );
 
 /**
@@ -205,24 +186,18 @@ export const ticketCommentAddedV2 = defineEvent(
  * vocabulary is duplicated from ai-service's domain for the usual reason:
  * a contract must not import a service's internals.
  */
-const aiSuggestionCreatedPayload = z.object({
-  suggestionId: z.uuid(),
-  ticketId: z.uuid(),
-  task: z.enum(['summary', 'classification', 'priority', 'reply']),
-  /** Provider id and model that produced it, e.g. 'local'/'heuristics-v1'. */
-  provider: z.string().min(1),
-  model: z.string().min(1),
-  requestedBy: z.uuid(),
-  createdAt: z.iso.datetime(),
-});
-
-export const aiSuggestionCreatedV1 = defineEvent(
-  'ai.suggestion.created.v1',
-  aiSuggestionCreatedPayload,
-);
 export const aiSuggestionCreatedV2 = defineEvent(
   'ai.suggestion.created.v2',
-  aiSuggestionCreatedPayload,
+  z.object({
+    suggestionId: z.uuid(),
+    ticketId: z.uuid(),
+    task: z.enum(['summary', 'classification', 'priority', 'reply']),
+    /** Provider id and model that produced it, e.g. 'local'/'heuristics-v1'. */
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    requestedBy: z.uuid(),
+    createdAt: z.iso.datetime(),
+  }),
 );
 
 // ---------------------------------------------------------------------------

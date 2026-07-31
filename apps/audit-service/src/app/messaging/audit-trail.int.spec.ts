@@ -22,7 +22,6 @@ import {
   MessagingClient,
   deadLetterQueueOf,
   defineEvent,
-  ticketCreatedV1,
   ticketCreatedV2,
 } from '@helpdesk-ai/messaging';
 import { SystemClock } from '../../application/ports/audit-event.repository';
@@ -48,6 +47,16 @@ const DLQ = deadLetterQueueOf(EVENT_LOG_QUEUE);
 const wormholeOpenedV9 = defineEvent(
   'wormhole.opened.v9',
   z.object({ sector: z.number() }),
+);
+
+// Another spec-only contract: phase 8 deleted the platform's v1
+// definitions, so publishing this impersonates the one thing that could
+// still emit the type — a legacy producer whose events the firehose must
+// keep recording faithfully. Same schema as v2 on purpose: the two
+// revisions carried byte-identical payloads.
+const legacyTicketCreatedV1 = defineEvent(
+  'ticket.created.v1',
+  ticketCreatedV2.payloadSchema,
 );
 
 async function waitFor<T>(
@@ -115,22 +124,25 @@ describe('audit trail (real broker, real database)', () => {
 
   it('records a contracted event type published through the client', async () => {
     const ticketId = randomUUID();
-    const contracted = await publisherClient.publish(ticketCreatedV1, {
-      ticketId,
-      requesterId: randomUUID(),
-      title: 'Audit int test',
-      priority: 'low',
-      status: 'open',
-      createdAt: '2026-07-28T12:00:00.000Z',
-    });
+    const contracted = await publisherClient.publish(
+      ticketCreatedV2,
+      {
+        ticketId,
+        requesterId: randomUUID(),
+        title: 'Audit int test',
+        priority: 'low',
+        status: 'open',
+        createdAt: '2026-07-28T12:00:00.000Z',
+      },
+      { organizationId: ORGANIZATION_ID },
+    );
 
     const recorded = await waitFor(() =>
       prisma.auditEvent.findUnique({ where: { id: contracted.id } }),
     );
-    expect(recorded.type).toBe('ticket.created.v1');
+    expect(recorded.type).toBe('ticket.created.v2');
     expect(recorded.payload).toMatchObject({ ticketId });
-    // v1 rows archive the compatibility window: no tenant to persist.
-    expect(recorded.organizationId).toBeNull();
+    expect(recorded.organizationId).toBe(ORGANIZATION_ID);
   });
 
   it('records event types the consumer has no contract for', async () => {
@@ -184,7 +196,7 @@ describe('audit trail (real broker, real database)', () => {
     ).toBeNull();
   });
 
-  it('records both versions of one fact as two rows, joined by the trace id', async () => {
+  it("still records a legacy v1-typed event exactly as the archived window's rows look", async () => {
     const ticketId = randomUUID();
     const traceId = `int-${randomUUID()}`;
     const payload = {
@@ -196,7 +208,7 @@ describe('audit trail (real broker, real database)', () => {
       createdAt: '2026-07-30T12:00:00.000Z',
     };
 
-    const v1 = await publisherClient.publish(ticketCreatedV1, payload, {
+    const v1 = await publisherClient.publish(legacyTicketCreatedV1, payload, {
       correlationId: traceId,
     });
     const v2 = await publisherClient.publish(ticketCreatedV2, payload, {
@@ -211,11 +223,14 @@ describe('audit trail (real broker, real database)', () => {
       return rows.length === 2 ? rows : null;
     });
 
-    // This duplication is the accepted cost of the compatibility window, not
-    // a bug. The firehose binds '#', so it receives both versions; the two
-    // envelopes have different ids, so the id-keyed dedupe that collapses a
-    // redelivery cannot collapse these. Anything counting audit rows per
-    // logical fact double-counts until v1 stops being published.
+    // The platform stopped dual-publishing in phase 8, so this no longer
+    // pins current producer behaviour: the v1 here comes from the spec's own
+    // legacy impersonation. What it pins instead is that the firehose ('#')
+    // still records a v1-typed event faithfully — null tenant, trace-joined
+    // to its v2 sibling — because that is exactly what the archived window's
+    // rows look like, and what a third-party or replayed v1 would produce
+    // today. The trail's job is to record what happened, not to gatekeep
+    // which versions may happen.
     const [rowV1, rowV2] = await Promise.all([
       prisma.auditEvent.findUniqueOrThrow({ where: { id: v1.id } }),
       prisma.auditEvent.findUniqueOrThrow({ where: { id: v2.id } }),
@@ -228,7 +243,7 @@ describe('audit trail (real broker, real database)', () => {
     expect(rowV1.correlationId).toBe(traceId);
     expect(rowV2.correlationId).toBe(traceId);
     // The tenant lands only where the envelope carried it: the v2 row owns
-    // it, the v1 row waits for the operator backfill.
+    // it, the legacy row waits for the operator backfill.
     expect(rowV1.organizationId).toBeNull();
     expect(rowV2.organizationId).toBe(ORGANIZATION_ID);
   });

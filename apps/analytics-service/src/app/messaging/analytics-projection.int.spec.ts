@@ -2,17 +2,21 @@
  * The sprint's key integration for analytics: real broker + real database,
  * exercising the ATOMIC last-writer-wins upsert in actual SQL — the piece
  * the in-memory fake can only imitate. Covers the v2 lifecycle chain under
- * two organizations, the membership stamp on user snapshots, the v1 no-op
- * path, the out-of-order backfill and stale-event rejection.
+ * two organizations, the membership stamp on user snapshots, the phase-8
+ * unbinding of the retired v1 routing keys, the out-of-order backfill and
+ * stale-event rejection.
  *
  * Requires the compose stack (`pnpm infra:up`); run via
  * `nx run @helpdesk-ai/analytics-service:test-integration`.
  */
 import { randomUUID } from 'node:crypto';
+import { connect as amqplibConnect } from 'amqplib';
+import type { Channel, ChannelModel } from 'amqplib';
 import {
   MessagingClient,
+  deadLetterQueueOf,
+  defineEvent,
   membershipCreatedV1,
-  ticketCreatedV1,
   ticketCreatedV2,
   ticketStatusChangedV2,
   userRegisteredV1,
@@ -28,7 +32,7 @@ import {
   PrismaUserSnapshotRepository,
 } from '../../infrastructure/prisma/prisma-analytics.repository';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
-import { MetricsConsumer } from './metrics.consumer';
+import { METRICS_QUEUE, MetricsConsumer } from './metrics.consumer';
 
 const databaseUrl = process.env.DATABASE_URL;
 const rabbitmqUrl = process.env.RABBITMQ_URL;
@@ -37,6 +41,17 @@ if (!databaseUrl || !rabbitmqUrl) {
     'DATABASE_URL and RABBITMQ_URL must be set. Run via `nx run @helpdesk-ai/analytics-service:test-integration` with the compose stack up.',
   );
 }
+
+const DLQ = deadLetterQueueOf(METRICS_QUEUE);
+
+// A contract that exists ONLY in this spec: phase 8 deleted the platform's
+// v1 definitions, so publishing this impersonates the one thing that could
+// still emit the type — a legacy producer. Same schema as v2 on purpose:
+// the two revisions carried byte-identical payloads.
+const legacyTicketCreatedV1 = defineEvent(
+  'ticket.created.v1',
+  ticketCreatedV2.payloadSchema,
+);
 
 async function waitFor<T>(
   probe: () => Promise<T | null>,
@@ -61,6 +76,8 @@ describe('analytics projection (real broker, real database)', () => {
   let userSnapshots: PrismaUserSnapshotRepository;
   let consumerClient: MessagingClient;
   let publisherClient: MessagingClient;
+  let rawConnection: ChannelModel;
+  let rawChannel: Channel;
 
   beforeAll(async () => {
     prisma = new PrismaService(databaseUrl as string);
@@ -86,9 +103,18 @@ describe('analytics projection (real broker, real database)', () => {
       new ApplyMembershipCreatedUseCase(userSnapshots),
     );
     await consumer.start();
+
+    // Raw side channel to inspect the DLQ. Purged up front: on the shared
+    // local broker the dead letters of earlier runs are noise.
+    rawConnection = await amqplibConnect(rabbitmqUrl as string);
+    rawChannel = await rawConnection.createChannel();
+    await rawChannel.purgeQueue(DLQ);
   });
 
   afterAll(async () => {
+    // The queue and its DLQ stay: they are the service's real durable
+    // topology on the local broker, not fixtures of this suite.
+    await rawConnection.close();
     await publisherClient.close();
     await consumerClient.close();
     await prisma.ticketSnapshot.deleteMany();
@@ -233,22 +259,23 @@ describe('analytics projection (real broker, real database)', () => {
     expect(await userSnapshots.total(orgB)).toBe(1);
   });
 
-  it('acknowledges v1 ticket events without projecting anything', async () => {
+  it('never receives a retired v1 event: the unbind kept it off the queue', async () => {
     const v1Ticket = randomUUID();
     const markerTicket = randomUUID();
     const org = randomUUID();
 
-    await publisherClient.publish(ticketCreatedV1, {
+    const legacy = await publisherClient.publish(legacyTicketCreatedV1, {
       ticketId: v1Ticket,
       requesterId: randomUUID(),
-      title: 'v1 twin — must be a no-op',
+      title: 'legacy v1 — must never be enqueued',
       priority: 'high',
       status: 'open',
       createdAt: '2026-07-28T12:00:00.000Z',
     });
-    // The marker is published AFTER the v1 event on the same channel and the
-    // consumer is serialized (prefetch 1), so once the marker is projected
-    // the v1 delivery has already been handled — and handled as a no-op.
+    // The marker is published AFTER the legacy event on the same channel
+    // and the consumer is serialized (prefetch 1), so once the marker is
+    // projected, anything the broker enqueued before it has already been
+    // through the handler — or the DLQ.
     await publisherClient.publish(
       ticketCreatedV2,
       {
@@ -269,10 +296,37 @@ describe('analytics projection (real broker, real database)', () => {
       return row ?? null;
     });
 
+    // Nothing projected under the legacy ticket id...
     const v1Row = await prisma.ticketSnapshot.findUnique({
       where: { ticketId: v1Ticket },
     });
     expect(v1Row).toBeNull();
+
+    // ...and not because the consumer politely acked it: this consumer has
+    // no v1 contract any more, so had the durable queue's old v1 binding
+    // survived, the delivery would have failed decode ("no contract bound")
+    // and dead-lettered. Draining the DLQ and finding no envelope with the
+    // legacy id proves the broker never enqueued it — the boot-time unbind
+    // is the thing under test here. Strays from other local activity are
+    // drained and dropped, same caveat as the table wipes.
+    const deadLetteredIds: string[] = [];
+    for (;;) {
+      const message = await rawChannel.get(DLQ, { noAck: true });
+      if (message === false) {
+        break;
+      }
+      try {
+        const body = JSON.parse(message.content.toString('utf-8')) as {
+          id?: string;
+        };
+        if (body.id) {
+          deadLetteredIds.push(body.id);
+        }
+      } catch {
+        // Undecodable strays cannot be the envelope we published.
+      }
+    }
+    expect(deadLetteredIds).not.toContain(legacy.id);
   });
 
   it('enforces the LWW guard atomically in SQL: stale events cannot regress', async () => {

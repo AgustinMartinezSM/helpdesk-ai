@@ -56,91 +56,33 @@ function buildConsumer() {
 }
 
 describe('TicketEventsConsumer', () => {
-  it('subscribes serialized (prefetch 1) to both contract versions on the one durable queue', async () => {
+  it('subscribes serialized (prefetch 1) to the four v2 contracts, retiring the v1 binding keys', async () => {
     const { messaging, consumer } = buildConsumer();
 
     await consumer.start();
 
     expect(messaging.subscription?.queue).toBe(TICKET_EVENTS_QUEUE);
     expect(messaging.subscription?.prefetch).toBe(1);
-    // Pinned on purpose: dropping a v1 contract here would dead-letter every
-    // v1 message still bound to the durable queue, and dropping a v2 one
-    // would silently stop notifying.
+    // Pinned on purpose: dropping a contract here would silently stop
+    // notifying on its stream. The v1 contracts are gone — deleted in
+    // phase 8, not consumed as no-ops any more.
     expect(
       messaging.subscription?.contracts.map((contract) => contract.type),
     ).toEqual([
-      'ticket.created.v1',
       'ticket.created.v2',
-      'ticket.status-changed.v1',
       'ticket.status-changed.v2',
-      'ticket.assigned.v1',
       'ticket.assigned.v2',
-      'ticket.comment-added.v1',
       'ticket.comment-added.v2',
     ]);
-  });
-
-  it('acks every v1 event as a no-op — its v2 twin is the one that notifies', async () => {
-    const { messaging, refs, notifications, consumer } = buildConsumer();
-    await consumer.start();
-    const handler = messaging.subscription!.handler as (
-      event: unknown,
-    ) => Promise<void>;
-
-    await handler({
-      id: '00000000-0000-4000-8000-000000000001',
-      type: 'ticket.created.v1',
-      occurredAt: '2026-07-28T12:00:00.000Z',
-      payload: {
-        ticketId: TICKET,
-        requesterId: REQUESTER,
-        title: 'x',
-        priority: 'medium',
-        status: 'open',
-        createdAt: '2026-07-28T12:00:00.000Z',
-      },
-    });
-    await handler({
-      id: '00000000-0000-4000-8000-000000000002',
-      type: 'ticket.status-changed.v1',
-      occurredAt: '2026-07-28T12:01:00.000Z',
-      payload: {
-        ticketId: TICKET,
-        actorId: AGENT,
-        fromStatus: 'open',
-        toStatus: 'in_progress',
-        changedAt: '2026-07-28T12:01:00.000Z',
-      },
-    });
-    await handler({
-      id: '00000000-0000-4000-8000-000000000003',
-      type: 'ticket.assigned.v1',
-      occurredAt: '2026-07-28T12:02:00.000Z',
-      payload: {
-        ticketId: TICKET,
-        actorId: REQUESTER,
-        assigneeId: AGENT,
-        assignedAt: '2026-07-28T12:02:00.000Z',
-      },
-    });
-    await handler({
-      id: '00000000-0000-4000-8000-000000000004',
-      type: 'ticket.comment-added.v1',
-      occurredAt: '2026-07-28T12:03:00.000Z',
-      payload: {
-        ticketId: TICKET,
-        commentId: '00000000-0000-4000-8000-000000000005',
-        authorId: AGENT,
-        internal: false,
-        addedAt: '2026-07-28T12:03:00.000Z',
-      },
-    });
-
-    // No repository interaction at all: the v1 delivery is acknowledged and
-    // forgotten, because processing it alongside its v2 twin would notify
-    // twice under two envelope ids.
-    expect(refs.refs.size).toBe(0);
-    expect(notifications.notifications).toHaveLength(0);
+    // Pinned too: dropping a retired key before every environment's durable
+    // queue has booted past this version would leave a stale binding
+    // delivering events that now dead-letter as "no contract bound".
+    expect(messaging.subscription?.retiredBindingKeys).toEqual([
+      'ticket.created.v1',
+      'ticket.status-changed.v1',
+      'ticket.assigned.v1',
+      'ticket.comment-added.v1',
+    ]);
   });
 
   it('projects v2 events, stamping the envelope organization end to end', async () => {

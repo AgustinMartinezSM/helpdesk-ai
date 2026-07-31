@@ -1,9 +1,7 @@
 import {
   membershipCreatedV1,
   requireEnvelopeOrganization,
-  ticketCreatedV1,
   ticketCreatedV2,
-  ticketStatusChangedV1,
   ticketStatusChangedV2,
   userRegisteredV1,
   type MessagingClient,
@@ -54,28 +52,21 @@ export class MetricsConsumer {
     await this.messaging.subscribe({
       queue: METRICS_QUEUE,
       contracts: [
-        ticketCreatedV1,
         ticketCreatedV2,
-        ticketStatusChangedV1,
         ticketStatusChangedV2,
         userRegisteredV1,
         membershipCreatedV1,
       ],
+      // Historical routing keys, as string literals ON PURPOSE: the v1
+      // contracts were deleted in phase 8, so there is no identifier left
+      // to reference — only the keys this durable queue was once bound to.
+      // Every boot unbinds them (idempotently), which is what allowed the
+      // v1 ack-as-no-op arms to leave the handler. Removable once every
+      // environment's durable queue has booted past this version.
+      retiredBindingKeys: ['ticket.created.v1', 'ticket.status-changed.v1'],
       prefetch: 1,
       handler: async (event) => {
         switch (event.type) {
-          // The ticket v1 contracts stay in the list but their events are
-          // acknowledged without processing. The durable queue's existing v1
-          // bindings cannot be removed by the client (startConsumer only
-          // ever binds), and processing both versions would double-apply
-          // every fact under two envelope ids — v2 is the processed stream,
-          // v1 is acked until phase 8 stops publishing it and the bindings
-          // are cleaned up with queue surgery. Since HEAD d87e187 every
-          // ticket write requires an organization, so every v1 fact has a
-          // v2 twin: ignoring v1 loses nothing.
-          case 'ticket.created.v1':
-          case 'ticket.status-changed.v1':
-            return;
           case 'ticket.created.v2': {
             // Throwing on a tenantless v2 envelope dead-letters it: better
             // an inspectable dead letter than a row no organization owns.

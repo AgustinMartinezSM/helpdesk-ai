@@ -1,18 +1,13 @@
 import {
-  aiSuggestionCreatedV1,
   aiSuggestionCreatedV2,
   eventEnvelopeSchema,
   membershipCreatedV1,
   membershipStatusChangedV1,
   MissingTenantContextError,
   requireEnvelopeOrganization,
-  ticketAssignedV1,
   ticketAssignedV2,
-  ticketCommentAddedV1,
   ticketCommentAddedV2,
-  ticketCreatedV1,
   ticketCreatedV2,
-  ticketStatusChangedV1,
   ticketStatusChangedV2,
   userRegisteredV1,
 } from './contracts.js';
@@ -91,39 +86,39 @@ describe('event contracts', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts a valid ticket.created.v1 payload', () => {
+  it('accepts a valid ticket.created.v2 payload', () => {
     expect(
-      ticketCreatedV1.payloadSchema.safeParse(validTicketPayload).success,
+      ticketCreatedV2.payloadSchema.safeParse(validTicketPayload).success,
     ).toBe(true);
   });
 
-  it('rejects a ticket.created.v1 payload with an unknown priority', () => {
-    const result = ticketCreatedV1.payloadSchema.safeParse({
+  it('rejects a ticket.created.v2 payload with an unknown priority', () => {
+    const result = ticketCreatedV2.payloadSchema.safeParse({
       ...validTicketPayload,
       priority: 'catastrophic',
     });
     expect(result.success).toBe(false);
   });
 
-  it('accepts a valid ai.suggestion.created.v1 payload', () => {
+  it('accepts a valid ai.suggestion.created.v2 payload', () => {
     expect(
-      aiSuggestionCreatedV1.payloadSchema.safeParse(validSuggestionPayload)
+      aiSuggestionCreatedV2.payloadSchema.safeParse(validSuggestionPayload)
         .success,
     ).toBe(true);
   });
 
-  it('rejects an ai.suggestion.created.v1 payload with an unknown task', () => {
-    const result = aiSuggestionCreatedV1.payloadSchema.safeParse({
+  it('rejects an ai.suggestion.created.v2 payload with an unknown task', () => {
+    const result = aiSuggestionCreatedV2.payloadSchema.safeParse({
       ...validSuggestionPayload,
       task: 'sentiment',
     });
     expect(result.success).toBe(false);
   });
 
-  it('strips suggestion content from an ai.suggestion.created.v1 payload', () => {
+  it('strips suggestion content from an ai.suggestion.created.v2 payload', () => {
     // The contract carries metadata only: a publisher that tries to attach
     // the draft must not be able to smuggle it past the schema.
-    const result = aiSuggestionCreatedV1.payloadSchema.safeParse({
+    const result = aiSuggestionCreatedV2.payloadSchema.safeParse({
       ...validSuggestionPayload,
       output: { body: 'Hello, we are looking into it.' },
     });
@@ -175,8 +170,9 @@ describe('event envelope', () => {
     expect(scoped.success).toBe(true);
     expect(scoped.data?.organizationId).toBe(ORGANIZATION_ID);
 
-    // v1 envelopes have none, and must keep parsing. This is what "consumers
-    // keep reading v1" means at the schema level.
+    // Legacy v1 envelopes have none, and must keep parsing: nothing
+    // publishes them any more, but the audit firehose still records
+    // third-party or replayed v1-typed events through this very schema.
     const unscoped = eventEnvelopeSchema.safeParse(validEnvelope);
     expect(unscoped.success).toBe(true);
     expect(unscoped.data?.organizationId).toBeUndefined();
@@ -193,31 +189,35 @@ describe('event envelope', () => {
 });
 
 describe('v2 contracts', () => {
-  const PAIRS = [
-    [ticketCreatedV1, ticketCreatedV2, validTicketPayload],
-    [ticketStatusChangedV1, ticketStatusChangedV2, validStatusChangedPayload],
-    [ticketAssignedV1, ticketAssignedV2, validAssignedPayload],
-    [ticketCommentAddedV1, ticketCommentAddedV2, validCommentPayload],
-    [aiSuggestionCreatedV1, aiSuggestionCreatedV2, validSuggestionPayload],
+  const CONTRACTS = [
+    [ticketCreatedV2, 'ticket.created.v2', validTicketPayload],
+    [
+      ticketStatusChangedV2,
+      'ticket.status-changed.v2',
+      validStatusChangedPayload,
+    ],
+    [ticketAssignedV2, 'ticket.assigned.v2', validAssignedPayload],
+    [ticketCommentAddedV2, 'ticket.comment-added.v2', validCommentPayload],
+    [aiSuggestionCreatedV2, 'ai.suggestion.created.v2', validSuggestionPayload],
   ] as const;
 
-  it.each(PAIRS)(
-    'names %#: v2 is the v1 type with the suffix bumped',
-    (v1, v2) => {
-      expect(v2.type).toBe(v1.type.replace(/\.v1$/, '.v2'));
-      expect(v2.type).not.toBe(v1.type);
+  it.each(CONTRACTS)(
+    'names %#: the .v2 suffix survives the deletion of v1',
+    (contract, type) => {
+      // v2 is the only published revision since phase 8, but the type string
+      // keeps its suffix: renaming a contract in place is exactly what
+      // ADR 0005 forbids. The suffix is history, not a parallel v1.
+      expect(contract.type).toBe(type);
     },
   );
 
-  it.each(PAIRS)(
-    'payload %#: v2 accepts exactly what v1 accepts',
-    (v1, v2, payload) => {
-      // Same schema object, so this cannot drift — the assertion exists to
-      // fail loudly if someone later copies the schema instead of sharing it.
-      expect(v2.payloadSchema).toBe(v1.payloadSchema);
-      expect(v2.payloadSchema.safeParse(payload)).toEqual(
-        v1.payloadSchema.safeParse(payload),
-      );
+  it.each(CONTRACTS)(
+    'payload %#: accepts the wire shape the dual-publish window carried',
+    (contract, _type, payload) => {
+      // The v1 twins shared these exact payload schemas until they were
+      // deleted; the v2 schema still accepting the same shape is what makes
+      // replaying an archived v1 payload against a v2 contract meaningful.
+      expect(contract.payloadSchema.safeParse(payload).success).toBe(true);
     },
   );
 

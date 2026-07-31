@@ -1,6 +1,7 @@
 /**
  * Integration coverage against a real RabbitMQ: publish→consume round trip
- * with broker confirms, and dead-lettering of undecodable messages.
+ * with broker confirms, dead-lettering of undecodable messages, and the
+ * boot-time unbinding of retired binding keys from a durable queue.
  *
  * Requires the compose stack (`pnpm infra:up`); run via
  * `nx run @helpdesk-ai/messaging:test-integration`, which injects
@@ -8,14 +9,14 @@
  */
 import { connect as amqplibConnect } from 'amqplib';
 import type { Channel, ChannelModel } from 'amqplib';
-import {
-  ticketCreatedV1,
-  ticketCreatedV2,
-  userRegisteredV1,
-} from './contracts.js';
+import { defineEvent, ticketCreatedV2, userRegisteredV1 } from './contracts.js';
 import { MessagingClient } from './messaging-client.js';
 import type { ContractEnvelope, EventEnvelope } from './contracts.js';
-import { EVENTS_EXCHANGE, deadLetterQueueOf } from './topology.js';
+import {
+  EVENTS_DEAD_LETTER_EXCHANGE,
+  EVENTS_EXCHANGE,
+  deadLetterQueueOf,
+} from './topology.js';
 
 const rabbitmqUrl = process.env.RABBITMQ_URL;
 if (!rabbitmqUrl) {
@@ -28,8 +29,19 @@ const QUEUE = 'messaging-lib.int-test';
 const DLQ = deadLetterQueueOf(QUEUE);
 const FIREHOSE_QUEUE = 'messaging-lib.int-test-firehose';
 const FIREHOSE_DLQ = deadLetterQueueOf(FIREHOSE_QUEUE);
+const RETIRED_QUEUE = 'messaging-lib.int-test-retired';
+const RETIRED_DLQ = deadLetterQueueOf(RETIRED_QUEUE);
 
 const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
+
+// A contract that exists ONLY in this spec: phase 8 deleted the platform's
+// v1 definitions, so publishing this impersonates the one thing that could
+// still emit the type — a legacy producer. Same schema as v2 on purpose:
+// the two revisions carried byte-identical payloads.
+const legacyTicketCreatedV1 = defineEvent(
+  'ticket.created.v1',
+  ticketCreatedV2.payloadSchema,
+);
 
 const ticketPayload = {
   ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
@@ -57,7 +69,7 @@ describe('MessagingClient against a real broker', () => {
   let client: MessagingClient;
   let rawConnection: ChannelModel;
   let rawChannel: Channel;
-  const received: ContractEnvelope<typeof ticketCreatedV1>[] = [];
+  const received: ContractEnvelope<typeof ticketCreatedV2>[] = [];
   const firehoseReceived: EventEnvelope[] = [];
 
   beforeAll(async () => {
@@ -67,7 +79,7 @@ describe('MessagingClient against a real broker', () => {
     });
     await client.subscribe({
       queue: QUEUE,
-      contracts: [ticketCreatedV1],
+      contracts: [ticketCreatedV2],
       handler: async (event) => {
         received.push(event);
       },
@@ -94,13 +106,16 @@ describe('MessagingClient against a real broker', () => {
     await rawChannel.deleteQueue(DLQ);
     await rawChannel.deleteQueue(FIREHOSE_QUEUE);
     await rawChannel.deleteQueue(FIREHOSE_DLQ);
+    await rawChannel.deleteQueue(RETIRED_QUEUE);
+    await rawChannel.deleteQueue(RETIRED_DLQ);
     await rawConnection.close();
     await client.close();
   });
 
   it('delivers a published event to a bound consumer', async () => {
-    const envelope = await client.publish(ticketCreatedV1, ticketPayload, {
+    const envelope = await client.publish(ticketCreatedV2, ticketPayload, {
       correlationId: 'int-test-correlation',
+      organizationId: ORGANIZATION_ID,
     });
 
     await waitFor(() => received.length === 1);
@@ -127,8 +142,8 @@ describe('MessagingClient against a real broker', () => {
     expect(firehoseReceived.length).toBeGreaterThan(before);
   });
 
-  it('carries the organization on a v2 envelope, and both versions on the bus', async () => {
-    const v1 = await client.publish(ticketCreatedV1, ticketPayload, {
+  it('carries the organization on a v2 envelope, and none on a legacy v1-typed one', async () => {
+    const legacy = await client.publish(legacyTicketCreatedV1, ticketPayload, {
       correlationId: 'int-test-pair',
     });
     const v2 = await client.publish(ticketCreatedV2, ticketPayload, {
@@ -137,43 +152,44 @@ describe('MessagingClient against a real broker', () => {
     });
 
     await waitFor(() =>
-      [v1.id, v2.id].every((id) =>
+      [legacy.id, v2.id].every((id) =>
         firehoseReceived.some((event) => event.id === id),
       ),
     );
 
-    const seenV1 = firehoseReceived.find((event) => event.id === v1.id);
+    const seenLegacy = firehoseReceived.find((event) => event.id === legacy.id);
     const seenV2 = firehoseReceived.find((event) => event.id === v2.id);
-
-    // Two envelopes, one fact. Distinct ids — which is why an id-keyed
-    // consumer cannot collapse them — grouped only by the shared trace id.
-    expect(seenV1?.id).not.toBe(seenV2?.id);
-    expect(seenV1?.correlationId).toBe('int-test-pair');
-    expect(seenV2?.correlationId).toBe('int-test-pair');
 
     // The tenant survives a round trip through a consumer that has no
     // contract for either type. If the field were missing from the envelope
     // schema, zod would strip it right here and this would be undefined.
-    expect(seenV1?.organizationId).toBeUndefined();
+    // The legacy envelope carries none — exactly how the archived
+    // compatibility window's v1 rows looked.
+    expect(seenLegacy?.organizationId).toBeUndefined();
     expect(seenV2?.organizationId).toBe(ORGANIZATION_ID);
-    expect(seenV2?.payload).toEqual(seenV1?.payload);
+    expect(seenLegacy?.correlationId).toBe('int-test-pair');
+    expect(seenV2?.payload).toEqual(seenLegacy?.payload);
+
+    // The v2 also lands on the contract-bound queue; wait for it so the
+    // next test's count of `received` starts from a settled baseline.
+    await waitFor(() => received.some((event) => event.id === v2.id));
   });
 
-  it('does not route a v2 event to a queue bound to v1', async () => {
+  it('does not route a legacy v1-typed event to a queue bound to v2', async () => {
     const before = received.length;
 
-    await client.publish(ticketCreatedV2, ticketPayload, {
-      organizationId: ORGANIZATION_ID,
-    });
-    // A v1 sentinel published after it: when the sentinel arrives, the v2 has
+    await client.publish(legacyTicketCreatedV1, ticketPayload);
+    // A v2 sentinel published after it: when the sentinel arrives, the v1 has
     // had at least as long to arrive and did not. A positive event as the
     // fence beats sleeping on a timeout.
-    const sentinel = await client.publish(ticketCreatedV1, ticketPayload);
+    const sentinel = await client.publish(ticketCreatedV2, ticketPayload, {
+      organizationId: ORGANIZATION_ID,
+    });
 
     await waitFor(() => received.some((event) => event.id === sentinel.id));
 
     expect(received.length).toBe(before + 1);
-    expect(received.every((event) => event.type === 'ticket.created.v1')).toBe(
+    expect(received.every((event) => event.type === 'ticket.created.v2')).toBe(
       true,
     );
 
@@ -182,11 +198,59 @@ describe('MessagingClient against a real broker', () => {
     expect(await rawChannel.get(DLQ, { noAck: true })).toBe(false);
   });
 
+  it('unbinds retired binding keys on boot, so a stale binding stops delivering', async () => {
+    // Recreate the durable state phase 8 inherits: the queue already exists
+    // (same arguments as the client's own assertQueue, or the re-assert
+    // would fail the channel) and still carries the v1 binding a previous
+    // deploy declared.
+    await rawChannel.assertQueue(RETIRED_QUEUE, {
+      durable: true,
+      deadLetterExchange: EVENTS_DEAD_LETTER_EXCHANGE,
+      deadLetterRoutingKey: RETIRED_QUEUE,
+    });
+    await rawChannel.assertQueue(RETIRED_DLQ, { durable: true });
+    await rawChannel.purgeQueue(RETIRED_QUEUE);
+    await rawChannel.purgeQueue(RETIRED_DLQ);
+    await rawChannel.bindQueue(
+      RETIRED_QUEUE,
+      EVENTS_EXCHANGE,
+      legacyTicketCreatedV1.type,
+    );
+
+    const delivered: EventEnvelope[] = [];
+    await client.subscribe({
+      queue: RETIRED_QUEUE,
+      contracts: [ticketCreatedV2],
+      retiredBindingKeys: [legacyTicketCreatedV1.type],
+      handler: async (event) => {
+        delivered.push(event);
+      },
+    });
+
+    await client.publish(legacyTicketCreatedV1, ticketPayload);
+    const sentinel = await client.publish(ticketCreatedV2, ticketPayload, {
+      organizationId: ORGANIZATION_ID,
+    });
+
+    await waitFor(() => delivered.some((event) => event.id === sentinel.id));
+    expect(delivered.map((event) => event.type)).toEqual(['ticket.created.v2']);
+
+    // Had the stale binding survived, the legacy event would have been
+    // enqueued, failed decode (no contract bound) and dead-lettered. An
+    // empty DLQ proves the broker never enqueued it: the unbind is the
+    // client-side queue surgery working, not the consumer politely acking.
+    expect(await rawChannel.get(RETIRED_DLQ, { noAck: true })).toBe(false);
+
+    // The sentinel also lands on the main test queue (bound to v2); wait
+    // for it so the next test's count of `received` starts settled.
+    await waitFor(() => received.some((event) => event.id === sentinel.id));
+  });
+
   it('dead-letters messages that cannot be decoded, without invoking the handler', async () => {
     const before = received.length;
     rawChannel.publish(
       EVENTS_EXCHANGE,
-      ticketCreatedV1.type,
+      ticketCreatedV2.type,
       Buffer.from('{"broken":'),
       { persistent: true },
     );

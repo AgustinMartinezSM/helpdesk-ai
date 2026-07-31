@@ -1,12 +1,8 @@
 import {
   requireEnvelopeOrganization,
-  ticketAssignedV1,
   ticketAssignedV2,
-  ticketCommentAddedV1,
   ticketCommentAddedV2,
-  ticketCreatedV1,
   ticketCreatedV2,
-  ticketStatusChangedV1,
   ticketStatusChangedV2,
   type MessagingClient,
   type MessagingLogger,
@@ -61,31 +57,26 @@ export class TicketEventsConsumer {
     await this.messaging.subscribe({
       queue: TICKET_EVENTS_QUEUE,
       contracts: [
-        ticketCreatedV1,
         ticketCreatedV2,
-        ticketStatusChangedV1,
         ticketStatusChangedV2,
-        ticketAssignedV1,
         ticketAssignedV2,
-        ticketCommentAddedV1,
         ticketCommentAddedV2,
+      ],
+      // Historical routing keys, as string literals ON PURPOSE: the v1
+      // contracts were deleted in phase 8, so there is no identifier left
+      // to reference — only the keys this durable queue was once bound to.
+      // Every boot unbinds them (idempotently), which is what allowed the
+      // v1 ack-as-no-op arms to leave the handler. Removable once every
+      // environment's durable queue has booted past this version.
+      retiredBindingKeys: [
+        'ticket.created.v1',
+        'ticket.status-changed.v1',
+        'ticket.assigned.v1',
+        'ticket.comment-added.v1',
       ],
       prefetch: 1,
       handler: async (event) => {
         switch (event.type) {
-          // The v1 cases are explicit no-op acks, not removed bindings: this
-          // client only ever binds, never unbinds, so the durable queue keeps
-          // its v1 bindings until the phase-8 queue surgery. Processing both
-          // versions would notify twice under two envelope ids — the
-          // (userId, sourceEventId) dedupe key cannot collapse two different
-          // envelopes. And since every ticket write requires an organization,
-          // every v1 fact has a v2 twin on this same queue: acking v1 loses
-          // nothing.
-          case 'ticket.created.v1':
-          case 'ticket.status-changed.v1':
-          case 'ticket.assigned.v1':
-          case 'ticket.comment-added.v1':
-            return;
           case 'ticket.created.v2':
             await this.registerRef.execute({
               ticketId: event.payload.ticketId,

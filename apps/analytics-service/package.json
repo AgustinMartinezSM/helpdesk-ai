@@ -148,6 +148,7 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^11.0.0",
+    "amqplib": "^2.0.1",
     "prisma": "7.9.1"
   }
 }

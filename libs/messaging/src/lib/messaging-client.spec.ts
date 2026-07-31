@@ -1,13 +1,18 @@
-import {
-  ticketCreatedV1,
-  ticketCreatedV2,
-  userRegisteredV1,
-} from './contracts.js';
+import { defineEvent, ticketCreatedV2, userRegisteredV1 } from './contracts.js';
 import {
   buildEnvelope,
   decodeDelivery,
   decodeRawDelivery,
 } from './messaging-client.js';
+
+// A contract that exists ONLY in this spec: the platform deleted its v1
+// definitions in phase 8, so a v1-typed event can only come from a legacy
+// producer — which is exactly what this impersonates. It reuses the v2
+// schema because the two revisions carried byte-identical payloads.
+const legacyTicketCreatedV1 = defineEvent(
+  'ticket.created.v1',
+  ticketCreatedV2.payloadSchema,
+);
 
 const ticketPayload = {
   ticketId: '5f0c9a52-77aa-4a30-b87e-6a3c5be2b222',
@@ -20,15 +25,15 @@ const ticketPayload = {
 
 const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
 
-const contractsByType = new Map([[ticketCreatedV1.type, ticketCreatedV1]]);
+const contractsByType = new Map([[ticketCreatedV2.type, ticketCreatedV2]]);
 
 describe('buildEnvelope (producer-side guarantees)', () => {
   it('wraps a valid payload with id, type and timestamp', () => {
-    const envelope = buildEnvelope(ticketCreatedV1, ticketPayload, {
+    const envelope = buildEnvelope(ticketCreatedV2, ticketPayload, {
       correlationId: 'req-123',
     });
 
-    expect(envelope.type).toBe('ticket.created.v1');
+    expect(envelope.type).toBe('ticket.created.v2');
     expect(envelope.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(Date.parse(envelope.occurredAt)).not.toBeNaN();
     expect(envelope.correlationId).toBe('req-123');
@@ -36,13 +41,13 @@ describe('buildEnvelope (producer-side guarantees)', () => {
   });
 
   it('omits correlationId when the producer has none', () => {
-    const envelope = buildEnvelope(ticketCreatedV1, ticketPayload);
+    const envelope = buildEnvelope(ticketCreatedV2, ticketPayload);
     expect('correlationId' in envelope).toBe(false);
   });
 
   it('throws when the producer violates its own contract', () => {
     expect(() =>
-      buildEnvelope(ticketCreatedV1, {
+      buildEnvelope(ticketCreatedV2, {
         ...ticketPayload,
         priority: 'catastrophic' as never,
       }),
@@ -81,7 +86,9 @@ describe('decodeDelivery (consumer-side guarantees)', () => {
   }
 
   it('decodes a valid delivery into a typed event', () => {
-    const envelope = buildEnvelope(ticketCreatedV1, ticketPayload);
+    const envelope = buildEnvelope(ticketCreatedV2, ticketPayload, {
+      organizationId: ORGANIZATION_ID,
+    });
     const decoded = decodeDelivery(deliveryOf(envelope), contractsByType);
 
     expect(decoded).toEqual({ ok: true, event: envelope });
@@ -120,30 +127,31 @@ describe('decodeDelivery (consumer-side guarantees)', () => {
 
   it('rejects a payload that violates the bound contract', () => {
     const envelope = {
-      ...buildEnvelope(ticketCreatedV1, ticketPayload),
+      ...buildEnvelope(ticketCreatedV2, ticketPayload, {
+        organizationId: ORGANIZATION_ID,
+      }),
       payload: { ...ticketPayload, status: 'exploded' },
     };
     const decoded = decodeDelivery(deliveryOf(envelope), contractsByType);
 
     expect(decoded).toEqual({
       ok: false,
-      reason: 'payload failed validation for "ticket.created.v1"',
+      reason: 'payload failed validation for "ticket.created.v2"',
     });
   });
 
-  it('rejects a v2 delivery when only v1 is bound', () => {
-    // The routing keys differ, so this should never be delivered in the
-    // first place. This pins what happens if one ever is — by a hand-made
-    // binding, a shovel, or a DLQ replay: it dead-letters rather than being
-    // decoded as if it were the version the consumer understands.
-    const envelope = buildEnvelope(ticketCreatedV2, ticketPayload, {
-      organizationId: ORGANIZATION_ID,
-    });
+  it('rejects a legacy v1-typed delivery when only v2 is bound', () => {
+    // After phase 8 the v1 routing keys are unbound, so this should never
+    // be delivered in the first place. This pins what happens if one ever
+    // is — by a hand-made binding, a shovel, or a DLQ replay: it
+    // dead-letters rather than being decoded as if it were the version the
+    // consumer understands.
+    const envelope = buildEnvelope(legacyTicketCreatedV1, ticketPayload);
     const decoded = decodeDelivery(deliveryOf(envelope), contractsByType);
 
     expect(decoded).toEqual({
       ok: false,
-      reason: 'no contract bound for type "ticket.created.v2"',
+      reason: 'no contract bound for type "ticket.created.v1"',
     });
   });
 });

@@ -72,55 +72,69 @@ const suggestionEvent = {
   requestedBy: REQUESTED_BY,
   createdAt: new Date('2026-07-30T12:00:00.000Z'),
   traceId: TRACE_ID,
+  organizationId: ORGANIZATION_ID,
 };
 
-describe('RabbitMqEventPublisher — the compatibility pair', () => {
-  it('publishes v1 and v2 with the same payload and trace, tenant on v2 only', async () => {
+describe('RabbitMqEventPublisher — v2 only', () => {
+  it('publishes exactly one v2 event, tenant and trace on the envelope', async () => {
     const { messaging, publisher } = build();
-
-    await publisher.publishSuggestionCreated({
-      ...suggestionEvent,
-      organizationId: ORGANIZATION_ID,
-    });
-
-    expect(messaging.typesOf()).toEqual([
-      'ai.suggestion.created.v1',
-      'ai.suggestion.created.v2',
-    ]);
-
-    const [v1, v2] = messaging.published;
-    expect(v2.payload).toEqual(v1.payload);
-    expect(v1.options?.correlationId).toBe(TRACE_ID);
-    expect(v2.options?.correlationId).toBe(TRACE_ID);
-    expect(v1.options?.organizationId).toBeUndefined();
-    expect(v2.options?.organizationId).toBe(ORGANIZATION_ID);
-  });
-
-  it('still carries no suggestion content in either version', async () => {
-    const { messaging, publisher } = build();
-
-    await publisher.publishSuggestionCreated({
-      ...suggestionEvent,
-      organizationId: ORGANIZATION_ID,
-    });
-
-    // The v2 contract shares the v1 payload schema, so the guarantee that
-    // this event is metadata only survives the version bump by construction.
-    for (const entry of messaging.published) {
-      expect(entry.payload).not.toHaveProperty('output');
-      expect(entry.payload).not.toHaveProperty('organizationId');
-    }
-  });
-
-  it('publishes v1 only, and warns, when the caller has no organization', async () => {
-    const { messaging, logger, publisher } = build();
 
     await publisher.publishSuggestionCreated(suggestionEvent);
 
-    expect(messaging.typesOf()).toEqual(['ai.suggestion.created.v1']);
-    expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).toContain('ai.suggestion.created.v2');
-    expect(logger.warnings[0]).toContain(SUGGESTION_ID);
+    // One publish per fact: phase 8 closed the dual-publish window, so a
+    // second v1 copy here would be a regression, not compatibility.
+    expect(messaging.typesOf()).toEqual(['ai.suggestion.created.v2']);
+    expect(messaging.published[0].options?.correlationId).toBe(TRACE_ID);
+    expect(messaging.published[0].options?.organizationId).toBe(
+      ORGANIZATION_ID,
+    );
+  });
+
+  it('still carries no suggestion content, and no tenant, in the payload', async () => {
+    const { messaging, publisher } = build();
+
+    await publisher.publishSuggestionCreated(suggestionEvent);
+
+    // Metadata only, always: the event must never become a side channel
+    // around the read authorization on ai-service (ADR 0011).
+    expect(messaging.published[0].payload).not.toHaveProperty('output');
+    expect(messaging.published[0].payload).not.toHaveProperty('organizationId');
+  });
+
+  it('never warns on the happy path — the skip-and-warn branch is gone', async () => {
+    const { logger, publisher } = build();
+
+    await publisher.publishSuggestionCreated(suggestionEvent);
+
+    // The "caller has no organization" skip died with phase 8: the domain
+    // types have required an organization since the write-path phase, so
+    // there is nothing left to warn about.
+    expect(logger.warnings).toEqual([]);
+    expect(logger.errors).toEqual([]);
+  });
+
+  it('stays best-effort: a broker failure is logged, never rethrown', async () => {
+    const { logger } = build();
+    const failing = {
+      async publish() {
+        throw new Error('broker unavailable');
+      },
+      async close() {
+        // not used by this spec
+      },
+    };
+    const isolated = new RabbitMqEventPublisher(
+      failing as unknown as MessagingClient,
+      logger,
+    );
+
+    // The suggestion already committed when this runs; the request must not
+    // fail because the (single) publish did.
+    await expect(
+      isolated.publishSuggestionCreated(suggestionEvent),
+    ).resolves.toBeUndefined();
+    expect(logger.errors).toHaveLength(1);
+    expect(logger.errors[0]).toContain('ai.suggestion.created.v2');
   });
 
   it('closes its messaging client on shutdown', async () => {
