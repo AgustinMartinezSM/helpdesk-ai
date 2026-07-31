@@ -29,8 +29,18 @@ export class PrismaUserProfileRepository implements UserProfileRepository {
     });
   }
 
-  async list(): Promise<UserProfile[]> {
+  async list(organizationId: string): Promise<UserProfile[]> {
+    // Two queries in the same database, not a cross-service join: the
+    // membership projection lives in helpdesk_users precisely so this read
+    // needs no call to organizations-service (ADR 0014). Active members
+    // only — suspended/deactivated/invited members leave the directory until
+    // the people-management sprint decides how to present them.
+    const members = await this.prisma.directoryMembership.findMany({
+      where: { organizationId, status: 'active' },
+      select: { userId: true },
+    });
     const rows = await this.prisma.userProfile.findMany({
+      where: { userId: { in: members.map((member) => member.userId) } },
       orderBy: { displayName: 'asc' },
     });
     return rows.map(toDomain);

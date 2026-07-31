@@ -1,4 +1,9 @@
-import { hasPermission, PERMISSIONS, type Actor } from '@helpdesk-ai/security';
+import {
+  hasPermission,
+  PERMISSIONS,
+  requireOrganization,
+  type Actor,
+} from '@helpdesk-ai/security';
 import {
   ForbiddenProfileActionError,
   ProfileNotFoundError,
@@ -25,12 +30,17 @@ export class GetMyProfileUseCase {
 export class ListUserProfilesUseCase {
   constructor(private readonly profiles: UserProfileRepository) {}
 
-  /** people.read gates the directory: it exists for agent pickers and
-   * ticket views, not for browsing colleagues. */
+  /**
+   * people.read gates the directory: it exists for agent pickers and
+   * ticket views, not for browsing colleagues. The listing is then scoped
+   * to the caller's organization — a token without one gets a refusal, not
+   * a global directory. GET /users/me stays unscoped by contrast: the own
+   * profile is keyed by the token subject, not by tenancy.
+   */
   async execute(actor: Actor): Promise<UserProfile[]> {
     if (!hasPermission(actor, PERMISSIONS.PEOPLE_READ)) {
       throw new ForbiddenProfileActionError();
     }
-    return this.profiles.list();
+    return this.profiles.list(requireOrganization(actor));
   }
 }

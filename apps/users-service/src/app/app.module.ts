@@ -5,6 +5,10 @@ import { MessagingClient } from '@helpdesk-ai/messaging';
 import { Logger, ObservabilityModule } from '@helpdesk-ai/observability';
 import { JwtAccessGuard } from '@helpdesk-ai/security';
 import {
+  MEMBERSHIP_PROJECTION_REPOSITORY,
+  type MembershipProjectionRepository,
+} from '../application/ports/membership-projection.repository';
+import {
   CLOCK,
   SystemClock,
   USER_PROFILE_REPOSITORY,
@@ -12,14 +16,20 @@ import {
   type UserProfileRepository,
 } from '../application/ports/user-profile.repository';
 import {
+  ApplyMembershipCreatedUseCase,
+  ApplyMembershipStatusChangedUseCase,
+} from '../application/use-cases/apply-membership-events';
+import {
   GetMyProfileUseCase,
   ListUserProfilesUseCase,
 } from '../application/use-cases/profile-queries';
 import { RegisterUserProfileUseCase } from '../application/use-cases/register-user-profile';
 import { APP_ENV, SERVICE_NAME, type UsersServiceEnv } from '../config/env';
+import { PrismaMembershipProjectionRepository } from '../infrastructure/prisma/prisma-membership-projection.repository';
 import { PrismaUserProfileRepository } from '../infrastructure/prisma/prisma-user-profile.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { HealthController } from './health/health.controller';
+import { MembershipEventsConsumer } from './messaging/membership-events.consumer';
 import { RegistrationConsumer } from './messaging/registration.consumer';
 import { UsersController } from './users/users.controller';
 
@@ -56,6 +66,12 @@ export class AppModule {
           inject: [PrismaService],
         },
         {
+          provide: MEMBERSHIP_PROJECTION_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaMembershipProjectionRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
           provide: MessagingClient,
           useFactory: (logger: Logger) =>
             new MessagingClient({
@@ -84,6 +100,18 @@ export class AppModule {
           inject: [USER_PROFILE_REPOSITORY],
         },
         {
+          provide: ApplyMembershipCreatedUseCase,
+          useFactory: (memberships: MembershipProjectionRepository) =>
+            new ApplyMembershipCreatedUseCase(memberships),
+          inject: [MEMBERSHIP_PROJECTION_REPOSITORY],
+        },
+        {
+          provide: ApplyMembershipStatusChangedUseCase,
+          useFactory: (memberships: MembershipProjectionRepository) =>
+            new ApplyMembershipStatusChangedUseCase(memberships),
+          inject: [MEMBERSHIP_PROJECTION_REPOSITORY],
+        },
+        {
           provide: RegistrationConsumer,
           useFactory: (
             messaging: MessagingClient,
@@ -91,6 +119,27 @@ export class AppModule {
             logger: Logger,
           ) => new RegistrationConsumer(messaging, registerProfile, logger),
           inject: [MessagingClient, RegisterUserProfileUseCase, Logger],
+        },
+        {
+          provide: MembershipEventsConsumer,
+          useFactory: (
+            messaging: MessagingClient,
+            applyCreated: ApplyMembershipCreatedUseCase,
+            applyStatusChanged: ApplyMembershipStatusChangedUseCase,
+            logger: Logger,
+          ) =>
+            new MembershipEventsConsumer(
+              messaging,
+              applyCreated,
+              applyStatusChanged,
+              logger,
+            ),
+          inject: [
+            MessagingClient,
+            ApplyMembershipCreatedUseCase,
+            ApplyMembershipStatusChangedUseCase,
+            Logger,
+          ],
         },
         JwtAccessGuard,
       ],

@@ -66,7 +66,9 @@ export class UsersController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Directory of all profiles (staff only)' })
+  @ApiOperation({
+    summary: "Directory of the caller's organization (people.read)",
+  })
   async list(@Req() req: AuthenticatedRequest): Promise<UserProfileResponse[]> {
     const profiles = await this.listProfiles.execute(actorOf(req));
     return profiles.map(toResponse);

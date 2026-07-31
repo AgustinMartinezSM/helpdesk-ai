@@ -9,8 +9,14 @@ export interface UserProfileRepository {
    * event consumer idempotent under at-least-once delivery.
    */
   upsert(profile: UserProfile): Promise<void>;
-  /** All profiles, ordered by display name. Pagination arrives with demand. */
-  list(): Promise<UserProfile[]>;
+  /**
+   * Profiles of the organization's ACTIVE members, ordered by display name.
+   * The organization is required — an unscoped listing no longer exists as
+   * an operation. Active-only because suspended/deactivated/invited members
+   * leave the directory until the people-management sprint decides how to
+   * present them. Pagination arrives with demand.
+   */
+  list(organizationId: string): Promise<UserProfile[]>;
 }
 
 export const CLOCK = Symbol('CLOCK');

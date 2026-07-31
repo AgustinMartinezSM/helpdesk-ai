@@ -27,3 +27,27 @@ model UserProfile {
 
   @@map("user_profiles")
 }
+
+// A projection of organizations-service's memberships, existing so the
+// directory can be scoped to an organization without a synchronous call on
+// every read (ADR 0014 forbids that dependency). user_profiles deliberately
+// has NO organization_id — a column there would assert one-org-per-person,
+// which ADR 0013 rejected by making membership its own table — so the tenant
+// source for the directory is this local copy of the membership lifecycle
+// events. Rebuilt/reconciled by
+// infrastructure/postgres/operations/backfill-directory-memberships.sh:
+// consumed events are gone and publishing is best-effort (ADR 0006), so the
+// script, not a replay, is the recovery path.
+model DirectoryMembership {
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  roleTemplate   String   @map("role_template")
+  status         String
+  // Timestamp of the newest membership fact applied; the LWW guard in the
+  // repository compares against it so a replayed stale event cannot regress.
+  updatedAt      DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@id([organizationId, userId])
+  @@index([userId])
+  @@map("directory_memberships")
+}

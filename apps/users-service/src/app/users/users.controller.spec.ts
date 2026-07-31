@@ -5,10 +5,12 @@ import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { MessagingClient } from '@helpdesk-ai/messaging';
 import { PERMISSIONS } from '@helpdesk-ai/security';
+import { MEMBERSHIP_PROJECTION_REPOSITORY } from '../../application/ports/membership-projection.repository';
 import { USER_PROFILE_REPOSITORY } from '../../application/ports/user-profile.repository';
 import { RegisterUserProfileUseCase } from '../../application/use-cases/register-user-profile';
 import {
   FixedClock,
+  InMemoryMembershipProjectionRepository,
   InMemoryUserProfileRepository,
 } from '../../application/testing/fakes';
 import { usersServiceEnvSchema } from '../../config/env';
@@ -24,22 +26,30 @@ const TEST_ENV = {
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const AGENT_ID = '33333333-3333-4333-8333-333333333333';
+const ORG_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const ORG_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 describe('Users HTTP API (fakes, real JWT verification)', () => {
   let app: INestApplication;
+  let memberships: InMemoryMembershipProjectionRepository;
   let profiles: InMemoryUserProfileRepository;
   let userToken: string;
   let agentToken: string;
+  let secondOrgAgentToken: string;
+  let tenantlessAgentToken: string;
 
   beforeAll(async () => {
     const env = validateEnv(usersServiceEnvSchema, TEST_ENV);
-    profiles = new InMemoryUserProfileRepository();
+    memberships = new InMemoryMembershipProjectionRepository();
+    profiles = new InMemoryUserProfileRepository(memberships);
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
     })
       .overrideProvider(USER_PROFILE_REPOSITORY)
       .useValue(profiles)
+      .overrideProvider(MEMBERSHIP_PROJECTION_REPOSITORY)
+      .useValue(memberships)
       // Replacing the client keeps the suite broker-free: the real one owns
       // a live AMQP connection.
       .overrideProvider(MessagingClient)
@@ -73,9 +83,30 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
       {
         email: 'agent@example.com',
         roles: ['agent'],
+        org: ORG_A,
         perms: [PERMISSIONS.PEOPLE_READ],
       },
       { subject: AGENT_ID },
+    );
+    // Same permission, different tenant: must see a different directory.
+    secondOrgAgentToken = await jwt.signAsync(
+      {
+        email: 'rival-agent@example.com',
+        roles: ['agent'],
+        org: ORG_B,
+        perms: [PERMISSIONS.PEOPLE_READ],
+      },
+      { subject: '44444444-4444-4444-8444-444444444444' },
+    );
+    // people.read but no org claim: the token of an account that belongs
+    // nowhere yet. The shared NoOrganizationContextError must surface as 403.
+    tenantlessAgentToken = await jwt.signAsync(
+      {
+        email: 'floating-agent@example.com',
+        roles: ['agent'],
+        perms: [PERMISSIONS.PEOPLE_READ],
+      },
+      { subject: '55555555-5555-4555-8555-555555555555' },
     );
   });
 
@@ -129,12 +160,26 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     });
   });
 
-  it('restricts the directory to people.read holders', async () => {
+  it('restricts the directory to people.read holders in an organization', async () => {
     await project(AGENT_ID, 'agent@example.com', ['agent']);
+    for (const userId of [USER_ID, AGENT_ID]) {
+      await memberships.applyCreated({
+        organizationId: ORG_A,
+        userId,
+        roleTemplate: 'agent',
+        status: 'active',
+        occurredAt: new Date('2026-07-28T12:00:01.000Z'),
+      });
+    }
 
     await request(app.getHttpServer())
       .get('/users')
       .set(asBearer(userToken))
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .get('/users')
+      .set(asBearer(tenantlessAgentToken))
       .expect(403);
 
     const response = await request(app.getHttpServer())
@@ -145,5 +190,14 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     expect(
       response.body.map((profile: { userId: string }) => profile.userId),
     ).toEqual(expect.arrayContaining([USER_ID, AGENT_ID]));
+  });
+
+  it('shows another organization an empty directory, not a filtered one', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/users')
+      .set(asBearer(secondOrgAgentToken))
+      .expect(200);
+
+    expect(response.body).toEqual([]);
   });
 });
