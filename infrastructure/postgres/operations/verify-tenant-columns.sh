@@ -31,14 +31,24 @@ PORT="${PGPORT:-5432}"
 SNAPSHOT_FILE="${SNAPSHOT_FILE:-/tmp/helpdesk-tenant-counts.txt}"
 BOOTSTRAP_ID='00000000-0000-4000-8000-000000000001'
 
-# service role : database : space-separated tables carrying organization_id
+# service role : database : space-separated tables carrying organization_id.
+# Keep in lockstep with backfill-tenant-columns.sh — a table present in one
+# list but not the other is either unverified or unfilled.
 SCOPED="
 tickets_service:helpdesk_tickets:tickets ticket_comments ticket_history
 ai_service:helpdesk_ai:suggestions
-analytics_service:helpdesk_analytics:ticket_snapshots
+analytics_service:helpdesk_analytics:ticket_snapshots user_snapshots
 notification_service:helpdesk_notifications:ticket_refs notifications
 audit_service:helpdesk_audit:audit_events
 "
+
+# The per-check loops below run in `| while` pipelines, which are subshells:
+# an assignment to FAILED inside them silently vanishes. That bug shipped in
+# the first version of this script — every check after the first was visual
+# only, and a run with untenanted rows still exited 0. Failures are collected
+# in a file instead, which crosses the subshell boundary.
+FAILURES=/tmp/helpdesk-tenant-verify-failures.txt
+: > "$FAILURES"
 
 url_for() {
   echo "postgresql://$1:helpdesk_local_only_$2@${HOST}:${PORT}/helpdesk_$2"
@@ -91,7 +101,10 @@ echo "$SCOPED" | while IFS=: read -r role db tables; do
     n=$(psql "$url" -v ON_ERROR_STOP=1 --tuples-only --no-align \
       -c "SELECT count(*) FROM ${table} WHERE organization_id IS NULL;")
     echo "   ${db}.${table}: ${n}"
-    [ "$n" = "0" ] || echo "   ^^ UNPOPULATED ROWS"
+    if [ "$n" != "0" ]; then
+      echo "   ^^ UNPOPULATED ROWS"
+      echo "check2 ${db}.${table} ${n} untenanted rows" >> "$FAILURES"
+    fi
   done
 done
 
@@ -112,6 +125,7 @@ echo "$SCOPED" | while IFS=: read -r role db tables; do
         [ -z "$found" ] && continue
         if ! echo "$KNOWN" | grep -qx "$found"; then
           echo "   ${db}.${table}: ${found} DOES NOT EXIST"
+          echo "check3 ${db}.${table} orphan ${found}" >> "$FAILURES"
         fi
       done
   done
@@ -124,18 +138,22 @@ echo "4. A ticket and its comments and history agree on the organization"
 # with no comments as a disagreement, because NULL IS DISTINCT FROM <uuid> is
 # true — and joining both children at once multiplies them into a cartesian
 # product that inflates the counts. Both mistakes were made here first.
-psql "$(url_for tickets_service tickets)" -v ON_ERROR_STOP=1 -c "
-  SELECT 'comment' AS child, c.id AS row_id, t.id AS ticket,
-         t.organization_id AS ticket_org, c.organization_id AS child_org
+DISAGREEMENTS=$(psql "$(url_for tickets_service tickets)" -v ON_ERROR_STOP=1 \
+  --tuples-only --no-align -c "
+  SELECT 'comment' || ' ' || c.id || ' ticket ' || t.id
   FROM ticket_comments c
   JOIN tickets t ON t.id = c.ticket_id
   WHERE c.organization_id IS DISTINCT FROM t.organization_id
   UNION ALL
-  SELECT 'history', h.id, t.id, t.organization_id, h.organization_id
+  SELECT 'history' || ' ' || h.id || ' ticket ' || t.id
   FROM ticket_history h
   JOIN tickets t ON t.id = h.ticket_id
   WHERE h.organization_id IS DISTINCT FROM t.organization_id;
-"
+")
+if [ -n "$DISAGREEMENTS" ]; then
+  echo "$DISAGREEMENTS" | sed 's/^/   DISAGREES: /'
+  echo "$DISAGREEMENTS" | sed 's/^/check4 /' >> "$FAILURES"
+fi
 echo "   (an empty result means every child agrees with its ticket)"
 
 echo ""
@@ -147,9 +165,19 @@ echo "$SCOPED" | while IFS=: read -r role db tables; do
   for table in $tables; do
     n=$(psql "$url" -v ON_ERROR_STOP=1 --tuples-only --no-align \
       -c "SELECT count(*) FROM ${table} WHERE organization_id <> '${BOOTSTRAP_ID}';")
-    [ "$n" = "0" ] || echo "   ${db}.${table}: ${n} row(s) on another organization"
+    if [ "$n" != "0" ]; then
+      echo "   ${db}.${table}: ${n} row(s) on another organization"
+      echo "check5 ${db}.${table} ${n} rows off bootstrap" >> "$FAILURES"
+    fi
   done
 done
 echo "   (nothing listed above means every row is on the bootstrap organization)"
+
+if [ -s "$FAILURES" ]; then
+  FAILED=1
+  echo ""
+  echo "FAILED checks:"
+  sed 's/^/   /' "$FAILURES"
+fi
 
 exit $FAILED
