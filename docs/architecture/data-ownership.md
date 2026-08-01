@@ -58,7 +58,7 @@ never existed), so "rebuild from events" is never the answer:
 
 | Projection                            | Owner                 | Rebuild path                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `user_profiles`                       | users-service         | GAP: auth-service exposes no user listing yet; an admin listing endpoint is the documented prerequisite                                                                                                                                                                                                                                                           |
+| `user_profiles`                       | users-service         | HYBRID since Sprint 9.6 (ADR 0018): the identity seed (user_id, email) is projected and re-seedable — still behind the same GAP (auth-service exposes no user listing) — but the profile columns and the `organization_profile_fields`/`profile_field_values` tables are SOURCE OF TRUTH. Losing them is losing data; this database stopped being disposable      |
 | `ticket_refs`                         | notification-service  | Per organization, by construction: tickets-service `GET /tickets` is tenant-scoped, so a rebuild runs once per organization with that organization's staff token, and the rebuilt rows take their tenant from the caller's scope (R13). A cross-tenant "rebuild everything" read no longer exists                                                                 |
 | `ticket_snapshots` / `user_snapshots` | analytics-service     | Ticket snapshots: per organization via the scoped `GET /tickets`, same shape as ticket_refs. User snapshots: GAP twice over — registrations need the auth listing above, and the organization stamp would need a reconciliation script against `helpdesk_organizations` (the `backfill-directory-memberships.sh` pattern), which is not built                     |
 | `notifications`                       | notification-service  | NON-REBUILDABLE BY DESIGN: derived state plus per-user readAt; accepted as ephemeral UX, not records                                                                                                                                                                                                                                                              |
@@ -95,6 +95,14 @@ be followed by the tenant backfill**
 refetch source itself supplies the organization, which today it does not.
 That stays true until the rebuild procedures are re-scoped (R13), and it is
 the reason the backfill script is idempotent rather than one-shot.
+
+Since Sprint 9.6 there is a second store in that category: users-service's
+profile columns and organization-defined field tables (ADR 0018). A person's
+edited phone number exists nowhere else — no replay, no refetch and no
+operator script brings it back. The registration consumer and the profile
+API co-own `user_profiles` and must never overlap columns; the schema
+comment names which columns belong to whom, and a test pins that a replayed
+registration leaves profile columns alone.
 
 `organizations` and `memberships` are the first data here that is neither a
 projection nor a record of something that already happened. Every other store

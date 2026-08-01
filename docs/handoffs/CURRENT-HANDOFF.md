@@ -1,14 +1,14 @@
 # Current handoff
 
 **Date:** 2026-07-31
-**Sprint:** 9.5 — branches, departments and operational stations, implemented; 9.4 (tenancy migration) complete
+**Sprint:** 9.6 — profiles and organization-defined identity fields, implemented; 9.5 and the tenancy migration complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
 
-Read `docs/progress/SPRINT-009.5.md` first (its Definition of Ready carries
-the six decisions and the outcome record), then `SPRINT-009.4.md` for the
-completed tenancy migration.
+Read `docs/progress/SPRINT-009.6.md` first (DoR, decisions D1-D7, outcome),
+then ADR 0018 — users-service is no longer disposable, and a session that
+forgets that will document fiction. 9.5 and 9.4 are in their own documents.
 
 ## The migration is done. What that means concretely
 
@@ -80,6 +80,26 @@ Three things NOT to do: do not add branch fields to ticket event payloads
 (that is a v3 when a consumer needs it); do not give organizations-service
 a JWT or a gateway route (9.8's structural change); do not make
 Actor.branchIds required yet.
+
+## Sprint 9.6 in one breath
+
+user_profiles is a HYBRID now (ADR 0018): identity seed projected, profile
+columns source of truth — the registration consumer's upsert update-arm is
+restricted to identity columns and a test pins that a replay cannot undo a
+rename. Person-level self-edit lives at PATCH /users/me (no permission key;
+works tenantless). Organizations define fields in users-service
+(organization.update): stable immutable key AND type, both locale labels,
+six types with closed declarative validation objects, archival retains
+values. people.update edits members' values through the
+directory-membership check. ONE view-filter decides visibility everywhere;
+staff-only means invisible to the subject too, and a subject writing a
+staff-only key gets 404, not 403 — a 403 confirms the key exists.
+profile.updated.v1 carries changed keys, never values, and is NOT
+tenant-carrying by name.
+
+Three things NOT to do: never let a profile field near authentication (ADR
+0017 — employee_number is an attribute, not a username); never write
+profile columns from a consumer; never put field values in an event.
 
 ## Things that will bite you if you do not know them
 

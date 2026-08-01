@@ -1,7 +1,8 @@
 # Sprint 9.6 — Profiles and organization-defined identity fields
 
-Status: **In progress (2026-07-31).** Definition of Ready below, written and
-checked before any code.
+Status: **Implemented and verified locally (2026-08-01).** The Definition of
+Ready below was written and checked before any code; the outcome record at
+the end says what landed against it.
 
 ## Definition of Ready
 
@@ -154,3 +155,54 @@ display; any change to organizations-service beyond the permission map.
 Dependency complete, state known, criteria and strategy above, the one
 structural decision has its ADR, everything is additive and reversible.
 Proceeding under the standing autonomous authorization.
+
+## Outcome record (2026-08-01)
+
+Every acceptance criterion landed in two commits: the opening (`8384b5a` —
+DoR, ADR 0018, vocabulary keys, code-map grants, the metadata-only
+contract) and the implementation (`4614523`).
+
+**The two-organizations story holds.** Org A defines a required
+employee_number with a `^[0-9]{4}$` pattern: a wrong shape is refused, a
+correct one lands and announces `changedKeys: ['employee_number']` with no
+value in the event, and clearing it is refused. Org B configures nothing
+and its profiles are exactly yesterday's. The walk is pinned at the
+use-case level and the visibility and validation matrices at the domain
+level.
+
+**Staff-only does not leak, not even by implication.** The one view-filter
+decides every response; a subject asking to WRITE a staff-only key gets
+not-found rather than forbidden, because a 403 would confirm the key
+exists. The hybrid-table invariant is enforced twice: the registration
+consumer's upsert update-arm is restricted to identity columns — a test
+proves a replayed registration cannot undo a rename even when the test
+tries to rename through the seed path and fails, which is the restriction
+working.
+
+### What the implementation decided that the DoR had left open
+
+- **A visible-but-not-editable field refuses with 403; an invisible one
+  with 404** — the same existence-hiding discipline tickets uses, applied
+  one level down.
+- **Clearing an unset value is a no-op and announces nothing**; an event
+  that says nothing changed is a bug at the publisher.
+- **Key AND type are immutable** — the DoR promised the key; the
+  implementation extended it to the type, because retyping a field orphans
+  the semantics of every stored value, and a changed type in a PATCH is a
+  409 conflict with the row's identity, not a malformed request.
+
+### Verified
+
+users-service: 53 unit tests across 7 suites (validation matrix per type,
+visibility cell matrix, the acceptance walk, event metadata pinned,
+hybrid-table replay protection), integration green with the migration
+applied to a populated database. The full gate plus all nine integration
+suites and the remote CI result are recorded in the handoff as usual.
+
+## Documentation
+
+Meaningfully changed this sprint: ADR 0018 (new — the ownership decision
+and its stated cost), `data-ownership.md` (user_profiles' rebuild row tells
+the truth about the hybrid; the non-rebuildable category gained its second
+member), this document, and the handoff. No fictional experience,
+customers, incidents or approvals were introduced.
