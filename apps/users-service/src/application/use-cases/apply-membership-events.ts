@@ -1,5 +1,6 @@
 import type {
   ApplyMembershipCreated,
+  ApplyMembershipRoleChanged,
   ApplyMembershipStatusChanged,
   MembershipProjectionRepository,
 } from '../ports/membership-projection.repository';
@@ -24,5 +25,14 @@ export class ApplyMembershipStatusChangedUseCase {
 
   async execute(input: ApplyMembershipStatusChanged): Promise<void> {
     await this.memberships.applyStatusChanged(input);
+  }
+}
+
+export class ApplyMembershipRoleChangedUseCase {
+  constructor(private readonly memberships: MembershipProjectionRepository) {}
+
+  /** Resolves false when the edge was unknown and the event was skipped. */
+  async execute(input: ApplyMembershipRoleChanged): Promise<boolean> {
+    return this.memberships.applyRoleChanged(input);
   }
 }

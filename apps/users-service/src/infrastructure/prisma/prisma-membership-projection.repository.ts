@@ -1,6 +1,7 @@
 import { LOST_CREATED_ROLE_TEMPLATE } from '../../domain/directory-membership';
 import type {
   ApplyMembershipCreated,
+  ApplyMembershipRoleChanged,
   ApplyMembershipStatusChanged,
   MembershipProjectionRepository,
 } from '../../application/ports/membership-projection.repository';
@@ -55,5 +56,27 @@ export class PrismaMembershipProjectionRepository implements MembershipProjectio
           THEN EXCLUDED.status ELSE directory_memberships.status END,
         updated_at = GREATEST(directory_memberships.updated_at, EXCLUDED.updated_at)
     `;
+  }
+
+  async applyRoleChanged(input: ApplyMembershipRoleChanged): Promise<boolean> {
+    // A plain UPDATE, deliberately without applyStatusChanged's insert arm:
+    // that placeholder may invent a role because it errs downward on
+    // privilege while pinning the safety-relevant fact the event carries
+    // (the status). A role-changed event carries no status, so a row shaped
+    // from it would be a guess in both directions, and the operator script
+    // (backfill-directory-memberships.sh) is the documented reconciliation
+    // (see the port contract). Zero affected rows IS that missing-row skip;
+    // the consumer warns on it.
+    const affected = await this.prisma.$executeRaw`
+      UPDATE directory_memberships SET
+        role_template = CASE
+          WHEN directory_memberships.updated_at <= ${input.occurredAt}
+          THEN ${input.toTemplate}
+          ELSE directory_memberships.role_template END,
+        updated_at = GREATEST(directory_memberships.updated_at, ${input.occurredAt})
+      WHERE organization_id = ${input.organizationId}::uuid
+        AND user_id = ${input.userId}::uuid
+    `;
+    return affected > 0;
   }
 }

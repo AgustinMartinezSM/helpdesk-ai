@@ -5,6 +5,7 @@ import {
 import type { UserProfile } from '../../domain/user-profile';
 import type {
   ApplyMembershipCreated,
+  ApplyMembershipRoleChanged,
   ApplyMembershipStatusChanged,
   MembershipProjectionRepository,
 } from '../ports/membership-projection.repository';
@@ -17,8 +18,9 @@ import type {
 
 /**
  * Mirrors the SQL semantics exactly (LWW guard with <=, requester-shaped
- * insert on a lost created event) so use-case specs exercise the same rules
- * the real repository enforces atomically.
+ * insert on a lost created event, role-changed skipping unknown edges) so
+ * use-case specs exercise the same rules the real repository enforces
+ * atomically.
  */
 export class InMemoryMembershipProjectionRepository implements MembershipProjectionRepository {
   readonly rows = new Map<string, DirectoryMembership>();
@@ -72,6 +74,25 @@ export class InMemoryMembershipProjectionRepository implements MembershipProject
         Math.max(existing.updatedAt.getTime(), input.occurredAt.getTime()),
       ),
     });
+  }
+
+  async applyRoleChanged(input: ApplyMembershipRoleChanged): Promise<boolean> {
+    const key = this.key(input.organizationId, input.userId);
+    const existing = this.rows.get(key);
+    if (!existing) {
+      // Skip, never create (see the port contract): a template without a
+      // status is a guess in both directions.
+      return false;
+    }
+    const wins = existing.updatedAt <= input.occurredAt;
+    this.rows.set(key, {
+      ...existing,
+      roleTemplate: wins ? input.toTemplate : existing.roleTemplate,
+      updatedAt: new Date(
+        Math.max(existing.updatedAt.getTime(), input.occurredAt.getTime()),
+      ),
+    });
+    return true;
   }
 
   /** Read side the profile fake scopes its listing with. */

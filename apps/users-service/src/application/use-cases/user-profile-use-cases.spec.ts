@@ -16,6 +16,7 @@ import {
 } from '../testing/fakes';
 import {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipRoleChangedUseCase,
   ApplyMembershipStatusChangedUseCase,
 } from './apply-membership-events';
 import {
@@ -63,6 +64,7 @@ function buildContext() {
     register: new RegisterUserProfileUseCase(profiles, clock),
     applyCreated: new ApplyMembershipCreatedUseCase(memberships),
     applyStatusChanged: new ApplyMembershipStatusChangedUseCase(memberships),
+    applyRoleChanged: new ApplyMembershipRoleChangedUseCase(memberships),
     getMine: new GetMyProfileUseCase(profiles),
     list: new ListUserProfilesUseCase(profiles),
   };
@@ -172,6 +174,54 @@ describe('membership projection', () => {
     expect(stored?.status).toBe('suspended');
     expect(stored?.roleTemplate).toBe('agent');
     expect(stored?.updatedAt).toEqual(new Date('2026-07-28T13:00:00.000Z'));
+  });
+
+  it('applies a newer role-change and ignores a stale replay', async () => {
+    const ctx = buildContext();
+    await ctx.applyCreated.execute({
+      ...EDGE,
+      roleTemplate: 'requester',
+      status: 'active',
+      occurredAt: new Date('2026-07-28T12:00:01.000Z'),
+    });
+
+    await expect(
+      ctx.applyRoleChanged.execute({
+        ...EDGE,
+        toTemplate: 'agent',
+        occurredAt: new Date('2026-07-28T13:00:00.000Z'),
+      }),
+    ).resolves.toBe(true);
+
+    // A stale event replayed later (e.g. DLQ replay) must not regress.
+    await ctx.applyRoleChanged.execute({
+      ...EDGE,
+      toTemplate: 'requester',
+      occurredAt: new Date('2026-07-28T12:30:00.000Z'),
+    });
+
+    const stored = ctx.memberships.rows.get(`${ORG_A}:${USER.id}`);
+    expect(stored?.roleTemplate).toBe('agent');
+    expect(stored?.status).toBe('active');
+    expect(stored?.updatedAt).toEqual(new Date('2026-07-28T13:00:00.000Z'));
+  });
+
+  it('skips a role-change on an unseen edge without inventing a row', async () => {
+    const ctx = buildContext();
+
+    // Unlike the status-change placeholder below, nothing here can err
+    // downward: a template without a status is a guess in both directions,
+    // so the skip (surfaced as false, warned by the consumer) plus the
+    // operator script are the recovery path.
+    await expect(
+      ctx.applyRoleChanged.execute({
+        ...EDGE,
+        toTemplate: 'agent',
+        occurredAt: new Date('2026-07-28T13:00:00.000Z'),
+      }),
+    ).resolves.toBe(false);
+
+    expect(ctx.memberships.rows.size).toBe(0);
   });
 
   it('creates a requester-shaped row for a status-change on an unseen edge', async () => {

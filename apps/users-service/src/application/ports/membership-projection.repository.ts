@@ -19,6 +19,14 @@ export interface ApplyMembershipStatusChanged {
   occurredAt: Date;
 }
 
+export interface ApplyMembershipRoleChanged {
+  organizationId: string;
+  userId: string;
+  toTemplate: string;
+  /** The payload's own timestamp (changedAt); becomes the row's updated_at. */
+  occurredAt: Date;
+}
+
 /**
  * Write side of the directory's membership projection. Both applies are
  * last-writer-wins upserts keyed on (organizationId, userId): an event is
@@ -37,4 +45,16 @@ export interface MembershipProjectionRepository {
    * truth later.
    */
   applyStatusChanged(input: ApplyMembershipStatusChanged): Promise<void>;
+  /**
+   * Unlike applyStatusChanged, a missing row is SKIPPED, never created. The
+   * status-changed placeholder invents privilege downward (requester) while
+   * pinning the safety-relevant fact the event actually carries (the
+   * status); a role-changed event carries no status, so a row shaped from
+   * it would be a guess in both directions — upward on privilege or wrong
+   * on liveness. The operator script
+   * (infrastructure/postgres/operations/backfill-directory-memberships.sh)
+   * is the documented reconciliation. Resolves false on that skip so the
+   * caller can warn.
+   */
+  applyRoleChanged(input: ApplyMembershipRoleChanged): Promise<boolean>;
 }

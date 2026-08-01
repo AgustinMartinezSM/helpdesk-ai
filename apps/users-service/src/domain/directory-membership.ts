@@ -1,6 +1,7 @@
 /**
  * Local projection of a membership edge owned by organizations-service,
- * rebuilt from membership.created.v1 / membership.status-changed.v1 events.
+ * rebuilt from the membership.created.v1 / membership.status-changed.v1 /
+ * membership.role-changed.v1 events.
  * organizations-service remains the source of truth for who belongs where;
  * this row exists so the directory can be scoped to an organization without
  * a synchronous call on every read (ADR 0014 forbids that dependency).

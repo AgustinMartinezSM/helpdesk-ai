@@ -1,5 +1,6 @@
 import {
   membershipCreatedV1,
+  membershipRoleChangedV1,
   membershipStatusChangedV1,
   requireEnvelopeOrganization,
   type MessagingClient,
@@ -7,6 +8,7 @@ import {
 } from '@helpdesk-ai/messaging';
 import type {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipRoleChangedUseCase,
   ApplyMembershipStatusChangedUseCase,
 } from '../../application/use-cases/apply-membership-events';
 
@@ -26,6 +28,7 @@ export class MembershipEventsConsumer {
     private readonly messaging: MessagingClient,
     private readonly applyCreated: ApplyMembershipCreatedUseCase,
     private readonly applyStatusChanged: ApplyMembershipStatusChangedUseCase,
+    private readonly applyRoleChanged: ApplyMembershipRoleChangedUseCase,
     private readonly logger?: MessagingLogger,
   ) {}
 
@@ -49,7 +52,11 @@ export class MembershipEventsConsumer {
   async start(): Promise<void> {
     await this.messaging.subscribe({
       queue: MEMBERSHIP_EVENTS_QUEUE,
-      contracts: [membershipCreatedV1, membershipStatusChangedV1],
+      contracts: [
+        membershipCreatedV1,
+        membershipStatusChangedV1,
+        membershipRoleChangedV1,
+      ],
       prefetch: 1,
       handler: async (event) => {
         // A tenantless envelope dead-letters instead of projecting a row no
@@ -77,6 +84,26 @@ export class MembershipEventsConsumer {
               occurredAt: new Date(event.payload.changedAt),
             });
             return;
+          case 'membership.role-changed.v1': {
+            const applied = await this.applyRoleChanged.execute({
+              organizationId: event.payload.organizationId,
+              userId: event.payload.userId,
+              toTemplate: event.payload.toTemplate,
+              occurredAt: new Date(event.payload.changedAt),
+            });
+            if (!applied) {
+              // An unseen edge means the created event was lost. No
+              // placeholder row here, unlike status-changed (see the port
+              // contract for the asymmetry): this warning plus the backfill
+              // script are the recovery path.
+              this.logger?.warn(
+                `skipped membership.role-changed.v1 for unknown membership ` +
+                  `${event.payload.organizationId}/${event.payload.userId}; ` +
+                  `backfill-directory-memberships.sh reconciles it`,
+              );
+            }
+            return;
+          }
         }
       },
     });

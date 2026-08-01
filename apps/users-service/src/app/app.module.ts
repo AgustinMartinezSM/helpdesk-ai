@@ -17,6 +17,7 @@ import {
 } from '../application/ports/user-profile.repository';
 import {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipRoleChangedUseCase,
   ApplyMembershipStatusChangedUseCase,
 } from '../application/use-cases/apply-membership-events';
 import {
@@ -112,6 +113,12 @@ export class AppModule {
           inject: [MEMBERSHIP_PROJECTION_REPOSITORY],
         },
         {
+          provide: ApplyMembershipRoleChangedUseCase,
+          useFactory: (memberships: MembershipProjectionRepository) =>
+            new ApplyMembershipRoleChangedUseCase(memberships),
+          inject: [MEMBERSHIP_PROJECTION_REPOSITORY],
+        },
+        {
           provide: RegistrationConsumer,
           useFactory: (
             messaging: MessagingClient,
@@ -126,18 +133,21 @@ export class AppModule {
             messaging: MessagingClient,
             applyCreated: ApplyMembershipCreatedUseCase,
             applyStatusChanged: ApplyMembershipStatusChangedUseCase,
+            applyRoleChanged: ApplyMembershipRoleChangedUseCase,
             logger: Logger,
           ) =>
             new MembershipEventsConsumer(
               messaging,
               applyCreated,
               applyStatusChanged,
+              applyRoleChanged,
               logger,
             ),
           inject: [
             MessagingClient,
             ApplyMembershipCreatedUseCase,
             ApplyMembershipStatusChangedUseCase,
+            ApplyMembershipRoleChangedUseCase,
             Logger,
           ],
         },

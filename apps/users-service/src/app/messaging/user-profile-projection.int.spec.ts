@@ -18,12 +18,14 @@ import { randomUUID } from 'node:crypto';
 import {
   MessagingClient,
   membershipCreatedV1,
+  membershipRoleChangedV1,
   membershipStatusChangedV1,
   userRegisteredV1,
 } from '@helpdesk-ai/messaging';
 import { SystemClock } from '../../application/ports/user-profile.repository';
 import {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipRoleChangedUseCase,
   ApplyMembershipStatusChangedUseCase,
 } from '../../application/use-cases/apply-membership-events';
 import { RegisterUserProfileUseCase } from '../../application/use-cases/register-user-profile';
@@ -101,6 +103,7 @@ describe('user profile projection (real broker, real database)', () => {
       consumerClient,
       new ApplyMembershipCreatedUseCase(memberships),
       new ApplyMembershipStatusChangedUseCase(memberships),
+      new ApplyMembershipRoleChangedUseCase(memberships),
     );
     await membershipConsumer.start();
   });
@@ -201,6 +204,28 @@ describe('user profile projection (real broker, real database)', () => {
     // role_template survives a status change; updated_at is the payload's.
     expect(suspended.roleTemplate).toBe('agent');
     expect(suspended.updatedAt).toEqual(new Date('2026-07-30T13:00:00.000Z'));
+
+    await publisherClient.publish(
+      membershipRoleChangedV1,
+      {
+        membershipId: randomUUID(),
+        organizationId,
+        userId,
+        fromTemplate: 'agent',
+        toTemplate: 'branch_manager',
+        version: 3,
+        changedAt: '2026-07-30T14:00:00.000Z',
+      },
+      { organizationId },
+    );
+
+    const promoted = await waitFor(async () => {
+      const row = await membershipRow(organizationId, userId);
+      return row?.roleTemplate === 'branch_manager' ? row : null;
+    });
+    // The role change carries no status fact, so status survives it.
+    expect(promoted.status).toBe('suspended');
+    expect(promoted.updatedAt).toEqual(new Date('2026-07-30T14:00:00.000Z'));
   });
 
   it('scopes the directory listing end-to-end against the real database', async () => {
