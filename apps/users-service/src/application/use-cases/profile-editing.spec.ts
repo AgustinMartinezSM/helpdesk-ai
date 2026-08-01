@@ -7,7 +7,7 @@ import {
   ProfileNotFoundError,
   RequiredFieldValueError,
 } from '../../domain/errors';
-import type { ProfileUpdatedEvent } from '../ports/profile-event.publisher';
+import type { ProfileUpdatedNotification } from '../ports/profile-event.publisher';
 import {
   FixedClock,
   InMemoryFieldDefinitionRepository,
@@ -47,9 +47,9 @@ const SUBJECT: Actor = {
 };
 
 class CapturingProfileEventPublisher {
-  readonly events: ProfileUpdatedEvent[] = [];
+  readonly events: ProfileUpdatedNotification[] = [];
 
-  async profileUpdated(event: ProfileUpdatedEvent): Promise<void> {
+  async profileUpdated(event: ProfileUpdatedNotification): Promise<void> {
     this.events.push(event);
   }
 }
