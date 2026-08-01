@@ -176,16 +176,25 @@ describe('audit trail (real broker, real database)', () => {
     });
 
     // Each probe pops one message; strays from other local activity are
-    // dropped, and only this run's envelope id ends the wait.
+    // dropped, and only this run's envelope id ends the wait. Strays are
+    // not even guaranteed to be JSON: the messaging lib's own suite proves
+    // its dead-lettering with deliberately undecodable bodies, the firehose
+    // receives every one of them through '#', and they land here — so a
+    // parse failure is a stray to skip, never a test failure.
     const deadLettered = await waitFor(async () => {
       const message = await rawChannel.get(DLQ, { noAck: true });
       if (message === false) {
         return null;
       }
-      const body = JSON.parse(message.content.toString('utf-8')) as {
-        id: string;
-        type: string;
-      };
+      let body: { id: string; type: string };
+      try {
+        body = JSON.parse(message.content.toString('utf-8')) as {
+          id: string;
+          type: string;
+        };
+      } catch {
+        return null;
+      }
       return body.id === envelope.id ? body : null;
     });
 
