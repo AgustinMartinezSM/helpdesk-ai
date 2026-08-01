@@ -349,3 +349,26 @@ export const stationUpdatedV1 = defineEvent(
     updatedAt: z.iso.datetime(),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Profile events. NOT tenant-carrying by name, deliberately: a person-level
+// profile edit can legitimately happen with no organization — the
+// belongs-nowhere state fixes their own phone number — so the envelope
+// carries the organization when the actor has one and the audit trail
+// records the rest with null, exactly the user.registered.v1 shape.
+//
+// The payload names WHICH keys changed and never the values: a value in an
+// event would sit in the audit trail's jsonb forever (see the retention note
+// in data-ownership.md), and no consumer needs it — the trail records that a
+// change happened, the profile itself is the record of what it is now.
+// ---------------------------------------------------------------------------
+
+export const profileUpdatedV1 = defineEvent(
+  'profile.updated.v1',
+  z.object({
+    userId: z.uuid(),
+    /** Person-level column names and/or organization field keys. */
+    changedKeys: z.array(z.string().min(1)).min(1),
+    updatedAt: z.iso.datetime(),
+  }),
+);

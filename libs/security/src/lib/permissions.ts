@@ -14,8 +14,18 @@
 export const PERMISSIONS = {
   /** Present in every template: being a member means seeing the workspace. */
   ORGANIZATION_READ: 'organization.read',
+  /**
+   * Organization configuration — first call site: managing the
+   * organization-defined profile field definitions.
+   */
+  ORGANIZATION_UPDATE: 'organization.update',
   /** The people directory. Listing profiles, not managing them. */
   PEOPLE_READ: 'people.read',
+  /**
+   * Editing someone else's profile values. Editing your own person-level
+   * fields needs no key — being yourself is the authorization.
+   */
+  PEOPLE_UPDATE: 'people.update',
   TICKETS_CREATE: 'tickets.create',
   /** Own requests only; the requester's default visibility. */
   TICKETS_READ_OWN: 'tickets.read_own',

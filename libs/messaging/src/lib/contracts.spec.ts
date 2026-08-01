@@ -6,6 +6,7 @@ import {
   membershipCreatedV1,
   membershipRoleChangedV1,
   membershipStatusChangedV1,
+  profileUpdatedV1,
   MissingTenantContextError,
   requireEnvelopeOrganization,
   stationCreatedV1,
@@ -515,5 +516,35 @@ describe('requireEnvelopeOrganization', () => {
     expect(() => requireEnvelopeOrganization(envelope)).toThrow(
       'membership.created.v1',
     );
+  });
+});
+
+describe('profile.updated.v1', () => {
+  it('accepts changed keys and rejects an empty change set', () => {
+    expect(
+      profileUpdatedV1.payloadSchema.safeParse({
+        userId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+        changedKeys: ['phone', 'employee_number'],
+        updatedAt: '2026-07-31T12:00:00.000Z',
+      }).success,
+    ).toBe(true);
+    // An event announcing that nothing changed is a bug at the publisher.
+    expect(
+      profileUpdatedV1.payloadSchema.safeParse({
+        userId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+        changedKeys: [],
+        updatedAt: '2026-07-31T12:00:00.000Z',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('never carries values: the payload shape has no room for them', () => {
+    const parsed = profileUpdatedV1.payloadSchema.parse({
+      userId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+      changedKeys: ['phone'],
+      updatedAt: '2026-07-31T12:00:00.000Z',
+      phone: '+54 11 5555-5555',
+    } as never);
+    expect(parsed).not.toHaveProperty('phone');
   });
 });

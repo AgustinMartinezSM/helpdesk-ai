@@ -76,7 +76,14 @@ const AGENT_PERMISSIONS: ReadonlySet<string> = new Set([
 
 const ORGANIZATION_ADMIN_PERMISSIONS: ReadonlySet<string> = new Set([
   PERMISSIONS.ORGANIZATION_READ,
+  // First call sites in Sprint 9.6: managing the profile-field definitions
+  // (organization.update) and editing someone else's values (people.update).
+  // Matrix ● cells for owner and admin; branch_manager's own-scope
+  // people.update stays unrepresented until branch-scoped editing means
+  // something.
+  PERMISSIONS.ORGANIZATION_UPDATE,
   PERMISSIONS.PEOPLE_READ,
+  PERMISSIONS.PEOPLE_UPDATE,
   PERMISSIONS.TICKETS_CREATE,
   PERMISSIONS.TICKETS_READ_OWN,
   PERMISSIONS.TICKETS_READ_ALL,
