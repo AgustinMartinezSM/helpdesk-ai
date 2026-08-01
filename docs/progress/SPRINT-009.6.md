@@ -197,7 +197,8 @@ users-service: 53 unit tests across 7 suites (validation matrix per type,
 visibility cell matrix, the acceptance walk, event metadata pinned,
 hybrid-table replay protection), integration green with the migration
 applied to a populated database. The full gate plus all nine integration
-suites and the remote CI result are recorded in the handoff as usual.
+suites ran green locally, and remotely GitHub Actions run `30681958652` on
+`42b0456` was green on its first attempt.
 
 ## Documentation
 
