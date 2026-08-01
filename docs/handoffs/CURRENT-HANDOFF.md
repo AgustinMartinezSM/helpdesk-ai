@@ -1,14 +1,14 @@
 # Current handoff
 
 **Date:** 2026-07-31
-**Sprint:** 9.4 — the tenancy migration, complete (phases 0–8)
+**Sprint:** 9.5 — branches, departments and operational stations, implemented; 9.4 (tenancy migration) complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
 
-Read `docs/progress/SPRINT-009.4.md` first — it covers the whole sprint,
-including phases 7 and 8 — then `docs/architecture/tenancy-phase-7-readiness.md`
-for the enforcement record.
+Read `docs/progress/SPRINT-009.5.md` first (its Definition of Ready carries
+the six decisions and the outcome record), then `SPRINT-009.4.md` for the
+completed tenancy migration.
 
 ## The migration is done. What that means concretely
 
@@ -59,6 +59,27 @@ membership lifecycle publishes born-tenant-carrying events and bumps `mv`,
 and assignment re-validates the assignee against live membership,
 fail-closed (ADR 0014's amendment: high-consequence mutations may ask
 synchronously, read paths never).
+
+## Sprint 9.5 in one breath
+
+The structure exists (branches/departments/stations with real FKs in
+organizations-service, internal operator endpoints, born-tenant-carrying
+events), the token carries the branch set (`br`, minted only when
+non-empty; Actor.branchIds optional — absence denies), tickets validate
+branch/station context against local projections fed by this service's
+FIRST consumer (fail-closed 422, one generic message per concept), branch
+visibility is live (read_all org-wide; read_branch = covered branches plus
+own; branchless tickets deliberately invisible to branch managers until
+routing exists), and the create-form pickers are served by tickets-service
+(GET /tickets/branches — declared BEFORE ':id', a test pins the route
+order). role-changed events keep the directory's template fresh. Department
+rows exist but nothing keys on them yet, by scope. ADR 0016's amendment
+records the dropped scope-qualifier experiment.
+
+Three things NOT to do: do not add branch fields to ticket event payloads
+(that is a v3 when a consumer needs it); do not give organizations-service
+a JWT or a gateway route (9.8's structural change); do not make
+Actor.branchIds required yet.
 
 ## Things that will bite you if you do not know them
 
@@ -129,13 +150,12 @@ git-ignored.
 
 ## Exact next action
 
-The tenancy migration is closed. The dependency map's next stop is
-**Sprint 9.5 — branches, departments, locations and stations**, which needs
-its own Definition of Ready pass (it extends the organizations-service graph
-and touches ticket context). Before or alongside it, two small pieces of
-paid-down debt are worth their own slots: the template-vocabulary decision
-(unblocks seeded role rows), and R9's shared two-tenant fixtures for the
-remaining integration suites.
+Sprint 9.5 needs its remote CI confirmation recorded (`gh run list` for the
+pushed tip), and then the dependency map points at Sprint 9.6 — profiles and
+organization-defined identity fields — which needs its own Definition of
+Ready. The short-debt items stand: the template-vocabulary
+decision (its scope-qualifier half shrank — read_branch plus a branch set
+expresses the own-scope cell now), and R9's shared two-tenant fixtures.
 
 ## Resume commands
 
@@ -150,21 +170,22 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Continue HelpDesk AI. The tenancy migration is COMPLETE (phases 0–8,
-> Sprint 9.4, all on `main` with remote CI green): permission-based
-> authorization with a required permissions set, no roles claim, NOT NULL on
-> seven tenant columns (user_snapshots and audit_events nullable by design),
-> v2-only publishing with self-healing queue bindings, scoped reads
-> everywhere, membership lifecycle with events, fail-closed assignee
-> validation. Read `docs/progress/SPRINT-009.4.md` and the handoff before
+> Continue HelpDesk AI. The tenancy migration is COMPLETE (phases 0–8) and
+> Sprint 9.5 (branches, departments, operational stations) is implemented
+> and verified: structure with real FKs in organizations-service, the br
+> claim, projection-validated ticket branch/station context, branch-scoped
+> visibility, pickers in tickets-service, all on `main`. Read
+> `docs/progress/SPRINT-009.5.md` (DoR + outcome) and the handoff before
 > touching anything.
 >
-> Next: Sprint 9.5 (branches, departments, operational stations) starting
-> with its Definition of Ready — audit what the organizations-service graph
-> needs, propose the schema and visibility rules, and stop for approval on
-> structural decisions. Do not seed role-template rows (vocabulary question
-> still open), do not remove the retiredBindingKeys literals, and do not
-> "finish" the two nullable-by-design tenant columns.
+> Next: Sprint 9.6 (profiles and organization-defined identity fields)
+> starting with its own Definition of Ready — audit the current profile
+> projection, design the org-defined field configuration per the master
+> brief's §14, and mind ADR 0017's line between profile attributes and
+> authentication identifiers. Do not seed role-template rows (vocabulary
+> question still open), do not remove the retiredBindingKeys literals, do
+> not add branch fields to ticket event payloads, and do not give
+> organizations-service a JWT or gateway route yet.
 
 ## Repository isolation
 

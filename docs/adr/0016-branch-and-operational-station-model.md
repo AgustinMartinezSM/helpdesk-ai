@@ -110,6 +110,22 @@ expressible either way, and I do not have enough real usage to choose. I have
 modelled a `scope` column and would happily drop it if the first
 implementation shows the role template already carries the meaning.
 
+**Settled in Sprint 9.5: the column was dropped before it existed.** The
+first implementation shipped `branch_memberships` as a bare
+(membership, branch) pair, and the role template does carry the meaning:
+branch_manager × branch set reads as "manages these", agent/requester ×
+branch set as "works at these", and `tickets.read_branch` plus the resolved
+branch set expresses the visibility cell the approved matrix marked
+own-scope — without any new vocabulary. That also shrinks the pending
+scope-qualifier question to the cells no branch set can express (team and
+desk scopes), which arrive with their own tables. If a real organization
+someday needs "works at store 12 but manages store 9", the answer the model
+already supports is what this ADR's identity rules imply: that is one
+membership with a manager template covering both branches — and if usage
+proves that too coarse, the qualifier column returns as an additive
+migration, which is exactly the reversibility this experiment was chosen
+for.
+
 I am also aware that "operational station" is a technical term. The UI should
 say _cashier station 2_ or _reception desk_, and the glossary should carry
 both — the model does not need the product's vocabulary and the product does

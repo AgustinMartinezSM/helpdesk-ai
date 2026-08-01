@@ -1,7 +1,8 @@
 # Sprint 9.5 — Branches, departments and operational stations
 
-Status: **In progress (2026-07-31).** Definition of Ready below, written and
-checked before any code.
+Status: **Implemented and verified locally (2026-07-31).** The Definition of
+Ready below was written and checked before any code; the outcome record at
+the end says what landed against it.
 
 ## Definition of Ready
 
@@ -151,3 +152,68 @@ either implement an accepted ADR or conserve an existing boundary; none is
 destructive or hard to reverse. Proceeding under the standing autonomous
 authorization, with each decision recorded in its owning document as it
 lands.
+
+## Outcome record (2026-07-31)
+
+Every acceptance criterion landed, in four commits: the structure and its
+events (`b061d86`), the `br` claim (`0c74dd7`), role changes in the
+directory (`e5f044d`), and ticket context with branch-scoped visibility
+(`a1c0877`).
+
+**The retail scenario holds end to end at the API level.** A branch and a
+till exist as rows with real foreign keys; a request can name both; the
+projection-backed validation refuses nonexistent, archived and foreign
+branches with one indistinguishable 422; a branch manager's list shows their
+store plus their own requests and never the neighbor store, the unrouted
+intake, or another organization — pinned by identity against the real SQL
+with the same requester planted across branches and organizations; and an
+org admin filters organization-wide by branch.
+
+### What the implementation decided that the DoR had left open
+
+- **An archive is an update.** One `branch.updated.v1` covers rename, status
+  and timezone changes: consumers project last-write state, not a
+  lifecycle, so a second contract would have added nothing but a second
+  binding.
+- **A branchless ticket is invisible to branch managers on purpose.**
+  Unrouted intake belongs to the central view until routing (9.11) exists —
+  the alternative silently turns every branch manager into a triage queue.
+- **The list's branch-visibility OR is one filter field (`branchScope`),
+  not two composable optionals**, because either half alone means something
+  narrower or wider than the visibility rule, and a call site should not be
+  able to assemble the wrong sentence from correct words.
+- **Archived branches stay in the resolved branch set.** A manager keeps
+  seeing the history of a store that closed; archiving hides the branch
+  from pickers, not from accountability.
+- **The status vocabulary stays unfrozen strings end to end**, with one
+  pinned word (`active`) that the projections key on — renaming statuses in
+  organizations-service is one edit in tickets-service, not a contract
+  change.
+
+### Deviations from the DoR
+
+None of substance. ADR 0016's amendment records the D3 outcome (the scope
+qualifier column was dropped before it existed, and the role template does
+carry the meaning). Department behavior remains schema-plus-endpoints with
+no events and nothing keying on rows, exactly as scoped out.
+
+### Verified
+
+Unit suites green across the four touched projects (organizations 149,
+tickets 78, users 23, auth 42, messaging 62), including the DoR's
+adversarial matrix verbatim. Integration against real PostgreSQL and
+RabbitMQ: the structure events reach a queue with the tenant on the
+envelope, a role change resolves to the new template's permissions,
+branch memberships round-trip into `branchIds`, the tickets migration
+applied to a populated database, the branch-visibility predicate and the
+projection scoping pinned by identity at the SQL level, and the LWW guard
+proven unable to resurrect an archived branch from a replay. The full gate
+and all nine integration suites, plus the remote CI result, are recorded in
+the handoff as usual.
+
+## Documentation
+
+Meaningfully changed this sprint: this document (the first sprint opened
+with a written Definition of Ready — worth keeping as the pattern), ADR
+0016's amendment settling its own open question, and the handoff. No
+fictional experience, customers, incidents or approvals were introduced.
