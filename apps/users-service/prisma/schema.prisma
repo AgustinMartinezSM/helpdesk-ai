@@ -3,8 +3,10 @@
 // adapter (ADR 0004).
 //
 // userId is the identifier auth-service issued in user.registered.v1 —
-// never a cross-service foreign key (ADR 0003). This table is a projection
-// rebuilt from events, not the source of truth for identity.
+// never a cross-service foreign key (ADR 0003). Since Sprint 9.6 this
+// database is NOT a pure projection anymore (ADR 0018): profile edits and
+// organization-defined field values are source of truth here, and losing
+// them is losing data.
 
 generator client {
   provider     = "prisma-client"
@@ -16,13 +18,26 @@ datasource db {
   provider = "postgresql"
 }
 
+// HYBRID table (ADR 0018), co-owned by two writers that must never overlap
+// columns:
+// - user_id, email and registered_at are the projected identity seed. The
+//   registration consumer owns them, upserts them on replay, and must never
+//   write anything else — a pinned test proves a replayed
+//   user.registered.v1 leaves the profile columns alone.
+// - display_name, preferred_name, phone, language and timezone are source
+//   of truth owned by the HTTP API. display_name is seeded on CREATE from
+//   the email's local part and user-editable from then on.
 model UserProfile {
-  userId       String   @id @map("user_id") @db.Uuid
-  email        String   @unique
-  displayName  String   @map("display_name")
-  registeredAt DateTime @map("registered_at") @db.Timestamptz(3)
-  createdAt    DateTime @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime @map("updated_at") @db.Timestamptz(3)
+  userId        String   @id @map("user_id") @db.Uuid
+  email         String   @unique
+  displayName   String   @map("display_name")
+  preferredName String?  @map("preferred_name")
+  phone         String?
+  language      String?
+  timezone      String?
+  registeredAt  DateTime @map("registered_at") @db.Timestamptz(3)
+  createdAt     DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @map("updated_at") @db.Timestamptz(3)
 
   @@map("user_profiles")
 }
@@ -49,4 +64,53 @@ model DirectoryMembership {
   @@id([organizationId, userId])
   @@index([userId])
   @@map("directory_memberships")
+}
+
+// Organization-defined profile field definitions (Sprint 9.6, D2/D3).
+// organization_id is an opaque identifier issued by organizations-service,
+// never a cross-database foreign key (ADR 0003). `validation` holds the
+// closed, per-type DECLARATIVE object (length/pattern/min/max/options) —
+// data validated against a fixed schema at write time, never code.
+model OrganizationProfileField {
+  id                 String   @id @db.Uuid
+  organizationId     String   @map("organization_id") @db.Uuid
+  key                String
+  labelEsAr          String   @map("label_es_ar")
+  labelEnUs          String   @map("label_en_us")
+  type               String
+  required           Boolean  @default(false)
+  editableByUser     Boolean  @default(false) @map("editable_by_user")
+  visibleToRequester Boolean  @default(true) @map("visible_to_requester")
+  visibleToStaff     Boolean  @default(true) @map("visible_to_staff")
+  displayOrder       Int      @map("display_order")
+  validation         Json?
+  status             String
+  createdAt          DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @map("updated_at") @db.Timestamptz(3)
+
+  values ProfileFieldValue[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId, status, displayOrder], map: "organization_profile_fields_org_status_order_idx")
+  @@map("organization_profile_fields")
+}
+
+// One value per (field, user), canonical text representation per type (see
+// src/domain/field-validation.ts). The definition FK is real — they live in
+// one database precisely so it can be (ADR 0018) — and deleting a definition
+// cascades its values. organization_id is denormalized on purpose: every
+// read is org-first, and the FK alone would force a join just to know the
+// tenant a value belongs to.
+model ProfileFieldValue {
+  fieldId        String   @map("field_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  value          String
+  updatedAt      DateTime @map("updated_at") @db.Timestamptz(3)
+
+  field OrganizationProfileField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@id([fieldId, userId])
+  @@index([organizationId, userId])
+  @@map("profile_field_values")
 }

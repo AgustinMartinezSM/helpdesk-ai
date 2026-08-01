@@ -2,7 +2,13 @@ import {
   LOST_CREATED_ROLE_TEMPLATE,
   type DirectoryMembership,
 } from '../../domain/directory-membership';
-import type { UserProfile } from '../../domain/user-profile';
+import type { FieldDefinition, FieldValue } from '../../domain/profile-fields';
+import type {
+  PersonProfilePatch,
+  UserProfile,
+} from '../../domain/user-profile';
+import type { FieldDefinitionRepository } from '../ports/field-definition.repository';
+import type { FieldValueRepository } from '../ports/field-value.repository';
 import type {
   ApplyMembershipCreated,
   ApplyMembershipRoleChanged,
@@ -10,7 +16,12 @@ import type {
   MembershipProjectionRepository,
 } from '../ports/membership-projection.repository';
 import type {
+  ProfileEventPublisher,
+  ProfileUpdatedNotification,
+} from '../ports/profile-event.publisher';
+import type {
   Clock,
+  IdGenerator,
   UserProfileRepository,
 } from '../ports/user-profile.repository';
 
@@ -122,8 +133,56 @@ export class InMemoryUserProfileRepository implements UserProfileRepository {
     return this.profiles.get(userId) ?? null;
   }
 
+  async findMember(
+    organizationId: string,
+    userId: string,
+  ): Promise<UserProfile | null> {
+    // Same null for a foreign user, an inactive member and a stranger —
+    // mirroring the scoped SQL, so a spec cannot pass on an unscoped stub.
+    if (!this.memberships.activeUserIds(organizationId).has(userId)) {
+      return null;
+    }
+    return this.profiles.get(userId) ?? null;
+  }
+
   async upsert(profile: UserProfile): Promise<void> {
-    this.profiles.set(profile.userId, profile);
+    const existing = this.profiles.get(profile.userId);
+    if (!existing) {
+      this.profiles.set(profile.userId, profile);
+      return;
+    }
+    // Mirrors the SQL update arm exactly (ADR 0018): a replayed
+    // registration refreshes the identity seed and nothing else.
+    this.profiles.set(profile.userId, {
+      ...existing,
+      email: profile.email,
+      registeredAt: profile.registeredAt,
+      updatedAt: profile.updatedAt,
+    });
+  }
+
+  async updateProfile(
+    userId: string,
+    patch: PersonProfilePatch,
+    updatedAt: Date,
+  ): Promise<void> {
+    const existing = this.profiles.get(userId);
+    if (!existing) {
+      throw new Error(`no profile for ${userId} — mirror of Prisma's P2025`);
+    }
+    this.profiles.set(userId, {
+      ...existing,
+      ...(patch.displayName !== undefined
+        ? { displayName: patch.displayName }
+        : {}),
+      ...(patch.preferredName !== undefined
+        ? { preferredName: patch.preferredName }
+        : {}),
+      ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+      ...(patch.language !== undefined ? { language: patch.language } : {}),
+      ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
+      updatedAt,
+    });
   }
 
   async list(organizationId: string): Promise<UserProfile[]> {
@@ -131,6 +190,142 @@ export class InMemoryUserProfileRepository implements UserProfileRepository {
     return [...this.profiles.values()]
       .filter((profile) => activeIds.has(profile.userId))
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }
+}
+
+/**
+ * Enforces the organization scope for real (R2): a definition created under
+ * one organization is null under any other, and the (organization, key)
+ * uniqueness is checked the way the SQL index would.
+ */
+export class InMemoryFieldDefinitionRepository implements FieldDefinitionRepository {
+  readonly rows = new Map<string, FieldDefinition>();
+
+  async create(definition: FieldDefinition): Promise<FieldDefinition | null> {
+    const duplicate = [...this.rows.values()].some(
+      (row) =>
+        row.organizationId === definition.organizationId &&
+        row.key === definition.key,
+    );
+    if (duplicate) {
+      return null;
+    }
+    this.rows.set(definition.id, definition);
+    return definition;
+  }
+
+  async update(definition: FieldDefinition): Promise<void> {
+    const existing = this.rows.get(definition.id);
+    if (!existing) {
+      throw new Error(`no definition ${definition.id} — mirror of P2025`);
+    }
+    // key and type stay as stored, mirroring the adapter's UPDATE column
+    // list: immutability holds even against a caller that forgets to check.
+    this.rows.set(definition.id, {
+      ...definition,
+      key: existing.key,
+      type: existing.type,
+    });
+  }
+
+  async list(
+    organizationId: string,
+    includeArchived = false,
+  ): Promise<FieldDefinition[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.organizationId === organizationId &&
+          (includeArchived || row.status === 'active'),
+      )
+      .sort(
+        (a, b) => a.displayOrder - b.displayOrder || a.key.localeCompare(b.key),
+      );
+  }
+
+  async findById(
+    organizationId: string,
+    id: string,
+  ): Promise<FieldDefinition | null> {
+    const row = this.rows.get(id);
+    return row && row.organizationId === organizationId ? row : null;
+  }
+
+  async findByKey(
+    organizationId: string,
+    key: string,
+  ): Promise<FieldDefinition | null> {
+    return (
+      [...this.rows.values()].find(
+        (row) => row.organizationId === organizationId && row.key === key,
+      ) ?? null
+    );
+  }
+}
+
+/** Values keyed like the SQL PK; org scope enforced on every read (R2). */
+export class InMemoryFieldValueRepository implements FieldValueRepository {
+  readonly rows = new Map<string, FieldValue>();
+
+  private key(fieldId: string, userId: string): string {
+    return `${fieldId}:${userId}`;
+  }
+
+  async find(fieldId: string, userId: string): Promise<FieldValue | null> {
+    return this.rows.get(this.key(fieldId, userId)) ?? null;
+  }
+
+  async upsert(value: FieldValue): Promise<void> {
+    this.rows.set(this.key(value.fieldId, value.userId), value);
+  }
+
+  async delete(fieldId: string, userId: string): Promise<boolean> {
+    return this.rows.delete(this.key(fieldId, userId));
+  }
+
+  async listForUser(
+    organizationId: string,
+    userId: string,
+  ): Promise<FieldValue[]> {
+    return [...this.rows.values()].filter(
+      (row) => row.organizationId === organizationId && row.userId === userId,
+    );
+  }
+
+  async listForUsers(
+    organizationId: string,
+    userIds: string[],
+  ): Promise<FieldValue[]> {
+    const wanted = new Set(userIds);
+    return [...this.rows.values()].filter(
+      (row) => row.organizationId === organizationId && wanted.has(row.userId),
+    );
+  }
+}
+
+/** Captures outbound profile events so specs can pin keys-only payloads. */
+export class CapturingProfileEventPublisher implements ProfileEventPublisher {
+  readonly published: ProfileUpdatedNotification[] = [];
+
+  async profileUpdated(
+    notification: ProfileUpdatedNotification,
+  ): Promise<void> {
+    this.published.push(notification);
+  }
+}
+
+/** Deterministic ids: seq-0, seq-1, ... or a fixed list when provided. */
+export class SequenceIdGenerator implements IdGenerator {
+  private counter = 0;
+
+  constructor(private readonly fixed: string[] = []) {}
+
+  next(): string {
+    const id =
+      this.fixed[this.counter] ??
+      `00000000-0000-4000-8000-${String(this.counter).padStart(12, '0')}`;
+    this.counter += 1;
+    return id;
   }
 }
 

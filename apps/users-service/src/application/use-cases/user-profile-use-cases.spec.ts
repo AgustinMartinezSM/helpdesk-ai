@@ -11,6 +11,8 @@ import { LOST_CREATED_ROLE_TEMPLATE } from '../../domain/directory-membership';
 import { displayNameFromEmail } from '../../domain/user-profile';
 import {
   FixedClock,
+  InMemoryFieldDefinitionRepository,
+  InMemoryFieldValueRepository,
   InMemoryMembershipProjectionRepository,
   InMemoryUserProfileRepository,
 } from '../testing/fakes';
@@ -56,6 +58,8 @@ const REGISTRATION = {
 function buildContext() {
   const memberships = new InMemoryMembershipProjectionRepository();
   const profiles = new InMemoryUserProfileRepository(memberships);
+  const definitions = new InMemoryFieldDefinitionRepository();
+  const values = new InMemoryFieldValueRepository();
   const clock = new FixedClock(new Date('2026-07-28T12:00:05.000Z'));
   return {
     memberships,
@@ -65,8 +69,8 @@ function buildContext() {
     applyCreated: new ApplyMembershipCreatedUseCase(memberships),
     applyStatusChanged: new ApplyMembershipStatusChangedUseCase(memberships),
     applyRoleChanged: new ApplyMembershipRoleChangedUseCase(memberships),
-    getMine: new GetMyProfileUseCase(profiles),
-    list: new ListUserProfilesUseCase(profiles),
+    getMine: new GetMyProfileUseCase(profiles, definitions, values),
+    list: new ListUserProfilesUseCase(profiles, definitions, values),
   };
 }
 
@@ -104,6 +108,11 @@ describe('RegisterUserProfileUseCase', () => {
       userId: USER.id,
       email: 'ada.lovelace@example.com',
       displayName: 'ada.lovelace',
+      // Person-level fields arrive empty: registration seeds identity only.
+      preferredName: null,
+      phone: null,
+      language: null,
+      timezone: null,
       registeredAt: REGISTRATION.registeredAt,
       createdAt: ctx.clock.now(),
       updatedAt: ctx.clock.now(),
@@ -114,8 +123,14 @@ describe('RegisterUserProfileUseCase', () => {
     const ctx = buildContext();
     const first = await ctx.register.execute(REGISTRATION);
 
-    // Simulate a manual rename before the duplicate delivery arrives.
-    await ctx.profiles.upsert({ ...first, displayName: 'Ada' });
+    // Simulate a manual rename before the duplicate delivery arrives —
+    // through updateProfile, because the upsert's update arm is restricted
+    // to identity columns on purpose (ADR 0018) and cannot rename anybody.
+    await ctx.profiles.updateProfile(
+      USER.id,
+      { displayName: 'Ada' },
+      ctx.clock.now(),
+    );
     ctx.clock.advanceSeconds(60);
 
     await ctx.register.execute(REGISTRATION);
@@ -253,8 +268,8 @@ describe('profile queries', () => {
     );
 
     await ctx.register.execute(REGISTRATION);
-    const profile = await ctx.getMine.execute(USER);
-    expect(profile.userId).toBe(USER.id);
+    const view = await ctx.getMine.execute(USER);
+    expect(view.profile.userId).toBe(USER.id);
   });
 
   it('restricts the directory to people.read holders', async () => {
@@ -267,7 +282,7 @@ describe('profile queries', () => {
     );
 
     const directory = await ctx.list.execute(AGENT);
-    expect(directory.map((p) => p.userId)).toEqual([USER.id]);
+    expect(directory.map((p) => p.profile.userId)).toEqual([USER.id]);
   });
 
   it('refuses a tenantless actor even with people.read', async () => {
@@ -296,7 +311,7 @@ describe('profile queries', () => {
     await joinOrganization(ctx, ORG_B, outsiderId);
 
     const directory = await ctx.list.execute(AGENT);
-    expect(directory.map((p) => p.userId)).toEqual([USER.id]);
+    expect(directory.map((p) => p.profile.userId)).toEqual([USER.id]);
   });
 
   it('drops a suspended member from the listing', async () => {

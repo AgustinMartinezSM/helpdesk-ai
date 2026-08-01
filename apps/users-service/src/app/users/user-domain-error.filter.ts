@@ -6,8 +6,14 @@ import {
 } from '@nestjs/common';
 import { NoOrganizationContextError } from '@helpdesk-ai/security';
 import {
+  DuplicateFieldKeyError,
+  FieldNotFoundError,
   ForbiddenProfileActionError,
+  ImmutableFieldKeyError,
+  InvalidFieldDefinitionError,
+  InvalidFieldValueError,
   ProfileNotFoundError,
+  RequiredFieldValueError,
   UserDomainError,
 } from '../../domain/errors';
 
@@ -47,11 +53,38 @@ function describe(exception: UserDomainError | NoOrganizationContextError): {
   status: number;
   error: string;
 } {
-  if (exception instanceof ProfileNotFoundError) {
+  if (
+    exception instanceof ProfileNotFoundError ||
+    exception instanceof FieldNotFoundError
+  ) {
+    // Foreign, archived and nonexistent answer alike — existence-hiding.
     return { status: HttpStatus.NOT_FOUND, error: 'Not Found' };
   }
   if (exception instanceof ForbiddenProfileActionError) {
     return { status: HttpStatus.FORBIDDEN, error: 'Forbidden' };
+  }
+  if (
+    exception instanceof DuplicateFieldKeyError ||
+    exception instanceof ImmutableFieldKeyError
+  ) {
+    return { status: HttpStatus.CONFLICT, error: 'Conflict' };
+  }
+  if (exception instanceof InvalidFieldDefinitionError) {
+    // The request itself is malformed (bad key, unknown type, validation
+    // object outside its type's closed schema) — a 400, like the DTO layer
+    // it backstops.
+    return { status: HttpStatus.BAD_REQUEST, error: 'Bad Request' };
+  }
+  if (
+    exception instanceof InvalidFieldValueError ||
+    exception instanceof RequiredFieldValueError
+  ) {
+    // Well-formed request, semantically unacceptable value: 422 keeps it
+    // distinguishable from shape errors so clients can show the field rule.
+    return {
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      error: 'Unprocessable Entity',
+    };
   }
   if (exception instanceof NoOrganizationContextError) {
     // Authenticated, but entitled to no directory yet. 403 rather than 404:

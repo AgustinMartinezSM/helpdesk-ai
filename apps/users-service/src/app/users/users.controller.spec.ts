@@ -5,11 +5,15 @@ import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { MessagingClient } from '@helpdesk-ai/messaging';
 import { PERMISSIONS } from '@helpdesk-ai/security';
+import { FIELD_DEFINITION_REPOSITORY } from '../../application/ports/field-definition.repository';
+import { FIELD_VALUE_REPOSITORY } from '../../application/ports/field-value.repository';
 import { MEMBERSHIP_PROJECTION_REPOSITORY } from '../../application/ports/membership-projection.repository';
 import { USER_PROFILE_REPOSITORY } from '../../application/ports/user-profile.repository';
 import { RegisterUserProfileUseCase } from '../../application/use-cases/register-user-profile';
 import {
   FixedClock,
+  InMemoryFieldDefinitionRepository,
+  InMemoryFieldValueRepository,
   InMemoryMembershipProjectionRepository,
   InMemoryUserProfileRepository,
 } from '../../application/testing/fakes';
@@ -33,6 +37,8 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
   let app: INestApplication;
   let memberships: InMemoryMembershipProjectionRepository;
   let profiles: InMemoryUserProfileRepository;
+  let definitions: InMemoryFieldDefinitionRepository;
+  let values: InMemoryFieldValueRepository;
   let userToken: string;
   let agentToken: string;
   let secondOrgAgentToken: string;
@@ -42,6 +48,8 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
     const env = validateEnv(usersServiceEnvSchema, TEST_ENV);
     memberships = new InMemoryMembershipProjectionRepository();
     profiles = new InMemoryUserProfileRepository(memberships);
+    definitions = new InMemoryFieldDefinitionRepository();
+    values = new InMemoryFieldValueRepository();
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
@@ -50,11 +58,18 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
       .useValue(profiles)
       .overrideProvider(MEMBERSHIP_PROJECTION_REPOSITORY)
       .useValue(memberships)
+      // The field projections back the org-defined values; in-memory
+      // doubles keep the suite database-free.
+      .overrideProvider(FIELD_DEFINITION_REPOSITORY)
+      .useValue(definitions)
+      .overrideProvider(FIELD_VALUE_REPOSITORY)
+      .useValue(values)
       // Replacing the client keeps the suite broker-free: the real one owns
       // a live AMQP connection.
       .overrideProvider(MessagingClient)
       .useValue({
         subscribe: async () => undefined,
+        publish: async () => undefined,
         close: async () => undefined,
       })
       .compile();
@@ -150,7 +165,13 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
       userId: USER_ID,
       email: 'ada@example.com',
       displayName: 'ada',
+      preferredName: null,
+      phone: null,
+      language: null,
+      timezone: null,
       registeredAt: '2026-07-28T12:00:00.000Z',
+      // Tenantless token: person profile only, no org fields to show.
+      fields: [],
     });
   });
 
