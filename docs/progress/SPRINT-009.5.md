@@ -207,9 +207,9 @@ envelope, a role change resolves to the new template's permissions,
 branch memberships round-trip into `branchIds`, the tickets migration
 applied to a populated database, the branch-visibility predicate and the
 projection scoping pinned by identity at the SQL level, and the LWW guard
-proven unable to resurrect an archived branch from a replay. The full gate
-and all nine integration suites, plus the remote CI result, are recorded in
-the handoff as usual.
+proven unable to resurrect an archived branch from a replay. The full gate and all
+nine integration suites ran green locally, and remotely GitHub Actions run
+`30679083851` on `de41b43` was green on its first attempt.
 
 ## Documentation
 
