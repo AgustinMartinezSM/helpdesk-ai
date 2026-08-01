@@ -42,6 +42,30 @@ export class CreateTicketDto {
   @IsString()
   @MaxLength(100)
   category?: string;
+
+  /**
+   * The assignee idiom, relaxed one notch: the field is optional AND
+   * nullable, and @IsOptional already skips null as well as undefined, so
+   * the explicit @ValidateIf the required assigneeId needs is not needed
+   * here — @IsUUID only ever sees a real value.
+   */
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description: 'Branch this request is filed under; omit or null for none.',
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description: 'Station within the branch; only valid alongside branchId.',
+  })
+  @IsOptional()
+  @IsUUID()
+  stationId?: string | null;
 }
 
 export class ChangeStatusDto {
@@ -80,6 +104,15 @@ export class ListTicketsQueryDto {
   @IsOptional()
   @IsUUID()
   assigneeId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Narrow to one branch. Organization-wide for read_all; intersected ' +
+      "with the caller's branch set for read_branch.",
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 
   @ApiPropertyOptional({ minimum: 0 })
   @IsOptional()

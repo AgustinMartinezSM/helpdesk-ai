@@ -55,3 +55,43 @@ export class MembershipVerificationUnavailableError extends TicketDomainError {
     super('Assignment is temporarily unavailable; try again shortly');
   }
 }
+
+/**
+ * The chosen branch cannot receive tickets in this organization.
+ *
+ * One message for every cause — nonexistent, archived, another tenant's —
+ * for the InvalidAssigneeError reason: branch ids are authorization inputs,
+ * and confirming that a guessed id exists somewhere is the leak. A foreign
+ * branch simply has no active row under the caller's organization in the
+ * projection, so the cross-tenant case answers exactly like a typo.
+ */
+export class InvalidBranchError extends TicketDomainError {
+  constructor() {
+    super('The branch cannot receive tickets in this organization');
+  }
+}
+
+/**
+ * The chosen station cannot receive tickets under this branch.
+ *
+ * Same one-message discipline as InvalidBranchError, covering every cause:
+ * an unknown or archived station, a station of another branch or another
+ * tenant, and a station named without any branch at all — a station only
+ * means something inside its branch (ADR 0016).
+ */
+export class InvalidStationError extends TicketDomainError {
+  constructor() {
+    super('The station cannot receive tickets under this branch');
+  }
+}
+
+/**
+ * The stations picker was asked about a branch that is not active in the
+ * caller's organization. Also the answer for an archived or foreign branch:
+ * the picker's 404 hides existence exactly as the ticket read's does.
+ */
+export class BranchNotFoundError extends TicketDomainError {
+  constructor() {
+    super('Branch not found');
+  }
+}

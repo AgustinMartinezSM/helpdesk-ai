@@ -50,6 +50,18 @@ model Ticket {
   /// behavior the code already refuses to get wrong.
   organizationId String @map("organization_id") @db.Uuid
 
+  /// Branch this ticket was filed under (ADR 0016) — an opaque id validated
+  /// against the branch_refs projection at creation, never a foreign key
+  /// (ADR 0003). Nullable FOREVER, not until a backfill: a ticket without a
+  /// branch is the eight-person shop with nothing to configure, a
+  /// permanently legitimate state.
+  branchId String? @map("branch_id") @db.Uuid
+
+  /// Station the request came from. Context, never a principal (ADR 0016):
+  /// this names a place, and requesterId keeps naming the person. Same
+  /// permanent nullability as branchId.
+  operationalStationId String? @map("operational_station_id") @db.Uuid
+
   comments TicketComment[]
   history  TicketHistoryEntry[]
 
@@ -59,7 +71,47 @@ model Ticket {
   /// The scoped list's exact shape: WHERE organization_id (optionally
   /// narrowed by requester/assignee/status), ORDER BY created_at.
   @@index([organizationId, createdAt])
+  /// The branch-scoped list's shape: WHERE organization_id AND branch_id IN
+  /// (the caller's branch set).
+  @@index([organizationId, branchId])
   @@map("tickets")
+}
+
+/// Projection of organizations-service's branches (Sprint 9.5, D4). Ticket
+/// creation is a hot path, so branch validation reads these local rows —
+/// fed by branch.created/updated.v1 — instead of asking
+/// organizations-service synchronously; ADR 0014's mutations-may-ask
+/// exception deliberately does not apply. Rows are last-write-wins on the
+/// event's own timestamp, and the id is opaque with no FK (ADR 0003).
+model BranchRef {
+  id             String   @id @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  status         String
+  updatedAt      DateTime @map("updated_at") @db.Timestamptz(3)
+
+  /// The picker's and the create-validation's shape: active branches of one
+  /// tenant.
+  @@index([organizationId, status])
+  @@map("branch_refs")
+}
+
+/// Projection of organizations-service's operational stations, for the same
+/// reason as BranchRef. organization_id is denormalized next to branch_id so
+/// a scoped read never joins to know whose row it is reading.
+model StationRef {
+  id             String   @id @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  area           String?
+  status         String
+  updatedAt      DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@index([branchId])
+  @@map("station_refs")
 }
 
 model TicketComment {

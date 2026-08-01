@@ -54,6 +54,12 @@ export interface ListTicketsInput {
   status?: TicketStatus;
   /** Only honored for holders of the org-wide read: filter by assignee. */
   assigneeId?: string;
+  /**
+   * Narrow to one branch. Honored organization-wide for read_all
+   * (acceptance criterion 4); intersected with the caller's branch set for
+   * read_branch — asking for a branch outside it answers the empty page.
+   */
+  branchId?: string;
   skip?: number;
   take?: number;
 }
@@ -68,24 +74,59 @@ export class ListTicketsUseCase {
     const take = Math.min(input.take ?? 20, MAX_PAGE_SIZE);
     const skip = Math.max(input.skip ?? 0, 0);
 
-    // Without the org-wide read, callers are always scoped to their own
-    // tickets, whatever they ask.
-    if (!hasPermission(actor, PERMISSIONS.TICKETS_READ_ALL)) {
+    // read_all sees every ticket in the organization and nothing outside
+    // it, optionally narrowed to one branch. Before the tenancy migration,
+    // the omitted scope widened the query to the whole table.
+    if (hasPermission(actor, PERMISSIONS.TICKETS_READ_ALL)) {
       return this.tickets.list({
         organizationId,
-        requesterId: actor.id,
+        status: input.status,
+        assigneeId: input.assigneeId,
+        branchId: input.branchId,
+        skip,
+        take,
+      });
+    }
+
+    const branchIds = actor.branchIds;
+    if (
+      hasPermission(actor, PERMISSIONS.TICKETS_READ_BRANCH) &&
+      branchIds !== undefined &&
+      branchIds.size > 0
+    ) {
+      // A requested branch outside the caller's set answers the empty
+      // page, never an error and never a widened query: a 4xx (or a page
+      // of the caller's own tickets under that filter) would confirm the
+      // branch exists — the same existence-hiding discipline as the 404 on
+      // a foreign ticket.
+      if (input.branchId !== undefined && !branchIds.has(input.branchId)) {
+        return { items: [], total: 0 };
+      }
+      // The OR-own leg is the visibility rule, not a filter, so it
+      // survives the branch narrowing: a manager's own requests are theirs
+      // to see wherever they were filed. Branchless tickets fail the
+      // IN-set leg by construction — unrouted intake belongs to the
+      // central view until routing (9.11) exists.
+      return this.tickets.list({
+        organizationId,
+        branchScope: {
+          branchIds:
+            input.branchId !== undefined ? [input.branchId] : [...branchIds],
+          requesterId: actor.id,
+        },
         status: input.status,
         skip,
         take,
       });
     }
 
-    // read_all sees every ticket in the organization and nothing outside it.
-    // Before this, the omitted scope widened the query to the whole table.
+    // Without the org-wide or branch read — including read_branch with an
+    // empty or absent branch set, which denies rather than grants (D2) —
+    // callers are scoped to their own tickets, whatever they ask.
     return this.tickets.list({
       organizationId,
+      requesterId: actor.id,
       status: input.status,
-      assigneeId: input.assigneeId,
       skip,
       take,
     });

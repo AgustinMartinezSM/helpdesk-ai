@@ -52,6 +52,19 @@ export interface Ticket {
   /** User id issued by auth-service; a plain identifier, never a foreign key. */
   readonly requesterId: string;
   readonly assigneeId: string | null;
+  /**
+   * Branch this ticket was filed under (ADR 0016) — an opaque id validated
+   * against the local projection at creation. Null is a permanently
+   * legitimate state, not a migration gap: the eight-person shop never
+   * configures a branch and its tickets carry none, forever.
+   */
+  readonly branchId: string | null;
+  /**
+   * Station the request came from. Context, never a principal (ADR 0016):
+   * this names a place, and requesterId keeps naming the person. Advisory
+   * until device registration exists — nothing verifies provenance yet.
+   */
+  readonly operationalStationId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -105,12 +118,22 @@ export function requireOrganizationOf(actor: Actor, ticket: Ticket): string {
 
 /**
  * Requesters see their own tickets; the org-wide read sees every ticket in
- * the organization. Callers that fail this get the not-found answer, never a
- * 403 — confirming the ticket exists is the leak.
+ * the organization; the branch read sees tickets ROUTED to a branch the
+ * actor's membership covers. Callers that fail this get the not-found
+ * answer, never a 403 — confirming the ticket exists is the leak.
+ *
+ * A branchless ticket is deliberately invisible to the branch read: until
+ * routing (9.11) exists, unrouted intake belongs to the central view — a
+ * branch manager does not see unrouted tickets, read_all holders (and the
+ * requester) do. And an absent branch set denies rather than grants (D2):
+ * an old token loses visibility, never gains it.
  */
 export function canView(actor: Actor, ticket: Ticket): boolean {
   return (
     hasPermission(actor, PERMISSIONS.TICKETS_READ_ALL) ||
+    (hasPermission(actor, PERMISSIONS.TICKETS_READ_BRANCH) &&
+      ticket.branchId !== null &&
+      (actor.branchIds?.has(ticket.branchId) ?? false)) ||
     ticket.requesterId === actor.id
   );
 }

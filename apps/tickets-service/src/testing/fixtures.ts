@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  BranchRef,
+  StationRef,
+} from '../application/ports/structure-refs.repository';
+import type {
   Ticket,
   TicketComment,
   TicketHistoryEntry,
@@ -35,6 +39,20 @@ export const TEST_ORGANIZATION = '00000000-0000-4000-8000-000000000001';
  */
 export const OTHER_ORGANIZATION = '00000000-0000-4000-8000-0000000000ff';
 
+/**
+ * The branch matrix (Sprint 9.5). Fixed, obviously synthetic ids for the
+ * OTHER_ORGANIZATION reason: an isolation failure should print values a
+ * human can tell apart at a glance.
+ */
+/** A branch of the bootstrap organization; the branch most tests route to. */
+export const TEST_BRANCH = '00000000-0000-4000-8000-0000000000b1';
+/** A second branch of the SAME organization — the not-my-branch cell. */
+export const OTHER_BRANCH = '00000000-0000-4000-8000-0000000000b2';
+/** A branch of OTHER_ORGANIZATION — the cross-tenant cells. */
+export const FOREIGN_BRANCH = '00000000-0000-4000-8000-0000000000b3';
+/** A station under TEST_BRANCH. */
+export const TEST_STATION = '00000000-0000-4000-8000-0000000000e1';
+
 export function aTicket(overrides: Partial<Ticket> = {}): Ticket {
   const now = new Date();
   return {
@@ -47,8 +65,40 @@ export function aTicket(overrides: Partial<Ticket> = {}): Ticket {
     category: 'hardware',
     requesterId: randomUUID(),
     assigneeId: null,
+    // Null by default, like production: a branch is opt-in context, and
+    // suites that do not care about routing should say nothing about it.
+    branchId: null,
+    operationalStationId: null,
     createdAt: now,
     updatedAt: now,
+    ...overrides,
+  };
+}
+
+/** A projected branch row; defaults model an active branch of the test org. */
+export function aBranchRef(overrides: Partial<BranchRef> = {}): BranchRef {
+  return {
+    id: TEST_BRANCH,
+    organizationId: TEST_ORGANIZATION,
+    code: 'BR-12',
+    name: 'Store 12',
+    status: 'active',
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+/** A projected station row under TEST_BRANCH, active by default. */
+export function aStationRef(overrides: Partial<StationRef> = {}): StationRef {
+  return {
+    id: TEST_STATION,
+    branchId: TEST_BRANCH,
+    organizationId: TEST_ORGANIZATION,
+    code: 'CASH-2',
+    name: 'Cashier station 2',
+    area: 'checkout',
+    status: 'active',
+    updatedAt: new Date(),
     ...overrides,
   };
 }

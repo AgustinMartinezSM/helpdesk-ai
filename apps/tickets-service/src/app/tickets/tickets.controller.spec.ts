@@ -6,14 +6,28 @@ import { validateEnv } from '@helpdesk-ai/configuration';
 import { PERMISSIONS } from '@helpdesk-ai/security';
 import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
 import { MEMBERSHIP_VERIFIER } from '../../application/ports/membership-verifier';
+import {
+  BRANCH_REF_REPOSITORY,
+  STATION_REF_REPOSITORY,
+} from '../../application/ports/structure-refs.repository';
 import { TICKET_REPOSITORY } from '../../application/ports/ticket.repository';
 import {
   FakeEventPublisher,
   FakeMembershipVerifier,
+  InMemoryBranchRefRepository,
+  InMemoryStationRefRepository,
   InMemoryTicketRepository,
 } from '../../application/testing/fakes';
 import { ticketsServiceEnvSchema } from '../../config/env';
-import { TEST_ORGANIZATION } from '../../testing/fixtures';
+import {
+  aBranchRef,
+  aStationRef,
+  OTHER_BRANCH,
+  OTHER_ORGANIZATION,
+  TEST_BRANCH,
+  TEST_ORGANIZATION,
+  TEST_STATION,
+} from '../../testing/fixtures';
 import { AppModule } from '../app.module';
 
 const TEST_ENV = {
@@ -31,12 +45,21 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
   let agentToken: string;
   // Shared with the tests so they can add rows and simulate an outage.
   const memberships = new FakeMembershipVerifier();
+  const branchRefs = new InMemoryBranchRefRepository();
+  const stationRefs = new InMemoryStationRefRepository();
 
   beforeAll(async () => {
     const env = validateEnv(ticketsServiceEnvSchema, TEST_ENV);
     // The agent the suite assigns tickets to is a live member of the test
     // organization; anybody else is refused with the one generic 422.
     memberships.set(TEST_ORGANIZATION, '33333333-3333-4333-8333-333333333333');
+    // One branch and one station at home, one foreign branch: enough to
+    // prove the pickers and the create-time validation end to end.
+    branchRefs.seed(aBranchRef());
+    branchRefs.seed(
+      aBranchRef({ id: OTHER_BRANCH, organizationId: OTHER_ORGANIZATION }),
+    );
+    stationRefs.seed(aStationRef());
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
@@ -51,6 +74,12 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
       // organizations-service over HTTP.
       .overrideProvider(MEMBERSHIP_VERIFIER)
       .useValue(memberships)
+      // The structure projections back the pickers and the create-time
+      // validation; in-memory doubles keep the suite database-free.
+      .overrideProvider(BRANCH_REF_REPOSITORY)
+      .useValue(branchRefs)
+      .overrideProvider(STATION_REF_REPOSITORY)
+      .useValue(stationRefs)
       .compile();
 
     app = moduleRef.createNestApplication({ logger: false });
@@ -299,5 +328,56 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
       .get('/tickets/not-a-uuid')
       .set(asUser(userToken))
       .expect(400);
+  });
+
+  it('serves the branch picker — the literal route wins over :id (Nest declaration order)', async () => {
+    // If 'branches' were captured by @Get(':id'), the uuid pipe would answer
+    // 400 here instead of the picker's 200 — this test is the route-order net.
+    const branches = await request(app.getHttpServer())
+      .get('/tickets/branches')
+      .set(asUser(userToken))
+      .expect(200);
+    expect(branches.body).toEqual([
+      expect.objectContaining({ id: TEST_BRANCH, code: 'BR-12' }),
+    ]);
+
+    const stations = await request(app.getHttpServer())
+      .get(`/tickets/branches/${TEST_BRANCH}/stations`)
+      .set(asUser(userToken))
+      .expect(200);
+    expect(stations.body).toEqual([
+      expect.objectContaining({ id: TEST_STATION }),
+    ]);
+
+    // A foreign branch's stations answer 404, exactly like a missing one.
+    await request(app.getHttpServer())
+      .get(`/tickets/branches/${OTHER_BRANCH}/stations`)
+      .set(asUser(userToken))
+      .expect(404);
+  });
+
+  it('creates a located request, and refuses a foreign branch with the one generic 422', async () => {
+    const located = await request(app.getHttpServer())
+      .post('/tickets')
+      .set(asUser(userToken))
+      .send({
+        title: 'Card terminal down',
+        description: 'Cashier 2 cannot process payments since this morning.',
+        branchId: TEST_BRANCH,
+        stationId: TEST_STATION,
+      })
+      .expect(201);
+    expect(located.body.branchId).toBe(TEST_BRANCH);
+    expect(located.body.operationalStationId).toBe(TEST_STATION);
+
+    await request(app.getHttpServer())
+      .post('/tickets')
+      .set(asUser(userToken))
+      .send({
+        title: 'Card terminal down',
+        description: 'Trying to plant another organization branch id here.',
+        branchId: OTHER_BRANCH,
+      })
+      .expect(422);
   });
 });

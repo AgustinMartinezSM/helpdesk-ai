@@ -6,8 +6,11 @@ import {
 } from '@nestjs/common';
 import { NoOrganizationContextError } from '@helpdesk-ai/security';
 import {
+  BranchNotFoundError,
   ForbiddenTicketActionError,
   InvalidAssigneeError,
+  InvalidBranchError,
+  InvalidStationError,
   InvalidStatusTransitionError,
   MembershipVerificationUnavailableError,
   TicketDomainError,
@@ -54,6 +57,12 @@ function describe(exception: TicketDomainError | NoOrganizationContextError): {
   if (exception instanceof TicketNotFoundError) {
     return { status: HttpStatus.NOT_FOUND, error: 'Not Found' };
   }
+  if (exception instanceof BranchNotFoundError) {
+    // The stations picker's answer for a missing, archived or foreign
+    // branch — one status for all three, because confirming a branch exists
+    // in another tenant is the leak.
+    return { status: HttpStatus.NOT_FOUND, error: 'Not Found' };
+  }
   if (exception instanceof ForbiddenTicketActionError) {
     return { status: HttpStatus.FORBIDDEN, error: 'Forbidden' };
   }
@@ -69,6 +78,19 @@ function describe(exception: TicketDomainError | NoOrganizationContextError): {
     // A well-formed request naming an unusable assignee. Not 404: the
     // ticket was found, and the deliberately generic message confirms
     // nothing about who exists where.
+    return {
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      error: 'Unprocessable Entity',
+    };
+  }
+  if (
+    exception instanceof InvalidBranchError ||
+    exception instanceof InvalidStationError
+  ) {
+    // The assignee reasoning, applied to places: a well-formed create
+    // naming an unusable branch or station. Each error's single generic
+    // message covers nonexistent, archived and foreign alike — confirming
+    // existence is the leak.
     return {
       status: HttpStatus.UNPROCESSABLE_ENTITY,
       error: 'Unprocessable Entity',

@@ -20,6 +20,10 @@ import {
   ListTicketsUseCase,
 } from '../../application/use-cases/ticket-queries';
 import {
+  ListBranchesForPickerUseCase,
+  ListStationsForPickerUseCase,
+} from '../../application/use-cases/structure-pickers';
+import {
   AssignTicketUseCase,
   ChangeTicketStatusUseCase,
 } from '../../application/use-cases/ticket-lifecycle';
@@ -53,6 +57,10 @@ function actorOf(req: AuthenticatedRequest): Actor {
     // Absent claim -> empty set: an old token loses capabilities rather
     // than gaining them.
     permissions: new Set(req.user.perms ?? []),
+    // Undefined, not an empty set, when the claim is absent: Actor keeps
+    // the difference visible, and both deny branch-scoped visibility — an
+    // old token loses scope rather than gaining it (D2).
+    branchIds: req.user.br ? new Set(req.user.br) : undefined,
   };
 }
 
@@ -79,6 +87,8 @@ export class TicketsController {
     private readonly changeStatus: ChangeTicketStatusUseCase,
     private readonly assignTicket: AssignTicketUseCase,
     private readonly addComment: AddCommentUseCase,
+    private readonly listBranches: ListBranchesForPickerUseCase,
+    private readonly listStations: ListStationsForPickerUseCase,
   ) {}
 
   @Post()
@@ -93,6 +103,27 @@ export class TicketsController {
   })
   list(@Req() req: AuthenticatedRequest, @Query() query: ListTicketsQueryDto) {
     return this.listTickets.execute(actorOf(req), query);
+  }
+
+  // The picker routes are declared BEFORE ':id' on purpose: Nest matches
+  // routes in declaration order, so a literal 'branches' segment declared
+  // after @Get(':id') would be captured as a ticket id and answer 400.
+
+  @Get('branches')
+  @ApiOperation({
+    summary: "Active branches of the caller's organization (picker)",
+  })
+  branches(@Req() req: AuthenticatedRequest) {
+    return this.listBranches.execute(actorOf(req));
+  }
+
+  @Get('branches/:branchId/stations')
+  @ApiOperation({ summary: "Active stations of one of the caller's branches" })
+  stations(
+    @Req() req: AuthenticatedRequest,
+    @Param('branchId', ParseUUIDPipe) branchId: string,
+  ) {
+    return this.listStations.execute(actorOf(req), branchId);
   }
 
   @Get(':id')

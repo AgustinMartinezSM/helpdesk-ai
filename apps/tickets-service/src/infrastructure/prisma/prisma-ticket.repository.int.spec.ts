@@ -263,4 +263,59 @@ describe('PrismaTicketRepository (real PostgreSQL)', () => {
     expect(staffView.map((h) => h.detail)).toContain('internal');
     expect(staffView).toHaveLength(3);
   });
+
+  it('builds the branch-visibility OR against real SQL: covered branches plus own, never branch C', async () => {
+    // The in-memory double proves the rule; this proves the predicate the
+    // database actually runs (R2). Same requester planted across branches
+    // and organizations so nothing but the OR can be doing the filtering.
+    const manager = randomUUID();
+    const branchB = randomUUID();
+    const branchC = randomUUID();
+    const inBranchB = aTicket({ id: randomUUID(), branchId: branchB });
+    const inBranchC = aTicket({ id: randomUUID(), branchId: branchC });
+    const unrouted = aTicket({ id: randomUUID(), branchId: null });
+    const ownElsewhere = aTicket({
+      id: randomUUID(),
+      branchId: branchC,
+      requesterId: manager,
+    });
+    const foreign = aTicket({
+      id: randomUUID(),
+      organizationId: OTHER_ORGANIZATION,
+      branchId: branchB,
+    });
+    for (const t of [inBranchB, inBranchC, unrouted, ownElsewhere, foreign]) {
+      await repository.create(t, aHistoryEntry(t));
+    }
+
+    const page = await repository.list({
+      organizationId: TEST_ORGANIZATION,
+      branchScope: { branchIds: [branchB], requesterId: manager },
+      skip: 0,
+      take: 10,
+    });
+
+    // Branch B's ticket and the manager's own request routed to branch C —
+    // not branch C's other traffic, not the unrouted intake, and never the
+    // foreign row even though it sits in branch B's id.
+    expect(idsOf(page.items)).toEqual(idsOf([inBranchB, ownElsewhere]));
+  });
+
+  it('narrows read_all by branch without an OR-leg', async () => {
+    const branchB = randomUUID();
+    const routed = aTicket({ id: randomUUID(), branchId: branchB });
+    const other = aTicket({ id: randomUUID(), branchId: randomUUID() });
+    const unrouted = aTicket({ id: randomUUID(), branchId: null });
+    for (const t of [routed, other, unrouted]) {
+      await repository.create(t, aHistoryEntry(t));
+    }
+
+    const page = await repository.list({
+      organizationId: TEST_ORGANIZATION,
+      branchId: branchB,
+      skip: 0,
+      take: 10,
+    });
+    expect(idsOf(page.items)).toEqual(idsOf([routed]));
+  });
 });

@@ -17,6 +17,8 @@ import {
   FakeEventPublisher,
   FakeMembershipVerifier,
   FixedClock,
+  InMemoryBranchRefRepository,
+  InMemoryStationRefRepository,
   InMemoryTicketRepository,
 } from '../testing/fakes';
 import { AddCommentUseCase } from './add-comment';
@@ -84,6 +86,10 @@ function buildContext() {
   const clock = new FixedClock(new Date('2026-07-28T12:00:00.000Z'));
   const events = new FakeEventPublisher();
   const memberships = new FakeMembershipVerifier();
+  // Empty projections: this suite creates branchless tickets, which must
+  // never consult them. The branch matrix lives in branch-context.spec.ts.
+  const branches = new InMemoryBranchRefRepository();
+  const stations = new InMemoryStationRefRepository();
   // The staff actor the suites assign to is a real, active member of the
   // test organization unless a test overwrites the row to say otherwise.
   memberships.set(TEST_ORGANIZATION, AGENT.id);
@@ -92,7 +98,7 @@ function buildContext() {
     clock,
     events,
     memberships,
-    create: new CreateTicketUseCase(tickets, clock, events),
+    create: new CreateTicketUseCase(tickets, clock, events, branches, stations),
     get: new GetTicketUseCase(tickets),
     listTickets: new ListTicketsUseCase(tickets),
     changeStatus: new ChangeTicketStatusUseCase(tickets, clock, events),

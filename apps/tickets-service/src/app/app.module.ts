@@ -12,6 +12,12 @@ import {
   type MembershipVerifier,
 } from '../application/ports/membership-verifier';
 import {
+  BRANCH_REF_REPOSITORY,
+  STATION_REF_REPOSITORY,
+  type BranchRefRepository,
+  type StationRefRepository,
+} from '../application/ports/structure-refs.repository';
+import {
   CLOCK,
   SystemClock,
   TICKET_REPOSITORY,
@@ -19,7 +25,15 @@ import {
   type TicketRepository,
 } from '../application/ports/ticket.repository';
 import { AddCommentUseCase } from '../application/use-cases/add-comment';
+import {
+  ApplyBranchEventUseCase,
+  ApplyStationEventUseCase,
+} from '../application/use-cases/apply-structure-events';
 import { CreateTicketUseCase } from '../application/use-cases/create-ticket';
+import {
+  ListBranchesForPickerUseCase,
+  ListStationsForPickerUseCase,
+} from '../application/use-cases/structure-pickers';
 import {
   GetTicketUseCase,
   ListTicketsUseCase,
@@ -32,9 +46,14 @@ import { APP_ENV, SERVICE_NAME, type TicketsServiceEnv } from '../config/env';
 import { JwtAccessGuard } from '@helpdesk-ai/security';
 import { HttpMembershipVerifier } from '../infrastructure/http/http-membership-verifier';
 import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-event-publisher';
+import {
+  PrismaBranchRefRepository,
+  PrismaStationRefRepository,
+} from '../infrastructure/prisma/prisma-structure-refs.repository';
 import { PrismaTicketRepository } from '../infrastructure/prisma/prisma-ticket.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { HealthController } from './health/health.controller';
+import { StructureEventsConsumer } from './messaging/structure-events.consumer';
 import { TicketsController } from './tickets/tickets.controller';
 
 /**
@@ -68,6 +87,33 @@ export class AppModule {
           useFactory: (prisma: PrismaService) =>
             new PrismaTicketRepository(prisma),
           inject: [PrismaService],
+        },
+        {
+          provide: BRANCH_REF_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaBranchRefRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: STATION_REF_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaStationRefRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          // The consumer's broker connection. The publisher adapter keeps
+          // its own client inside RabbitMqEventPublisher, deliberately: each
+          // owner closes what it opened on shutdown, and consuming under
+          // prefetch pressure can never sit on the same channel as the
+          // publish path.
+          provide: MessagingClient,
+          useFactory: (logger: Logger) =>
+            new MessagingClient({
+              url: env.RABBITMQ_URL,
+              serviceName: SERVICE_NAME,
+              logger,
+            }),
+          inject: [Logger],
         },
         {
           // The adapter owns its broker connection; overriding this token in
@@ -111,8 +157,17 @@ export class AppModule {
             tickets: TicketRepository,
             clock: Clock,
             events: EventPublisher,
-          ) => new CreateTicketUseCase(tickets, clock, events),
-          inject: [TICKET_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+            branches: BranchRefRepository,
+            stations: StationRefRepository,
+          ) =>
+            new CreateTicketUseCase(tickets, clock, events, branches, stations),
+          inject: [
+            TICKET_REPOSITORY,
+            CLOCK,
+            EVENT_PUBLISHER,
+            BRANCH_REF_REPOSITORY,
+            STATION_REF_REPOSITORY,
+          ],
         },
         {
           provide: GetTicketUseCase,
@@ -158,6 +213,53 @@ export class AppModule {
             events: EventPublisher,
           ) => new AddCommentUseCase(tickets, clock, events),
           inject: [TICKET_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+        },
+        {
+          provide: ListBranchesForPickerUseCase,
+          useFactory: (branches: BranchRefRepository) =>
+            new ListBranchesForPickerUseCase(branches),
+          inject: [BRANCH_REF_REPOSITORY],
+        },
+        {
+          provide: ListStationsForPickerUseCase,
+          useFactory: (
+            branches: BranchRefRepository,
+            stations: StationRefRepository,
+          ) => new ListStationsForPickerUseCase(branches, stations),
+          inject: [BRANCH_REF_REPOSITORY, STATION_REF_REPOSITORY],
+        },
+        {
+          provide: ApplyBranchEventUseCase,
+          useFactory: (branches: BranchRefRepository) =>
+            new ApplyBranchEventUseCase(branches),
+          inject: [BRANCH_REF_REPOSITORY],
+        },
+        {
+          provide: ApplyStationEventUseCase,
+          useFactory: (stations: StationRefRepository) =>
+            new ApplyStationEventUseCase(stations),
+          inject: [STATION_REF_REPOSITORY],
+        },
+        {
+          provide: StructureEventsConsumer,
+          useFactory: (
+            messaging: MessagingClient,
+            applyBranch: ApplyBranchEventUseCase,
+            applyStation: ApplyStationEventUseCase,
+            logger: Logger,
+          ) =>
+            new StructureEventsConsumer(
+              messaging,
+              applyBranch,
+              applyStation,
+              logger,
+            ),
+          inject: [
+            MessagingClient,
+            ApplyBranchEventUseCase,
+            ApplyStationEventUseCase,
+            Logger,
+          ],
         },
         JwtAccessGuard,
       ],

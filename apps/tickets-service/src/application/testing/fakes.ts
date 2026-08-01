@@ -15,6 +15,15 @@ import type {
   AssigneeMembership,
   MembershipVerifier,
 } from '../ports/membership-verifier';
+import {
+  ACTIVE_REF_STATUS,
+  type ApplyBranchRef,
+  type ApplyStationRef,
+  type BranchRef,
+  type BranchRefRepository,
+  type StationRef,
+  type StationRefRepository,
+} from '../ports/structure-refs.repository';
 import type {
   Clock,
   TicketListFilter,
@@ -50,6 +59,17 @@ export class InMemoryTicketRepository implements TicketRepository {
       )
       .filter((t) => !filter.assigneeId || t.assigneeId === filter.assigneeId)
       .filter((t) => !filter.status || t.status === filter.status)
+      .filter((t) => !filter.branchId || t.branchId === filter.branchId)
+      // The whole visibility predicate, enforced for real (R2): branch in
+      // the set OR the caller's own row. A branchless ticket fails the
+      // IN-set leg, exactly like NULL does in SQL.
+      .filter(
+        (t) =>
+          !filter.branchScope ||
+          (t.branchId !== null &&
+            filter.branchScope.branchIds.includes(t.branchId)) ||
+          t.requesterId === filter.branchScope.requesterId,
+      )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return {
       items: all.slice(filter.skip, filter.skip + filter.take),
@@ -156,6 +176,117 @@ export class FakeMembershipVerifier implements MembershipVerifier {
     // Missing key answers null exactly like the adapter's 404: a foreign
     // user has no row under this organization, same as a guessed id.
     return this.rows.get(`${organizationId}:${userId}`) ?? null;
+  }
+}
+
+/**
+ * Mirrors the SQL semantics exactly (LWW guard with <=, whole-row replace on
+ * a win) so specs exercise the same rules the real repository enforces
+ * atomically — and enforces the organization scope for real (R2): a foreign
+ * branch answers null exactly like a missing one, so a unit test cannot pass
+ * against a projection that leaks.
+ */
+export class InMemoryBranchRefRepository implements BranchRefRepository {
+  readonly rows = new Map<string, BranchRef>();
+
+  /** Seeds a projected row directly, bypassing the LWW guard — arranging. */
+  seed(ref: BranchRef): void {
+    this.rows.set(ref.id, ref);
+  }
+
+  async apply(input: ApplyBranchRef): Promise<void> {
+    const existing = this.rows.get(input.branchId);
+    if (existing && !(existing.updatedAt <= input.occurredAt)) {
+      // Stale replay loses; GREATEST keeps the newer updated_at untouched.
+      return;
+    }
+    this.rows.set(input.branchId, {
+      id: input.branchId,
+      organizationId: input.organizationId,
+      code: input.code,
+      name: input.name,
+      status: input.status,
+      updatedAt: input.occurredAt,
+    });
+  }
+
+  async findActive(
+    organizationId: string,
+    branchId: string,
+  ): Promise<BranchRef | null> {
+    const row = this.rows.get(branchId);
+    return row &&
+      row.organizationId === organizationId &&
+      row.status === ACTIVE_REF_STATUS
+      ? row
+      : null;
+  }
+
+  async listActive(organizationId: string): Promise<BranchRef[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.organizationId === organizationId &&
+          row.status === ACTIVE_REF_STATUS,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
+
+/** The station projection double, under the same R2 discipline. */
+export class InMemoryStationRefRepository implements StationRefRepository {
+  readonly rows = new Map<string, StationRef>();
+
+  /** Seeds a projected row directly, bypassing the LWW guard — arranging. */
+  seed(ref: StationRef): void {
+    this.rows.set(ref.id, ref);
+  }
+
+  async apply(input: ApplyStationRef): Promise<void> {
+    const existing = this.rows.get(input.stationId);
+    if (existing && !(existing.updatedAt <= input.occurredAt)) {
+      return;
+    }
+    this.rows.set(input.stationId, {
+      id: input.stationId,
+      branchId: input.branchId,
+      organizationId: input.organizationId,
+      code: input.code,
+      name: input.name,
+      area: input.area,
+      status: input.status,
+      updatedAt: input.occurredAt,
+    });
+  }
+
+  async findActive(
+    organizationId: string,
+    branchId: string,
+    stationId: string,
+  ): Promise<StationRef | null> {
+    const row = this.rows.get(stationId);
+    // Branch AND organization, like the real predicate: a station of
+    // another branch answers null exactly like a guessed id.
+    return row &&
+      row.organizationId === organizationId &&
+      row.branchId === branchId &&
+      row.status === ACTIVE_REF_STATUS
+      ? row
+      : null;
+  }
+
+  async listActive(
+    organizationId: string,
+    branchId: string,
+  ): Promise<StationRef[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.organizationId === organizationId &&
+          row.branchId === branchId &&
+          row.status === ACTIVE_REF_STATUS,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 }
 

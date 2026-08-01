@@ -24,6 +24,9 @@ interface TicketRow {
   category: string | null;
   requesterId: string;
   assigneeId: string | null;
+  /** Nullable forever — see the schema comment. */
+  branchId: string | null;
+  operationalStationId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +68,19 @@ export class PrismaTicketRepository implements TicketRepository {
       ...(filter.requesterId ? { requesterId: filter.requesterId } : {}),
       ...(filter.assigneeId ? { assigneeId: filter.assigneeId } : {}),
       ...(filter.status ? { status: filter.status } : {}),
+      ...(filter.branchId ? { branchId: filter.branchId } : {}),
+      // The read_branch visibility predicate, whole (see the port comment):
+      // a branchless row fails the IN-set leg because NULL is never in a
+      // list, which is exactly the rule — unrouted tickets belong to the
+      // central view.
+      ...(filter.branchScope
+        ? {
+            OR: [
+              { branchId: { in: [...filter.branchScope.branchIds] } },
+              { requesterId: filter.branchScope.requesterId },
+            ],
+          }
+        : {}),
     };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.ticket.findMany({

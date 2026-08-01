@@ -33,6 +33,24 @@ export interface TicketListFilter {
   requesterId?: string;
   assigneeId?: string;
   status?: TicketStatus;
+  /**
+   * Exact branch narrowing for the org-wide read (acceptance criterion 4).
+   * Never combined with branchScope: read_all narrows a set it already sees
+   * in full, so no OR-leg is needed.
+   */
+  branchId?: string;
+  /**
+   * The branch-visibility predicate for `tickets.read_branch`: rows whose
+   * branch is in `branchIds` OR whose requester is `requesterId`. One field
+   * rather than two optionals, deliberately — the OR cannot be assembled at
+   * a call site from halves, because either half alone silently means
+   * something narrower (drop the caller's own tickets) or wider (every
+   * branch plus own) than the visibility rule.
+   */
+  branchScope?: {
+    branchIds: readonly string[];
+    requesterId: string;
+  };
   skip: number;
   take: number;
 }
