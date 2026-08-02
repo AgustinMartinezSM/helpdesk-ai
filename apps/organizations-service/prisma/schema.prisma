@@ -27,8 +27,58 @@ model Organization {
 
   memberships Membership[]
   branches    Branch[]
+  invitations Invitation[]
 
   @@map("organizations")
+}
+
+// A redeemable offer of membership (Sprint 9.8, ADR 0019). It is not an
+// account and not a credential for one: redeeming it requires already being
+// authenticated as the addressed person, and the password that person logs in
+// with is theirs, created by them, never seen by the admin who invited them.
+//
+// Lives here because redemption must consume the code and insert the
+// membership below in one transaction — there is no outbox (ADR 0006), so a
+// split write can burn a code whose secret nothing can regenerate.
+model Invitation {
+  id String @id @db.Uuid
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Normalized (trimmed, lowercased) at the boundary; matched against the
+  // `email` claim of the person redeeming, never against a request body.
+  inviteeEmail String @map("invitee_email")
+
+  // A plain string key, like Membership.roleTemplate and for the same reason
+  // (ADR 0015): the template vocabulary is not settled.
+  roleTemplate String @map("role_template")
+  status       String
+
+  // sha256 of the code's secret half. The code itself is never stored, never
+  // logged and never put in an event — it exists in exactly one HTTP
+  // response. That also means this row is NOT reconstructible: no reissue
+  // path can exist, which data-ownership.md records.
+  codeHash String @map("code_hash")
+
+  invitedByUserId String   @map("invited_by_user_id") @db.Uuid
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(3)
+
+  acceptedByUserId String?   @map("accepted_by_user_id") @db.Uuid
+  acceptedAt       DateTime? @map("accepted_at") @db.Timestamptz(3)
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  // The "one pending invitation per address" rule is a PARTIAL unique index
+  // (WHERE status = 'pending'), which Prisma's schema language cannot
+  // express — it is raw SQL in the migration. Declared here as a plain index
+  // so the generated client still plans lookups well; the uniqueness lives in
+  // the database, where a concurrent second issue is refused rather than
+  // racing a prior read.
+  @@index([organizationId, inviteeEmail])
+  @@index([organizationId, status, createdAt])
+  @@map("invitations")
 }
 
 model Membership {

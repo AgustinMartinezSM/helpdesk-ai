@@ -26,11 +26,21 @@ interface InternalRequest {
  * It is a shared secret rather than a self-signed JWT on purpose: reusing
  * JWT_ACCESS_SECRET would make one symmetric key stand for both "this person
  * is authenticated" and "this process is authenticated", so rotating either
- * meaning would force rotating the other.
+ * meaning would force rotating the other. That argument survives Sprint 9.8
+ * declaring JWT_ACCESS_SECRET here for the public surface: the two variables
+ * mean different things and neither opens the other's routes.
  *
- * Not built yet, and it should be before this credential guards anything a
- * person would miss: rotation, and an audit record of internal calls.
- * ADR 0011 named both as the story a service credential deserves.
+ * ROTATION, from Sprint 9.8: the guard accepts the value being rotated out
+ * (INTERNAL_SERVICE_TOKEN_PREVIOUS) alongside the current one, so a rotation
+ * is add-promote-drop rather than a synchronized restart of every caller. The
+ * runbook is in SECURITY.md.
+ *
+ * STILL NOT BUILT, deliberately: an audit record of internal calls. Recording
+ * WHICH process called requires the credential to identify the caller —
+ * per-caller secrets, or a signed service assertion. Attaching a
+ * self-declared caller header to a shared secret would log a claim the
+ * credential does not bind, which is decoration rather than attribution.
+ * ADR 0011 named both halves; this closes one of them.
  */
 @Injectable()
 export class InternalServiceGuard implements CanActivate {
@@ -40,11 +50,25 @@ export class InternalServiceGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<InternalRequest>();
     const presented = request.headers[INTERNAL_SERVICE_TOKEN_HEADER];
 
-    if (!presented || !matches(presented, this.env.INTERNAL_SERVICE_TOKEN)) {
+    if (!presented || !this.accepts(presented)) {
       throw new UnauthorizedException();
     }
 
     return true;
+  }
+
+  /**
+   * Both comparisons always run — no early return on the first match. An
+   * early return would make "matched the current value" measurably faster
+   * than "matched the previous one", which is a timing signal about which
+   * half of a rotation a caller is on.
+   */
+  private accepts(presented: string): boolean {
+    const current = matches(presented, this.env.INTERNAL_SERVICE_TOKEN);
+    const previous = this.env.INTERNAL_SERVICE_TOKEN_PREVIOUS
+      ? matches(presented, this.env.INTERNAL_SERVICE_TOKEN_PREVIOUS)
+      : false;
+    return current || previous;
   }
 }
 

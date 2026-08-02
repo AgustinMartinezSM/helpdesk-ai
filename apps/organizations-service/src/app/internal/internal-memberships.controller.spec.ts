@@ -35,6 +35,10 @@ const TEST_ENV = {
   DATABASE_URL: 'postgresql://nobody:nothing@127.0.0.1:59999/unreachable',
   RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
   INTERNAL_SERVICE_TOKEN: INTERNAL_TOKEN,
+  // Required since Sprint 9.8 gave the service a person-facing surface. The
+  // internal routes below verify no access token, but the module registers
+  // JwtModule for the ones that do.
+  JWT_ACCESS_SECRET: 'jwt-test-secret-0123456789abcdef0123456789',
 };
 
 const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';

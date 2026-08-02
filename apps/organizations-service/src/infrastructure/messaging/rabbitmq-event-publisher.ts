@@ -1,6 +1,9 @@
 import {
   branchCreatedV1,
   branchUpdatedV1,
+  invitationAcceptedV1,
+  invitationIssuedV1,
+  invitationRevokedV1,
   membershipCreatedV1,
   membershipRoleChangedV1,
   membershipStatusChangedV1,
@@ -12,6 +15,7 @@ import {
 } from '@helpdesk-ai/messaging';
 import type { OrganizationEventPublisher } from '../../application/ports/event-publisher';
 import type { Branch, OperationalStation } from '../../domain/branch';
+import type { Invitation } from '../../domain/invitation';
 import type {
   Membership,
   MembershipStatus,
@@ -179,6 +183,72 @@ export class RabbitMqEventPublisher implements OrganizationEventPublisher {
         updatedAt: station.updatedAt.toISOString(),
       },
       station.organizationId,
+      correlationId,
+    );
+  }
+
+  async invitationIssued(
+    invitation: Invitation,
+    correlationId?: string,
+  ): Promise<void> {
+    // No invitee email, no code, no code hash — audit-service keeps payloads
+    // opaquely and indefinitely, so an address here is an address retained
+    // forever. Who acted travels instead; that is what these events are for.
+    await this.safePublish(
+      invitationIssuedV1,
+      {
+        invitationId: invitation.id,
+        organizationId: invitation.organizationId,
+        roleTemplate: invitation.roleTemplate,
+        invitedByUserId: invitation.invitedByUserId,
+        expiresAt: invitation.expiresAt.toISOString(),
+        issuedAt: invitation.createdAt.toISOString(),
+      },
+      invitation.organizationId,
+      correlationId,
+    );
+  }
+
+  async invitationAccepted(
+    invitation: Invitation,
+    acceptedByUserId: string,
+    membershipId: string | undefined,
+    correlationId?: string,
+  ): Promise<void> {
+    await this.safePublish(
+      invitationAcceptedV1,
+      {
+        invitationId: invitation.id,
+        organizationId: invitation.organizationId,
+        acceptedByUserId,
+        // Omitted rather than null when the redeemer already belonged: no
+        // membership row appeared, and naming one would mislead every
+        // consumer that projects it.
+        ...(membershipId ? { membershipId } : {}),
+        roleTemplate: invitation.roleTemplate,
+        acceptedAt: (
+          invitation.acceptedAt ?? invitation.updatedAt
+        ).toISOString(),
+      },
+      invitation.organizationId,
+      correlationId,
+    );
+  }
+
+  async invitationRevoked(
+    invitation: Invitation,
+    revokedByUserId: string,
+    correlationId?: string,
+  ): Promise<void> {
+    await this.safePublish(
+      invitationRevokedV1,
+      {
+        invitationId: invitation.id,
+        organizationId: invitation.organizationId,
+        revokedByUserId,
+        revokedAt: invitation.updatedAt.toISOString(),
+      },
+      invitation.organizationId,
       correlationId,
     );
   }

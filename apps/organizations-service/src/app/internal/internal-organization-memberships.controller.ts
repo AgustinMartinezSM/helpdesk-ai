@@ -23,7 +23,7 @@ import {
 import { RemoveBranchMembershipUseCase } from '../../application/use-cases/remove-branch-membership';
 import { ChangeMembershipRoleDto, ChangeMembershipStatusDto } from './dto';
 import { InternalServiceGuard } from './internal-service.guard';
-import { OrganizationDomainErrorFilter } from './organization-domain-error.filter';
+import { OrganizationDomainErrorFilter } from '../organization-domain-error.filter';
 
 interface ChangedStatusResponse {
   status: string;

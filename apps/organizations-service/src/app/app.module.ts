@@ -1,9 +1,15 @@
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { JwtAccessGuard } from '@helpdesk-ai/security';
 import { MessagingClient } from '@helpdesk-ai/messaging';
 import { Logger, ObservabilityModule } from '@helpdesk-ai/observability';
 import { EVENT_PUBLISHER } from '../application/ports/event-publisher';
 import type { OrganizationEventPublisher } from '../application/ports/event-publisher';
+import {
+  INVITATION_REPOSITORY,
+  type InvitationRepository,
+} from '../application/ports/invitation.repository';
 import { MEMBERSHIP_REPOSITORY } from '../application/ports/membership.repository';
 import type { MembershipRepository } from '../application/ports/membership.repository';
 import {
@@ -25,6 +31,7 @@ import {
   type DepartmentRepository,
   type OperationalStationRepository,
 } from '../application/ports/structure.repository';
+import { AcceptInvitationUseCase } from '../application/use-cases/accept-invitation';
 import { AssignBranchMembershipUseCase } from '../application/use-cases/assign-branch-membership';
 import { ChangeMembershipRoleUseCase } from '../application/use-cases/change-membership-role';
 import { ChangeMembershipStatusUseCase } from '../application/use-cases/change-membership-status';
@@ -33,8 +40,11 @@ import { CreateDepartmentUseCase } from '../application/use-cases/create-departm
 import { CreateStationUseCase } from '../application/use-cases/create-station';
 import { EnsureMembershipUseCase } from '../application/use-cases/ensure-membership';
 import { GetMembershipUseCase } from '../application/use-cases/get-membership';
+import { IssueInvitationUseCase } from '../application/use-cases/issue-invitation';
+import { ListInvitationsUseCase } from '../application/use-cases/list-invitations';
 import { RemoveBranchMembershipUseCase } from '../application/use-cases/remove-branch-membership';
 import { ResolveActiveMembershipUseCase } from '../application/use-cases/resolve-active-membership';
+import { RevokeInvitationUseCase } from '../application/use-cases/revoke-invitation';
 import { UpdateBranchUseCase } from '../application/use-cases/update-branch';
 import { UpdateDepartmentUseCase } from '../application/use-cases/update-department';
 import { UpdateStationUseCase } from '../application/use-cases/update-station';
@@ -47,12 +57,14 @@ import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-eve
 import { PrismaBranchMembershipRepository } from '../infrastructure/prisma/prisma-branch-membership.repository';
 import { PrismaBranchRepository } from '../infrastructure/prisma/prisma-branch.repository';
 import { PrismaDepartmentRepository } from '../infrastructure/prisma/prisma-department.repository';
+import { PrismaInvitationRepository } from '../infrastructure/prisma/prisma-invitation.repository';
 import { PrismaMembershipRepository } from '../infrastructure/prisma/prisma-membership.repository';
 import { PrismaOperationalStationRepository } from '../infrastructure/prisma/prisma-operational-station.repository';
 import { PrismaOrganizationRepository } from '../infrastructure/prisma/prisma-organization.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { UuidGenerator } from '../infrastructure/uuid-generator';
 import { HealthController } from './health/health.controller';
+import { InvitationsController } from './invitations/invitations.controller';
 import { InternalMembershipsController } from './internal/internal-memberships.controller';
 import { InternalOrganizationMembershipsController } from './internal/internal-organization-memberships.controller';
 import { InternalOrganizationStructureController } from './internal/internal-organization-structure.controller';
@@ -63,10 +75,15 @@ import { RegistrationConsumer } from './messaging/registration.consumer';
  * Root module built from an already-validated environment; ports meet their
  * infrastructure implementations here and nowhere else.
  *
- * No JwtModule: this service has no person-facing endpoint yet. Its only
- * surface is the internal resolution call, which authenticates a process
- * rather than a user, so registering token verification would be wiring that
- * guards nothing.
+ * JwtModule is registered for VERIFICATION ONLY — this service never signs a
+ * token. It gained a person-facing surface in Sprint 9.8 (ADR 0019), which
+ * reversed the property the previous version of this comment described.
+ *
+ * JwtAccessGuard is a plain provider rather than an APP_GUARD, on purpose:
+ * the /internal/* controllers authenticate a PROCESS through
+ * InternalServiceGuard, and a global person-token guard would either lock
+ * them out or have to be excepted per route. Each controller declares the
+ * guard it means.
  */
 @Module({})
 export class AppModule {
@@ -79,9 +96,11 @@ export class AppModule {
           environment: env.NODE_ENV,
           logLevel: env.LOG_LEVEL,
         }),
+        JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
       ],
       controllers: [
         HealthController,
+        InvitationsController,
         InternalMembershipsController,
         InternalOrganizationMembershipsController,
         InternalOrganizationStructureController,
@@ -104,6 +123,12 @@ export class AppModule {
           provide: MEMBERSHIP_REPOSITORY,
           useFactory: (prisma: PrismaService) =>
             new PrismaMembershipRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: INVITATION_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaInvitationRepository(prisma),
           inject: [PrismaService],
         },
         {
@@ -363,6 +388,72 @@ export class AppModule {
           ],
         },
         {
+          provide: IssueInvitationUseCase,
+          useFactory: (
+            invitations: InvitationRepository,
+            memberships: MembershipRepository,
+            clock: Clock,
+            ids: IdGenerator,
+            events: OrganizationEventPublisher,
+          ) =>
+            new IssueInvitationUseCase(
+              invitations,
+              memberships,
+              clock,
+              ids,
+              events,
+            ),
+          inject: [
+            INVITATION_REPOSITORY,
+            MEMBERSHIP_REPOSITORY,
+            CLOCK,
+            ID_GENERATOR,
+            EVENT_PUBLISHER,
+          ],
+        },
+        {
+          provide: ListInvitationsUseCase,
+          useFactory: (invitations: InvitationRepository, clock: Clock) =>
+            new ListInvitationsUseCase(invitations, clock),
+          inject: [INVITATION_REPOSITORY, CLOCK],
+        },
+        {
+          provide: RevokeInvitationUseCase,
+          useFactory: (
+            invitations: InvitationRepository,
+            clock: Clock,
+            events: OrganizationEventPublisher,
+          ) => new RevokeInvitationUseCase(invitations, clock, events),
+          inject: [INVITATION_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+        },
+        {
+          provide: AcceptInvitationUseCase,
+          useFactory: (
+            invitations: InvitationRepository,
+            memberships: MembershipRepository,
+            organizations: OrganizationRepository,
+            clock: Clock,
+            ids: IdGenerator,
+            events: OrganizationEventPublisher,
+          ) =>
+            new AcceptInvitationUseCase(
+              invitations,
+              memberships,
+              organizations,
+              clock,
+              ids,
+              events,
+            ),
+          inject: [
+            INVITATION_REPOSITORY,
+            MEMBERSHIP_REPOSITORY,
+            ORGANIZATION_REPOSITORY,
+            CLOCK,
+            ID_GENERATOR,
+            EVENT_PUBLISHER,
+          ],
+        },
+        {
           provide: RegistrationConsumer,
           useFactory: (
             messaging: MessagingClient,
@@ -372,6 +463,7 @@ export class AppModule {
           inject: [MessagingClient, EnsureMembershipUseCase, Logger],
         },
         InternalServiceGuard,
+        JwtAccessGuard,
       ],
     };
   }

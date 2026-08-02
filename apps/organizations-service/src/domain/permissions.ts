@@ -84,6 +84,11 @@ const ORGANIZATION_ADMIN_PERMISSIONS: ReadonlySet<string> = new Set([
   PERMISSIONS.ORGANIZATION_UPDATE,
   PERMISSIONS.PEOPLE_READ,
   PERMISSIONS.PEOPLE_UPDATE,
+  // Sprint 9.8. A matrix ● cell for owner and admin. branch_manager's ○
+  // stays unrepresented: the matrix grants it own-scope, and a branch-scoped
+  // invitation would have to mean "into my branches", which needs the branch
+  // set on the invitation itself — a shape this sprint does not build.
+  PERMISSIONS.PEOPLE_INVITE,
   PERMISSIONS.TICKETS_CREATE,
   PERMISSIONS.TICKETS_READ_OWN,
   PERMISSIONS.TICKETS_READ_ALL,

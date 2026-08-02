@@ -134,6 +134,7 @@
     "@helpdesk-ai/security": "workspace:*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/swagger": "^11.4.6",
     "@prisma/adapter-pg": "7.9.1",

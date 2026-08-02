@@ -10,7 +10,10 @@ import {
 } from '@helpdesk-ai/observability';
 import { AppModule } from '../app.module';
 import { apiGatewayEnvSchema } from '../../config/env';
-import { createServiceProxy } from './service-proxy';
+import {
+  createServiceProxy,
+  INTERNAL_SERVICE_TOKEN_HEADER,
+} from './service-proxy';
 
 /** One entry per downstream the gateway fronts. */
 const SERVICES = [
@@ -49,6 +52,18 @@ const SERVICES = [
     envVar: 'ANALYTICS_SERVICE_URL',
     prefix: '/api/analytics',
     rewriteTo: '/analytics',
+  },
+  {
+    key: 'ai',
+    envVar: 'AI_SERVICE_URL',
+    prefix: '/api/ai',
+    rewriteTo: '/ai',
+  },
+  {
+    key: 'organizations',
+    envVar: 'ORGANIZATIONS_SERVICE_URL',
+    prefix: '/api/organizations',
+    rewriteTo: '/organizations',
   },
 ] as const;
 
@@ -164,6 +179,14 @@ describe('Service proxies (stub downstream services)', () => {
       .get('/api/analytics/summary')
       .set('authorization', 'Bearer token')
       .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/ai/capabilities')
+      .set('authorization', 'Bearer token')
+      .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/organizations/invitations')
+      .set('authorization', 'Bearer token')
+      .expect(200);
 
     expect(received.map((r) => [r.service, r.url])).toEqual([
       ['auth', '/auth/login'],
@@ -172,6 +195,8 @@ describe('Service proxies (stub downstream services)', () => {
       ['audit', '/audit?type=ticket.created.v1'],
       ['notifications', '/notifications/abc/read'],
       ['analytics', '/analytics/summary'],
+      ['ai', '/ai/capabilities'],
+      ['organizations', '/organizations/invitations'],
     ]);
     expect(received[1].body).toEqual({
       title: 'Via gateway',
@@ -196,5 +221,34 @@ describe('Service proxies (stub downstream services)', () => {
   it('keeps gateway-owned routes (health) outside the proxies', async () => {
     await request(app.getHttpServer()).get('/health').expect(200);
     expect(received).toHaveLength(0);
+  });
+
+  // organizations-service is the first routed host with an /internal/* surface
+  // that authenticates a process rather than a person (ADR 0019). A caller
+  // outside the cluster must not be able to present that credential, so the
+  // proxy drops the header on every route — the authorization header, which
+  // proves a person, still passes.
+  it('strips the internal service credential from inbound requests', async () => {
+    await request(app.getHttpServer())
+      .get('/api/organizations/invitations')
+      .set('authorization', 'Bearer token')
+      .set(INTERNAL_SERVICE_TOKEN_HEADER, 'smuggled-service-credential')
+      .expect(200);
+
+    expect(received[0].headers[INTERNAL_SERVICE_TOKEN_HEADER]).toBeUndefined();
+    expect(received[0].headers.authorization).toBe('Bearer token');
+  });
+
+  it('strips it on every proxied route, not only the organizations one', async () => {
+    await request(app.getHttpServer())
+      .patch('/api/tickets/abc/status')
+      .set(INTERNAL_SERVICE_TOKEN_HEADER, 'smuggled-service-credential')
+      .send({ status: 'in_progress' })
+      .expect(200);
+
+    expect(received[0].headers[INTERNAL_SERVICE_TOKEN_HEADER]).toBeUndefined();
+    // The body still arrives: the strip runs before fixRequestBody, which is
+    // what re-serializes it.
+    expect(received[0].body).toEqual({ status: 'in_progress' });
   });
 });

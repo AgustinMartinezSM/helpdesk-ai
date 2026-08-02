@@ -32,9 +32,10 @@ async function bootstrap(): Promise<void> {
       transform: true,
     }),
   );
-  // CORS is intentionally NOT enabled, and this service is deliberately absent
-  // from the api-gateway's routing table: only auth-service calls it, server
-  // to server. Browsers have no path here at all.
+  // CORS stays intentionally OFF even though the gateway routes
+  // /api/organizations here from Sprint 9.8 (ADR 0019): the browser path is
+  // web → web-bff → gateway, server to server from there on, so no page ever
+  // makes a cross-origin request to this process.
   app.enableShutdownHooks();
 
   if (env.NODE_ENV !== 'production') {
@@ -42,6 +43,7 @@ async function bootstrap(): Promise<void> {
       .setTitle('organizations-service')
       .setDescription('Organization and membership API')
       .setVersion('0.1.0')
+      .addBearerAuth()
       .build();
     SwaggerModule.setup(
       'docs',

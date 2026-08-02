@@ -15,13 +15,30 @@ export interface IncomingEnvelope {
 }
 
 /**
+ * Families whose ".v1" is already tenant-carrying — their first version was
+ * born with the tenant, so the version-suffix rule below would wrongly let
+ * them record with a null organization.
+ *
+ * `profile.*` is deliberately ABSENT: profile.updated.v1 is not
+ * tenant-carrying by name, because a person-level edit can legitimately
+ * happen with no organization (the belongs-nowhere state fixing their own
+ * phone number). Adding it here would dead-letter a legitimate event.
+ */
+const BORN_TENANT_CARRYING_PREFIXES = [
+  'membership.',
+  'branch.',
+  'station.',
+  'invitation.',
+];
+
+/**
  * Whether an event type is expected to carry its tenant on the envelope.
  * Two halves, matching how tenancy reached the bus:
  *
  * - A version suffix of `.v2` or higher: v2 is the tenant-carrying revision
  *   of every contract that had a tenantless v1, and later versions keep the
  *   field — dropping it again would be the break v2 exists to avoid.
- * - `membership.*`: born tenant-carrying, so their ".v1" names the first
+ * - The prefixes above: born tenant-carrying, so their ".v1" names the first
  *   version of a tenant-carrying contract, not a tenantless past (see the
  *   comment above membershipCreatedV1 in @helpdesk-ai/messaging contracts).
  *
@@ -29,7 +46,7 @@ export interface IncomingEnvelope {
  * events it has no contract for and cannot demand a tenant nobody agreed on.
  */
 export function isTenantCarryingEventType(type: string): boolean {
-  if (type.startsWith('membership.')) {
+  if (BORN_TENANT_CARRYING_PREFIXES.some((prefix) => type.startsWith(prefix))) {
     return true;
   }
   const version = /\.v(\d+)$/.exec(type);

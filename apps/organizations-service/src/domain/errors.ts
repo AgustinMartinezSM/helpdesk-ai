@@ -113,6 +113,86 @@ export class InvalidRoleTemplateError extends OrganizationDomainError {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Invitation errors (Sprint 9.8). Two shapes, and the split is the security
+// design rather than tidiness:
+//
+// - NOT FOUND covers an unknown id, a wrong secret and a foreign
+//   organization's invitation alike. Anything finer turns the accept endpoint
+//   into an oracle for valid invitation ids, and the revoke endpoint into one
+//   for other organizations' rows.
+// - NOT ACCEPTABLE covers every reason a real, addressed invitation may not
+//   be redeemed right now — expired, already used, revoked, its issuer no
+//   longer has standing, its organization was suspended. ONE error, blind to
+//   the cause, because naming the cause tells someone who is not a member yet
+//   what the organization's membership looks like. Same rule the assignee
+//   validation settled in Sprint 9.4.
+// ---------------------------------------------------------------------------
+
+export class InvitationNotFoundError extends OrganizationDomainError {
+  constructor() {
+    super('invitation not found');
+  }
+}
+
+/**
+ * Raised when the actor's token carries no `people.invite`. The check lives
+ * in the use case rather than a route decorator, following the platform's
+ * rule that permission checks are server-side and at the call site — a guard
+ * that has to be remembered per route is a guard that gets forgotten.
+ */
+export class ForbiddenInvitationActionError extends OrganizationDomainError {
+  constructor() {
+    super('you are not allowed to manage invitations here');
+  }
+}
+
+export class InvitationNotRedeemableError extends OrganizationDomainError {
+  constructor() {
+    super('this invitation cannot be used');
+  }
+}
+
+/**
+ * Raised when a valid code is redeemed by someone other than the person it
+ * was addressed to.
+ *
+ * Named rather than folded into the generic refusal above: signing in with
+ * the wrong one of your own accounts is the common case, and whoever presents
+ * the code already knows the code is real — so this tells them nothing they
+ * could not deduce. It deliberately never names the address it expected.
+ */
+export class InvitationAddresseeMismatchError extends OrganizationDomainError {
+  constructor() {
+    super('this invitation was sent to a different address');
+  }
+}
+
+/**
+ * Raised when an organization already has a pending invitation for an
+ * address. Backed by a partial unique index, so the check is not merely
+ * advisory under concurrency — the database refuses the second one.
+ */
+export class DuplicatePendingInvitationError extends OrganizationDomainError {
+  constructor(organizationId: string) {
+    super(
+      `organization "${organizationId}" already has a pending invitation for that address`,
+    );
+  }
+}
+
+/**
+ * Raised when an issuer names a template their own carries no path to.
+ * Distinct from the redemption refusals above: this one answers the ISSUER,
+ * who is a member and already knows their own standing, so telling them why
+ * leaks nothing and refusing silently would be unhelpful.
+ */
+export class RoleTemplateNotGrantableError extends OrganizationDomainError {
+  constructor(template: string) {
+    super(`you cannot grant the role template "${template}"`);
+  }
+}
+
 /**
  * Raised when a role change targets the template the membership already has
  * — the status transition table's no-self-loop argument, applied to roles:

@@ -26,6 +26,17 @@ export const PERMISSIONS = {
    * fields needs no key — being yourself is the authorization.
    */
   PEOPLE_UPDATE: 'people.update',
+  /**
+   * Bringing a person into the organization: issuing, listing and revoking
+   * invitations. Redeeming one needs no key — holding the code while being
+   * the addressed person is the authorization, and the invitee is by
+   * definition not a member yet.
+   *
+   * An invitation cannot grant more than its issuer holds, so this key is
+   * bounded by whatever else the issuer's template carries; the check lives
+   * in the use case, against the stored membership rather than the token.
+   */
+  PEOPLE_INVITE: 'people.invite',
   TICKETS_CREATE: 'tickets.create',
   /** Own requests only; the requester's default visibility. */
   TICKETS_READ_OWN: 'tickets.read_own',

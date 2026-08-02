@@ -557,7 +557,7 @@ describe('ResolveActiveMembershipUseCase', () => {
     expect(resolved?.membershipVersion).toBe(7);
   });
 
-  it('resolves the oldest active membership when a user belongs to several', async () => {
+  it('prefers a real organization over the bootstrap one, even when older', async () => {
     const ctx = buildContext();
     ctx.organizations.add(organization());
     ctx.organizations.add(
@@ -575,8 +575,62 @@ describe('ResolveActiveMembershipUseCase', () => {
       createdAt: new Date('2026-07-30T13:00:00.000Z'),
     });
 
-    // Deterministic until an organization selector exists; a login must not
-    // land somewhere different depending on row order.
+    // Sprint 9.8 changed this from plain oldest-first, and this exact shape is
+    // why: registering gives everyone a bootstrap membership, so someone who
+    // signs up in order to accept an invitation always has an older row in the
+    // migration's holding pen. Oldest-first would make their acceptance
+    // invisible and the feature would never demonstrate.
+    const resolved = await ctx.resolveActiveMembership.execute(USER_ID);
+    expect(resolved?.organizationId).toBe(OTHER_ORG_ID);
+  });
+
+  it('still resolves the oldest when both are real organizations', async () => {
+    const ctx = buildContext();
+    const olderReal = '00000000-0000-4000-8000-0000000000aa';
+    ctx.organizations.add(
+      organization({ id: olderReal, slug: 'older-real', name: 'Older' }),
+    );
+    ctx.organizations.add(
+      organization({ id: OTHER_ORG_ID, slug: 'other', name: 'Other' }),
+    );
+
+    const base = {
+      userId: USER_ID,
+      roleTemplate: 'requester' as const,
+      status: 'active' as const,
+      version: 1,
+      updatedAt: new Date('2026-07-30T00:00:00.000Z'),
+    };
+    ctx.memberships.memberships.push(
+      {
+        ...base,
+        id: 'older-real-membership',
+        organizationId: olderReal,
+        createdAt: new Date('2026-07-30T10:00:00.000Z'),
+      },
+      {
+        ...base,
+        id: 'newer-real-membership',
+        organizationId: OTHER_ORG_ID,
+        createdAt: new Date('2026-07-30T13:00:00.000Z'),
+      },
+    );
+
+    // The bootstrap preference is a tiebreak, not a new ordering: among real
+    // organizations the original rule stands, and a login must not land
+    // somewhere different depending on row order.
+    const resolved = await ctx.resolveActiveMembership.execute(USER_ID);
+    expect(resolved?.organizationId).toBe(olderReal);
+  });
+
+  it('falls back to the bootstrap membership when it is the only one', async () => {
+    const ctx = buildContext();
+    ctx.organizations.add(organization());
+
+    await ctx.ensureMembership.execute({ userId: USER_ID, roles: ['user'] });
+
+    // The preference must not become a filter: every legacy user reconciled
+    // by the backfill has exactly this membership and nothing else.
     const resolved = await ctx.resolveActiveMembership.execute(USER_ID);
     expect(resolved?.organizationId).toBe(BOOTSTRAP_ID);
   });

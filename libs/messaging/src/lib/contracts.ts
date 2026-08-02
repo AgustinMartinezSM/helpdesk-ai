@@ -372,3 +372,63 @@ export const profileUpdatedV1 = defineEvent(
     updatedAt: z.iso.datetime(),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Invitation events (Sprint 9.8). Born tenant-carrying, like the membership
+// and structure contracts: an invitation exists only inside an organization,
+// so the envelope organizationId is required on the publish path and the
+// payload states the same fact for consumers that already hold this schema.
+//
+// What these payloads deliberately do NOT carry: the code, its hash, or the
+// invited email address. audit-service binds the firehose with '#' and keeps
+// payloads opaquely and indefinitely, so an address in a payload is an
+// address retained forever — the same reasoning that keeps values out of
+// profile.updated.v1. Who acted travels instead, because the point of these
+// events is attribution: every step of bringing a person in names the person
+// who took it.
+//
+// roleTemplate is a min-1 string for the membership-contract reason: the
+// template vocabulary is still open, and an enum here would turn settling it
+// into a breaking contract change.
+// ---------------------------------------------------------------------------
+
+export const invitationIssuedV1 = defineEvent(
+  'invitation.issued.v1',
+  z.object({
+    invitationId: z.uuid(),
+    organizationId: z.uuid(),
+    roleTemplate: z.string().min(1),
+    invitedByUserId: z.uuid(),
+    expiresAt: z.iso.datetime(),
+    issuedAt: z.iso.datetime(),
+  }),
+);
+
+/**
+ * The invitation was redeemed. `membershipId` is present only when this
+ * acceptance actually inserted a membership: someone who already belonged to
+ * the organization consumes their invitation without a second row, and an
+ * event claiming a membership id that names no new row would mislead every
+ * consumer that projects one.
+ */
+export const invitationAcceptedV1 = defineEvent(
+  'invitation.accepted.v1',
+  z.object({
+    invitationId: z.uuid(),
+    organizationId: z.uuid(),
+    acceptedByUserId: z.uuid(),
+    membershipId: z.uuid().optional(),
+    roleTemplate: z.string().min(1),
+    acceptedAt: z.iso.datetime(),
+  }),
+);
+
+export const invitationRevokedV1 = defineEvent(
+  'invitation.revoked.v1',
+  z.object({
+    invitationId: z.uuid(),
+    organizationId: z.uuid(),
+    revokedByUserId: z.uuid(),
+    revokedAt: z.iso.datetime(),
+  }),
+);

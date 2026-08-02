@@ -12,8 +12,8 @@ interface LivenessReport {
 interface ReadinessReport extends LivenessReport {
   /**
    * External dependencies actually probed for readiness. Empty on purpose:
-   * the gateway does not route to any downstream service yet, and reporting
-   * a dependency that is never probed would make readiness lie.
+   * the gateway proxies to its downstreams but probes none of them, and
+   * reporting a dependency that is never probed would make readiness lie.
    */
   checks: string[];
 }

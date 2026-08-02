@@ -1,4 +1,5 @@
 import type { Branch, OperationalStation } from '../../domain/branch';
+import type { Invitation } from '../../domain/invitation';
 import type {
   Membership,
   MembershipStatus,
@@ -65,6 +66,45 @@ export interface StructureEventPublisher {
   ): Promise<void>;
 }
 
+/**
+ * Outbound invitation events (Sprint 9.8). Best-effort after the commit and
+ * born tenant-carrying like the rest.
+ *
+ * Every method takes the acting person's id: attribution is the point of
+ * these events, and the invitation row only records who issued it. The
+ * payloads never carry the code, its hash, or the invited address — the
+ * reasoning is in the contract definitions.
+ */
+export interface InvitationEventPublisher {
+  invitationIssued(
+    invitation: Invitation,
+    correlationId?: string,
+  ): Promise<void>;
+  /**
+   * `acceptedByUserId` is passed rather than read off the row: the domain
+   * type makes it nullable (a pending invitation has none), and an adapter
+   * coercing a null into the payload would publish an event that fails its
+   * own schema at the broker.
+   *
+   * `membershipId` is present only when this redemption actually inserted a
+   * membership: someone who already belonged consumes their invitation
+   * without a new row, and naming one that does not exist would mislead
+   * every consumer that projects it.
+   */
+  invitationAccepted(
+    invitation: Invitation,
+    acceptedByUserId: string,
+    membershipId: string | undefined,
+    correlationId?: string,
+  ): Promise<void>;
+  invitationRevoked(
+    invitation: Invitation,
+    revokedByUserId: string,
+    correlationId?: string,
+  ): Promise<void>;
+}
+
 /** What the one wired publisher adapter provides under EVENT_PUBLISHER. */
 export type OrganizationEventPublisher = MembershipEventPublisher &
-  StructureEventPublisher;
+  StructureEventPublisher &
+  InvitationEventPublisher;

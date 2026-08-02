@@ -131,18 +131,44 @@ export class PrismaUserSnapshotRepository implements UserSnapshotRepository {
   }
 
   async applyMembershipCreated(input: ApplyMembershipCreated): Promise<void> {
-    // upsert keyed on the primary key compiles to a single INSERT .. ON
-    // CONFLICT DO UPDATE. The create path exists for a lost or late
-    // registration event: registeredAt is then the membership time, the
-    // honest nearby value (see the port contract).
-    await this.prisma.userSnapshot.upsert({
-      where: { userId: input.userId },
-      create: {
-        userId: input.userId,
-        registeredAt: input.createdAt,
-        organizationId: input.organizationId,
-      },
-      update: { organizationId: input.organizationId },
+    // The stamp only fills an EMPTY organization; it never moves a snapshot
+    // from one tenant to another.
+    //
+    // This row is keyed on userId alone, which encodes an assumption the
+    // identity model never made: ADR 0013 lets one person belong to several
+    // organizations. Sprint 9.8 is when that starts happening routinely —
+    // accepting an invitation gives someone a second membership — and the
+    // previous unconditional update meant two membership events for one
+    // person MOVED them between tenants, with broker delivery order deciding
+    // whose headcount they landed in. A per-organization count settled by
+    // delivery order is worse than a stale one.
+    //
+    // What this does NOT fix, stated rather than implied: a person in two
+    // organizations is still counted in exactly one — the first to claim
+    // them. Counting them in both needs user_snapshots rekeyed on
+    // (userId, organizationId), which is its own increment (Sprint 9.8, D8).
+    const stamped = await this.prisma.userSnapshot.updateMany({
+      where: { userId: input.userId, organizationId: null },
+      data: { organizationId: input.organizationId },
+    });
+    if (stamped.count > 0) {
+      return;
+    }
+
+    // No row to stamp: either it already carries an organization (leave it),
+    // or the registration event was lost or is late. createMany with
+    // skipDuplicates covers the second case without racing the first —
+    // registeredAt is then the membership time, the honest nearby value (see
+    // the port contract).
+    await this.prisma.userSnapshot.createMany({
+      data: [
+        {
+          userId: input.userId,
+          registeredAt: input.createdAt,
+          organizationId: input.organizationId,
+        },
+      ],
+      skipDuplicates: true,
     });
   }
 

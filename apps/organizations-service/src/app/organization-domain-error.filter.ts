@@ -4,20 +4,27 @@ import {
   type ArgumentsHost,
   type ExceptionFilter,
 } from '@nestjs/common';
+import { NoOrganizationContextError } from '@helpdesk-ai/security';
 import {
   BranchNotFoundError,
   DepartmentNotFoundError,
   DuplicateBranchCodeError,
   DuplicateDepartmentNameError,
+  DuplicatePendingInvitationError,
   DuplicateStationCodeError,
+  ForbiddenInvitationActionError,
   InvalidMembershipTransitionError,
   InvalidRoleTemplateError,
+  InvitationAddresseeMismatchError,
+  InvitationNotFoundError,
+  InvitationNotRedeemableError,
   MembershipNotFoundError,
   OrganizationDomainError,
   OrganizationNotFoundError,
+  RoleTemplateNotGrantableError,
   SameRoleTemplateError,
   StationNotFoundError,
-} from '../../domain/errors';
+} from '../domain/errors';
 
 interface JsonResponse {
   status(code: number): { json(body: unknown): void };
@@ -29,10 +36,19 @@ interface JsonResponse {
  * Every error is listed explicitly and the fallback is 500, following the
  * lesson tickets-service learned the hard way: a domain error nobody has
  * mapped yet must fail loudly, not masquerade as "not found".
+ *
+ * Shared by the internal surface and, from Sprint 9.8, the public one — which
+ * is why it no longer lives under app/internal. NoOrganizationContextError
+ * comes from @helpdesk-ai/security (the shared requireOrganization helper
+ * throws it), so it is caught by name next to the domain hierarchy rather
+ * than through it, exactly as every other service's filter does.
  */
-@Catch(OrganizationDomainError)
+@Catch(OrganizationDomainError, NoOrganizationContextError)
 export class OrganizationDomainErrorFilter implements ExceptionFilter {
-  catch(exception: OrganizationDomainError, host: ArgumentsHost): void {
+  catch(
+    exception: OrganizationDomainError | NoOrganizationContextError,
+    host: ArgumentsHost,
+  ): void {
     const response = host.switchToHttp().getResponse<JsonResponse>();
     const { status, error } = describe(exception);
 
@@ -44,7 +60,9 @@ export class OrganizationDomainErrorFilter implements ExceptionFilter {
   }
 }
 
-function describe(exception: OrganizationDomainError): {
+function describe(
+  exception: OrganizationDomainError | NoOrganizationContextError,
+): {
   status: number;
   error: string;
 } {
@@ -53,10 +71,13 @@ function describe(exception: OrganizationDomainError): {
     exception instanceof OrganizationNotFoundError ||
     exception instanceof BranchNotFoundError ||
     exception instanceof DepartmentNotFoundError ||
-    exception instanceof StationNotFoundError
+    exception instanceof StationNotFoundError ||
+    exception instanceof InvitationNotFoundError
   ) {
     // Foreign and nonexistent answer alike: the not-found errors are built
     // scoped, so a guessed id from another organization gets this same 404.
+    // The invitation one goes further and covers a wrong secret too, so the
+    // accept endpoint cannot be used to confirm that an id is real.
     return { status: HttpStatus.NOT_FOUND, error: 'Not Found' };
   }
   if (
@@ -64,11 +85,26 @@ function describe(exception: OrganizationDomainError): {
     exception instanceof SameRoleTemplateError ||
     exception instanceof DuplicateBranchCodeError ||
     exception instanceof DuplicateDepartmentNameError ||
-    exception instanceof DuplicateStationCodeError
+    exception instanceof DuplicateStationCodeError ||
+    exception instanceof DuplicatePendingInvitationError ||
+    exception instanceof InvitationNotRedeemableError
   ) {
     // The row exists; its current state refuses the move. 409 tells the
     // caller to re-read rather than retry the same request.
     return { status: HttpStatus.CONFLICT, error: 'Conflict' };
+  }
+  if (
+    exception instanceof ForbiddenInvitationActionError ||
+    exception instanceof RoleTemplateNotGrantableError ||
+    exception instanceof InvitationAddresseeMismatchError ||
+    exception instanceof NoOrganizationContextError
+  ) {
+    // The caller is authenticated and the request is well-formed; what they
+    // asked for exceeds what they hold. 403 rather than 404 because none of
+    // these hides anything: each answers the caller about their OWN standing
+    // or about a code they already possess, so there is nothing to conceal
+    // and a silent not-found would only be confusing.
+    return { status: HttpStatus.FORBIDDEN, error: 'Forbidden' };
   }
   if (exception instanceof InvalidRoleTemplateError) {
     // Normally unreachable over HTTP — the DTO already refuses unknown

@@ -29,7 +29,7 @@ import {
   UpdateStationDto,
 } from './dto';
 import { InternalServiceGuard } from './internal-service.guard';
-import { OrganizationDomainErrorFilter } from './organization-domain-error.filter';
+import { OrganizationDomainErrorFilter } from '../organization-domain-error.filter';
 
 interface BranchResponse {
   branchId: string;

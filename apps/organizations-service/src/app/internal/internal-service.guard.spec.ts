@@ -6,6 +6,7 @@ import {
 } from './internal-service.guard';
 
 const EXPECTED = 'a'.repeat(48);
+const PREVIOUS = 'p'.repeat(48);
 
 function contextWithHeaders(
   headers: Record<string, string | undefined>,
@@ -15,9 +16,10 @@ function contextWithHeaders(
   } as unknown as ExecutionContext;
 }
 
-function guard(): InternalServiceGuard {
+function guard(previous?: string): InternalServiceGuard {
   return new InternalServiceGuard({
     INTERNAL_SERVICE_TOKEN: EXPECTED,
+    INTERNAL_SERVICE_TOKEN_PREVIOUS: previous,
   } as OrganizationsServiceEnv);
 }
 
@@ -64,5 +66,41 @@ describe('InternalServiceGuard', () => {
       authorization: `Bearer ${EXPECTED}`,
     });
     expect(() => guard().canActivate(context)).toThrow(UnauthorizedException);
+  });
+
+  describe('rotation (Sprint 9.8)', () => {
+    it('accepts the value being rotated out alongside the new one', () => {
+      const rotating = guard(PREVIOUS);
+      expect(
+        rotating.canActivate(
+          contextWithHeaders({ [INTERNAL_SERVICE_TOKEN_HEADER]: EXPECTED }),
+        ),
+      ).toBe(true);
+      expect(
+        rotating.canActivate(
+          contextWithHeaders({ [INTERNAL_SERVICE_TOKEN_HEADER]: PREVIOUS }),
+        ),
+      ).toBe(true);
+    });
+
+    it('stops accepting the old value once it is dropped', () => {
+      // The third step of the runbook. Without it a rotation never actually
+      // retires anything.
+      expect(() =>
+        guard().canActivate(
+          contextWithHeaders({ [INTERNAL_SERVICE_TOKEN_HEADER]: PREVIOUS }),
+        ),
+      ).toThrow(UnauthorizedException);
+    });
+
+    it('still rejects a wrong value while a rotation is in flight', () => {
+      expect(() =>
+        guard(PREVIOUS).canActivate(
+          contextWithHeaders({
+            [INTERNAL_SERVICE_TOKEN_HEADER]: 'b'.repeat(EXPECTED.length),
+          }),
+        ),
+      ).toThrow(UnauthorizedException);
+    });
   });
 });

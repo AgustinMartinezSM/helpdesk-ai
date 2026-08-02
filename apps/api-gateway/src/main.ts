@@ -75,6 +75,17 @@ async function bootstrap(): Promise<void> {
       target: env.AI_SERVICE_URL,
     }),
   );
+  // organizations-service is routed from Sprint 9.8 (ADR 0019). Only its
+  // person-facing routes are meant to be reachable this way; its /internal/*
+  // surface keeps a separate guard, and the proxy strips the service
+  // credential's header so nothing outside can present one.
+  app.use(
+    createServiceProxy({
+      pathFilter: '/api/organizations',
+      rewriteTo: '/organizations',
+      target: env.ORGANIZATIONS_SERVICE_URL,
+    }),
+  );
   // CORS is intentionally NOT enabled: browsers never call the gateway
   // directly — only the web BFF and other services do, server to server.
   app.enableShutdownHooks();

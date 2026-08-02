@@ -9,8 +9,16 @@ import type {
   MembershipStatus,
   RoleTemplate,
 } from '../../domain/membership';
+import type { Invitation, InvitationStatus } from '../../domain/invitation';
 import type { Organization } from '../../domain/organization';
+import { DuplicatePendingInvitationError } from '../../domain/errors';
 import type { OrganizationEventPublisher } from '../ports/event-publisher';
+import type {
+  InvitationListFilter,
+  InvitationRepository,
+  RedeemInvitationInput,
+  RedeemInvitationResult,
+} from '../ports/invitation.repository';
 import type {
   MembershipCreateResult,
   MembershipRepository,
@@ -149,6 +157,130 @@ export class InMemoryMembershipRepository implements MembershipRepository {
       ) ?? null
     );
   }
+}
+
+/**
+ * Mirrors the SQL the Prisma adapter actually runs, not a convenient version
+ * of it: `redeem` and `revoke` re-check the status inside the "update" the
+ * way the conditional UPDATE does, so a use case that stopped guarding
+ * against a second redemption fails here too. A fake that just did what it
+ * was asked would let single-use silently break.
+ */
+export class InMemoryInvitationRepository implements InvitationRepository {
+  readonly invitations: Invitation[] = [];
+
+  async create(invitation: Invitation): Promise<Invitation> {
+    const clashes = this.invitations.some(
+      (existing) =>
+        existing.organizationId === invitation.organizationId &&
+        existing.inviteeEmail === invitation.inviteeEmail &&
+        existing.status === 'pending',
+    );
+    // The partial unique index, in memory: only PENDING rows collide, so a
+    // person who was invited and left can be invited again.
+    if (clashes) {
+      throw new DuplicatePendingInvitationError(invitation.organizationId);
+    }
+    this.invitations.push(invitation);
+    return invitation;
+  }
+
+  async findById(invitationId: string): Promise<Invitation | null> {
+    return (
+      this.invitations.find((invitation) => invitation.id === invitationId) ??
+      null
+    );
+  }
+
+  async findByOrganizationAndId(
+    organizationId: string,
+    invitationId: string,
+  ): Promise<Invitation | null> {
+    return (
+      this.invitations.find(
+        (invitation) =>
+          invitation.id === invitationId &&
+          invitation.organizationId === organizationId,
+      ) ?? null
+    );
+  }
+
+  async list(filter: InvitationListFilter): Promise<Invitation[]> {
+    return this.invitations
+      .filter(
+        (invitation) =>
+          invitation.organizationId === filter.organizationId &&
+          (filter.status === undefined || invitation.status === filter.status),
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(filter.offset, filter.offset + filter.limit);
+  }
+
+  async redeem(
+    input: RedeemInvitationInput,
+  ): Promise<RedeemInvitationResult | null> {
+    const index = this.invitations.findIndex(
+      (invitation) =>
+        invitation.id === input.invitationId && invitation.status === 'pending',
+    );
+    if (index < 0) {
+      return null;
+    }
+    const invitation: Invitation = {
+      ...this.invitations[index],
+      status: 'accepted' as InvitationStatus,
+      acceptedByUserId: input.acceptedByUserId,
+      acceptedAt: input.at,
+      updatedAt: input.at,
+    };
+    this.invitations[index] = invitation;
+
+    const existing = this.memberships?.find(
+      (membership) =>
+        membership.organizationId === input.membership.organizationId &&
+        membership.userId === input.membership.userId,
+    );
+    if (existing) {
+      return { invitation, membership: existing, membershipCreated: false };
+    }
+    this.memberships?.push(input.membership);
+    return {
+      invitation,
+      membership: input.membership,
+      membershipCreated: true,
+    };
+  }
+
+  async revoke(
+    organizationId: string,
+    invitationId: string,
+    revokedAt: Date,
+  ): Promise<Invitation | null> {
+    const index = this.invitations.findIndex(
+      (invitation) =>
+        invitation.id === invitationId &&
+        invitation.organizationId === organizationId &&
+        invitation.status === 'pending',
+    );
+    if (index < 0) {
+      return null;
+    }
+    const invitation: Invitation = {
+      ...this.invitations[index],
+      status: 'revoked' as InvitationStatus,
+      updatedAt: revokedAt,
+    };
+    this.invitations[index] = invitation;
+    return invitation;
+  }
+
+  /**
+   * The membership rows redemption writes into. Assigned by the spec from
+   * the membership fake, because the real `redeem` writes both tables in one
+   * transaction and a fake that kept its own copy would let a spec pass while
+   * the two disagreed.
+   */
+  memberships?: Membership[];
 }
 
 export class InMemoryBranchRepository implements BranchRepository {
@@ -366,6 +498,21 @@ export class FakeOrganizationEventPublisher implements OrganizationEventPublishe
     station: OperationalStation;
     correlationId?: string;
   }[] = [];
+  readonly invitationsIssued: {
+    invitation: Invitation;
+    correlationId?: string;
+  }[] = [];
+  readonly invitationsAccepted: {
+    invitation: Invitation;
+    acceptedByUserId: string;
+    membershipId: string | undefined;
+    correlationId?: string;
+  }[] = [];
+  readonly invitationsRevoked: {
+    invitation: Invitation;
+    revokedByUserId: string;
+    correlationId?: string;
+  }[] = [];
 
   async membershipCreated(
     membership: Membership,
@@ -410,6 +557,39 @@ export class FakeOrganizationEventPublisher implements OrganizationEventPublishe
     correlationId?: string,
   ): Promise<void> {
     this.stationsUpdated.push({ station, correlationId });
+  }
+
+  async invitationIssued(
+    invitation: Invitation,
+    correlationId?: string,
+  ): Promise<void> {
+    this.invitationsIssued.push({ invitation, correlationId });
+  }
+
+  async invitationAccepted(
+    invitation: Invitation,
+    acceptedByUserId: string,
+    membershipId: string | undefined,
+    correlationId?: string,
+  ): Promise<void> {
+    this.invitationsAccepted.push({
+      invitation,
+      acceptedByUserId,
+      membershipId,
+      correlationId,
+    });
+  }
+
+  async invitationRevoked(
+    invitation: Invitation,
+    revokedByUserId: string,
+    correlationId?: string,
+  ): Promise<void> {
+    this.invitationsRevoked.push({
+      invitation,
+      revokedByUserId,
+      correlationId,
+    });
   }
 }
 

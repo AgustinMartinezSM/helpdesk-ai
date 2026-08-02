@@ -3,6 +3,9 @@ import {
   branchCreatedV1,
   branchUpdatedV1,
   eventEnvelopeSchema,
+  invitationAcceptedV1,
+  invitationIssuedV1,
+  invitationRevokedV1,
   membershipCreatedV1,
   membershipRoleChangedV1,
   membershipStatusChangedV1,
@@ -546,5 +549,88 @@ describe('profile.updated.v1', () => {
       phone: '+54 11 5555-5555',
     } as never);
     expect(parsed).not.toHaveProperty('phone');
+  });
+});
+
+describe('invitation contracts', () => {
+  const ISSUED = {
+    invitationId: '8b1f2c3d-4e5a-4b6c-8d7e-9f0a1b2c3d4e',
+    organizationId: 'c0ffee00-c0de-4bad-8f00-0d15ea5e0001',
+    roleTemplate: 'agent',
+    invitedByUserId: '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111',
+    expiresAt: '2026-08-09T12:00:00.000Z',
+    issuedAt: '2026-08-02T12:00:00.000Z',
+  };
+
+  it('accepts a valid invitation.issued.v1 payload', () => {
+    expect(invitationIssuedV1.payloadSchema.safeParse(ISSUED).success).toBe(
+      true,
+    );
+  });
+
+  it('never carries the invited address or the code: the shapes have no room', () => {
+    // The security property, pinned where it is enforced. zod strips what a
+    // schema does not declare, so an adapter that started passing an address
+    // would publish an event without one rather than leak it into the audit
+    // trail's jsonb, where payloads are kept opaquely and indefinitely.
+    const issued = invitationIssuedV1.payloadSchema.parse({
+      ...ISSUED,
+      inviteeEmail: 'nueva.persona@empresa.com',
+      code: 'secret-code',
+      codeHash: 'deadbeef',
+    } as never);
+    expect(issued).not.toHaveProperty('inviteeEmail');
+    expect(issued).not.toHaveProperty('code');
+    expect(issued).not.toHaveProperty('codeHash');
+
+    const accepted = invitationAcceptedV1.payloadSchema.parse({
+      invitationId: ISSUED.invitationId,
+      organizationId: ISSUED.organizationId,
+      acceptedByUserId: ISSUED.invitedByUserId,
+      roleTemplate: 'agent',
+      acceptedAt: '2026-08-03T12:00:00.000Z',
+      inviteeEmail: 'nueva.persona@empresa.com',
+    } as never);
+    expect(accepted).not.toHaveProperty('inviteeEmail');
+  });
+
+  it('leaves membershipId optional, so a redemption that created no row can say so', () => {
+    const withoutMembership = invitationAcceptedV1.payloadSchema.safeParse({
+      invitationId: ISSUED.invitationId,
+      organizationId: ISSUED.organizationId,
+      acceptedByUserId: ISSUED.invitedByUserId,
+      roleTemplate: 'agent',
+      acceptedAt: '2026-08-03T12:00:00.000Z',
+    });
+    expect(withoutMembership.success).toBe(true);
+  });
+
+  it('does not constrain the role template to a vocabulary', () => {
+    // Same reason as the membership contracts: the template vocabulary is
+    // still open, and an enum here would make settling it a breaking change.
+    expect(
+      invitationIssuedV1.payloadSchema.safeParse({
+        ...ISSUED,
+        roleTemplate: 'a_template_that_does_not_exist_yet',
+      }).success,
+    ).toBe(true);
+    expect(
+      invitationIssuedV1.payloadSchema.safeParse({
+        ...ISSUED,
+        roleTemplate: '',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires the revoker on invitation.revoked.v1', () => {
+    // Attribution is the point of these events; an anonymous revoke would
+    // record that the offer was pulled without recording who pulled it.
+    expect(
+      invitationRevokedV1.payloadSchema.safeParse({
+        invitationId: ISSUED.invitationId,
+        organizationId: ISSUED.organizationId,
+        revokedAt: '2026-08-03T12:00:00.000Z',
+      }).success,
+    ).toBe(false);
   });
 });

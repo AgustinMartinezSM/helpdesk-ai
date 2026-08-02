@@ -1,6 +1,9 @@
 import { grantsAccess } from '../../domain/membership';
 import { permissionsForTemplate } from '../../domain/permissions';
-import { isActive } from '../../domain/organization';
+import {
+  BOOTSTRAP_ORGANIZATION_SLUG,
+  isActive,
+} from '../../domain/organization';
 import type { MembershipRepository } from '../ports/membership.repository';
 import type { BranchMembershipRepository } from '../ports/structure.repository';
 import type { OrganizationRepository } from '../ports/organization.repository';
@@ -39,10 +42,27 @@ export interface ResolvedMembership {
  * Resolution happens here, once per mint, rather than per request: that is
  * what keeps the other services free of a synchronous dependency on this one.
  *
- * There is no organization selector yet, so the rule is the oldest active
- * membership in an active organization. When switching organizations becomes
- * a token exchange, this is where the requested organization gets validated
- * against the caller's memberships instead of being chosen for them.
+ * There is no organization selector yet, so the rule is the oldest eligible
+ * membership — with ONE exception, added in Sprint 9.8: a real organization
+ * always beats the bootstrap one.
+ *
+ * The exception is not a preference, it is what makes invitations work.
+ * Everyone who registers gets a bootstrap membership from the registration
+ * consumer, so a person who signs up in order to accept an invitation holds
+ * two memberships, and the bootstrap one is almost always older. Oldest-first
+ * alone would hand them a token for the migration's holding pen and their
+ * acceptance would be invisible — the feature would not demonstrate at all.
+ *
+ * Nothing is retired to achieve this. The bootstrap membership stays: it is
+ * migration data, `deactivated` is terminal, and the real answer to "which
+ * organization am I acting in" is the selector ADR 0014 already defers. This
+ * is the smallest change that makes the common case right, and it is
+ * deliberately a tiebreak rather than a filter — someone whose ONLY
+ * membership is the bootstrap one still resolves to it.
+ *
+ * When switching organizations becomes a token exchange, this is where the
+ * requested organization gets validated against the caller's memberships
+ * instead of being chosen for them, and this tiebreak goes away with it.
  */
 export class ResolveActiveMembershipUseCase {
   constructor(
@@ -54,6 +74,7 @@ export class ResolveActiveMembershipUseCase {
   async execute(userId: string): Promise<ResolvedMembership | null> {
     const candidates = await this.memberships.listByUser(userId);
 
+    let fallback: ResolvedMembership | null = null;
     for (const membership of candidates) {
       if (!grantsAccess(membership)) {
         continue;
@@ -65,14 +86,23 @@ export class ResolveActiveMembershipUseCase {
       if (!organization || !isActive(organization)) {
         continue;
       }
-      return {
+
+      const resolved: ResolvedMembership = {
         organizationId: membership.organizationId,
         permissions: [...permissionsForTemplate(membership.roleTemplate)],
         membershipVersion: membership.version,
         branchIds: await this.branchMemberships.listBranchIds(membership.id),
       };
+
+      if (organization.slug !== BOOTSTRAP_ORGANIZATION_SLUG) {
+        // Candidates arrive oldest-first, so the first real organization is
+        // also the oldest real one — the original rule, with the holding pen
+        // skipped rather than a new ordering invented.
+        return resolved;
+      }
+      fallback ??= resolved;
     }
 
-    return null;
+    return fallback;
   }
 }
