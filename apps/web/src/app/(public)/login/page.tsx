@@ -13,6 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [sharedWorkstation, setSharedWorkstation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -26,7 +27,7 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, sharedWorkstation);
       router.push('/account');
     } catch (loginError) {
       setError(
@@ -65,6 +66,19 @@ export default function LoginPage() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
+
+          {/* The flag only ever shortens the session server-side, so a
+              plain checkbox is enough ceremony (ADR 0016). */}
+          <label className={styles.sharedRow}>
+            <input
+              type="checkbox"
+              checked={sharedWorkstation}
+              onChange={(event) => setSharedWorkstation(event.target.checked)}
+            />
+            <span>
+              Shared computer — sign me out sooner and when the browser closes
+            </span>
+          </label>
 
           {error ? <FormError>{error}</FormError> : null}
 

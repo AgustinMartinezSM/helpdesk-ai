@@ -181,7 +181,13 @@ export class AppModule {
             users: UserRepository,
             hasher: PasswordHasher,
             sessions: SessionService,
-          ) => new LoginUseCase(users, hasher, sessions),
+          ) =>
+            new LoginUseCase(
+              users,
+              hasher,
+              sessions,
+              env.JWT_REFRESH_SHARED_TTL_SECONDS,
+            ),
           inject: [USER_REPOSITORY, PASSWORD_HASHER, SessionService],
         },
         {

@@ -58,7 +58,17 @@ export class RefreshSessionUseCase {
     }
 
     // Issue first, then revoke the old token pointing at its replacement.
-    const session = await this.sessions.issueSession(user);
+    // The replacement inherits the window the presented token was BORN
+    // with (expiresAt - createdAt), not the configured TTL: a session
+    // opened on a shared workstation stays short across every rotation,
+    // and a normal session keeps exactly today's window. Deriving it from
+    // the row means no posture column exists to drift.
+    const bornWindowSeconds = Math.round(
+      (stored.expiresAt.getTime() - stored.createdAt.getTime()) / 1000,
+    );
+    const session = await this.sessions.issueSession(user, {
+      refreshTtlSeconds: bornWindowSeconds,
+    });
     await this.refreshTokens.revoke(stored.id, now, session.refreshTokenId);
 
     return session;

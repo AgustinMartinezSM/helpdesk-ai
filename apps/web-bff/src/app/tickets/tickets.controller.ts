@@ -51,6 +51,25 @@ export class TicketsController {
     return this.forward(req, 'GET', `/api/tickets${suffix}`);
   }
 
+  // Declared before ':id' — Nest matches in declaration order, and a
+  // literal 'branches' segment after ':id' would be parsed as a ticket id.
+  @Get('branches')
+  branches(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(req, 'GET', '/api/tickets/branches');
+  }
+
+  @Get('branches/:branchId/stations')
+  stations(
+    @Req() req: BrowserRequest,
+    @Param('branchId') branchId: string,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'GET',
+      `/api/tickets/branches/${encodeURIComponent(branchId)}/stations`,
+    );
+  }
+
   @Get(':id')
   get(@Req() req: BrowserRequest, @Param('id') id: string): Promise<unknown> {
     return this.forward(req, 'GET', `/api/tickets/${encodeURIComponent(id)}`);

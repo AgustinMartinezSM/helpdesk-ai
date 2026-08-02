@@ -145,6 +145,38 @@ describe('Session endpoints (stub gateway)', () => {
     expect(gateway.requests[0].url).toBe('/api/auth/login');
   });
 
+  it('login keeps Max-Age normally and drops it on a shared workstation', async () => {
+    gateway.respond('POST /api/auth/login', 200, SESSION_BODY);
+
+    const normal = await request(app.getHttpServer())
+      .post('/session/login')
+      .send({ email: 'a@b.com', password: 'a-valid-password' })
+      .expect(200);
+    expect(normal.headers['set-cookie']?.[0]).toContain('Max-Age=');
+
+    const shared = await request(app.getHttpServer())
+      .post('/session/login')
+      .send({
+        email: 'a@b.com',
+        password: 'a-valid-password',
+        sharedWorkstation: true,
+      })
+      .expect(200);
+    // No Max-Age and no Expires: the cookie dies with the browser, so
+    // closing the till's window ends the session locally while the
+    // shortened upstream TTL bounds it anyway.
+    const cookie = shared.headers['set-cookie']?.[0] ?? '';
+    expect(cookie).toContain('helpdesk_refresh=');
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).not.toContain('Max-Age=');
+    expect(cookie).not.toContain('Expires=');
+
+    // The flag reached auth-service: it decides the upstream TTL there.
+    expect(gateway.requests.at(-1)?.body).toMatchObject({
+      sharedWorkstation: true,
+    });
+  });
+
   it('login passes upstream 401 through without setting a cookie', async () => {
     gateway.respond('POST /api/auth/login', 401, {
       statusCode: 401,

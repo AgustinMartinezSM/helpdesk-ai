@@ -102,9 +102,45 @@ export function getTicket(
   return call(accessToken, 'GET', `/tickets/${encodeURIComponent(id)}`);
 }
 
+export interface BranchOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface StationOption {
+  id: string;
+  code: string;
+  name: string;
+  area: string | null;
+}
+
+/** Active branches of the caller's organization; empty for the shop that
+ * never configured any — the form then renders exactly as before. */
+export function listBranches(accessToken: string): Promise<BranchOption[]> {
+  return call(accessToken, 'GET', '/tickets/branches');
+}
+
+export function listStations(
+  accessToken: string,
+  branchId: string,
+): Promise<StationOption[]> {
+  return call(
+    accessToken,
+    'GET',
+    `/tickets/branches/${encodeURIComponent(branchId)}/stations`,
+  );
+}
+
 export function createTicket(
   accessToken: string,
-  input: { title: string; description: string; priority?: TicketPriority },
+  input: {
+    title: string;
+    description: string;
+    priority?: TicketPriority;
+    branchId?: string;
+    stationId?: string;
+  },
 ): Promise<Ticket> {
   return call(accessToken, 'POST', '/tickets', input);
 }

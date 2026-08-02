@@ -36,12 +36,20 @@ async function parseError(response: Response): Promise<string> {
 export async function loginRequest(
   email: string,
   password: string,
+  sharedWorkstation = false,
 ): Promise<BrowserSession> {
   const response = await fetch(`${BFF_URL}/session/login`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    // The flag only ever SHORTENS the session server-side (ADR 0016's
+    // shared-terminal increment), and it is omitted when false so the
+    // normal login payload stays byte-identical.
+    body: JSON.stringify({
+      email,
+      password,
+      ...(sharedWorkstation ? { sharedWorkstation } : {}),
+    }),
   });
   if (!response.ok) {
     throw new Error(await parseError(response));

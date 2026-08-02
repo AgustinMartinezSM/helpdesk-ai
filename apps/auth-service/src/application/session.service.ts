@@ -39,6 +39,19 @@ export interface Session {
  * semantics, since revoking a stolen token family would then have to reason
  * about which workspace the family belonged to.
  */
+export interface IssueSessionOptions {
+  /**
+   * Lifetime for the refresh credential, capped at the configured normal
+   * TTL — a caller can only SHRINK a session, never stretch one. Two
+   * callers use it: login passes the shared-workstation TTL when the
+   * client declared the machine shared (a hint that reduces access is
+   * trustworthy by direction), and rotation passes the window the
+   * presented token was born with, so a session keeps the posture it was
+   * created under for its whole life.
+   */
+  refreshTtlSeconds?: number;
+}
+
 export class SessionService {
   constructor(
     private readonly refreshTokens: RefreshTokenRepository,
@@ -49,7 +62,10 @@ export class SessionService {
     private readonly logger?: SessionLogger,
   ) {}
 
-  async issueSession(user: User): Promise<Session> {
+  async issueSession(
+    user: User,
+    options: IssueSessionOptions = {},
+  ): Promise<Session> {
     const membership = await this.resolveMembership(user.id);
 
     const { token: accessToken, expiresInSeconds } =
@@ -76,11 +92,19 @@ export class SessionService {
     const id = randomUUID();
     const secret = generateRefreshSecret();
 
+    // min() is the only-shrink guarantee in one place: a misconfigured
+    // shared TTL larger than the normal one, or a tampered rotation window,
+    // still cannot produce a session longer than the configured maximum.
+    const refreshTtlSeconds = Math.min(
+      options.refreshTtlSeconds ?? this.refreshTtlSeconds,
+      this.refreshTtlSeconds,
+    );
+
     await this.refreshTokens.create({
       id,
       userId: user.id,
       tokenHash: hashRefreshSecret(secret),
-      expiresAt: new Date(now.getTime() + this.refreshTtlSeconds * 1000),
+      expiresAt: new Date(now.getTime() + refreshTtlSeconds * 1000),
       createdAt: now,
       revokedAt: null,
       replacedById: null,

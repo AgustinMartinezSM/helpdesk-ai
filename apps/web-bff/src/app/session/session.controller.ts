@@ -70,7 +70,11 @@ export class SessionController {
       body: dto,
     });
     const session = this.expectSession(upstream);
-    this.setRefreshCookie(res, session.refreshToken);
+    // The BFF forwarded the flag itself, so deciding the cookie shape from
+    // the request is honest — no upstream field needed to echo it back.
+    this.setRefreshCookie(res, session.refreshToken, {
+      sessionScoped: dto.sharedWorkstation === true,
+    });
     return toBrowserSession(session);
   }
 
@@ -141,13 +145,22 @@ export class SessionController {
     return upstream.body as UpstreamSession;
   }
 
-  private setRefreshCookie(res: CookieResponse, refreshToken: string): void {
+  private setRefreshCookie(
+    res: CookieResponse,
+    refreshToken: string,
+    options: { sessionScoped?: boolean } = {},
+  ): void {
     res.cookie(REFRESH_COOKIE, refreshToken, {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.env.SESSION_COOKIE_SECURE,
       path: '/session',
-      maxAge: this.env.SESSION_REFRESH_COOKIE_MAX_AGE_SECONDS * 1000,
+      // On a shared workstation the cookie carries no Max-Age at all: it
+      // dies with the browser, so closing the till's window ends the
+      // session locally while the shortened upstream TTL bounds it anyway.
+      ...(options.sessionScoped
+        ? {}
+        : { maxAge: this.env.SESSION_REFRESH_COOKIE_MAX_AGE_SECONDS * 1000 }),
     });
   }
 

@@ -59,6 +59,38 @@ describe('LoginPage', () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith('/account'));
   });
 
+  it('posts the shared-workstation flag only when the checkbox is ticked', async () => {
+    mockFetchRoutes({
+      '/session/refresh': { status: 401, body: {} },
+      '/session/login': { status: 200, body: SESSION },
+    });
+
+    render(
+      <AuthProvider>
+        <LoginPage />
+      </AuthProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'a@b.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'a-valid-password' },
+    });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/account'));
+    const loginCall = (global.fetch as jest.Mock).mock.calls.find(([url]) =>
+      String(url).endsWith('/session/login'),
+    );
+    expect(JSON.parse(loginCall![1].body as string)).toEqual({
+      email: 'a@b.com',
+      password: 'a-valid-password',
+      sharedWorkstation: true,
+    });
+  });
+
   it('shows the BFF error message when credentials are rejected', async () => {
     mockFetchRoutes({
       '/session/refresh': { status: 401, body: {} },

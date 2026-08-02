@@ -8,6 +8,14 @@ import { SessionService } from '../session.service';
 export interface LoginInput {
   email: string;
   password: string;
+  /**
+   * The client's declaration that this machine is shared (a store till, a
+   * reception desk). It only SHRINKS the session — the refresh credential
+   * lives hours instead of weeks — so it needs no trust: forging it costs
+   * the forger session length, and omitting it changes nothing (ADR 0016's
+   * shared-terminal increment).
+   */
+  sharedWorkstation?: boolean;
 }
 
 export class LoginUseCase {
@@ -15,6 +23,8 @@ export class LoginUseCase {
     private readonly users: UserRepository,
     private readonly passwordHasher: PasswordHasher,
     private readonly sessions: SessionService,
+    /** Refresh TTL for shared machines; capped at the normal TTL downstream. */
+    private readonly sharedRefreshTtlSeconds: number,
   ) {}
 
   async execute(input: LoginInput): Promise<Session> {
@@ -35,6 +45,11 @@ export class LoginUseCase {
       throw new InvalidCredentialsError();
     }
 
-    return this.sessions.issueSession(user);
+    return this.sessions.issueSession(
+      user,
+      input.sharedWorkstation
+        ? { refreshTtlSeconds: this.sharedRefreshTtlSeconds }
+        : {},
+    );
   }
 }

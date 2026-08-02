@@ -31,3 +31,16 @@
 .submit {
   width: 100%;
 }
+
+.sharedRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary, inherit);
+  cursor: pointer;
+}
+
+.sharedRow input {
+  margin-top: 0.15rem;
+}

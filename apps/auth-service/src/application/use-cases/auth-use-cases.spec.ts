@@ -20,6 +20,7 @@ import { RefreshSessionUseCase } from './refresh-session';
 import { RegisterUserUseCase } from './register-user';
 
 const REFRESH_TTL_SECONDS = 3600;
+const SHARED_REFRESH_TTL_SECONDS = 1800;
 
 function buildContext() {
   const users = new InMemoryUserRepository();
@@ -40,8 +41,14 @@ function buildContext() {
     hasher,
     clock,
     events,
+    sessions,
     register: new RegisterUserUseCase(users, hasher, clock, events),
-    login: new LoginUseCase(users, hasher, sessions),
+    login: new LoginUseCase(
+      users,
+      hasher,
+      sessions,
+      SHARED_REFRESH_TTL_SECONDS,
+    ),
     refresh: new RefreshSessionUseCase(users, refreshTokens, sessions, clock),
     logout: new LogoutUseCase(refreshTokens, clock),
   };
@@ -125,6 +132,64 @@ describe('LoginUseCase', () => {
     ).rejects.toBeInstanceOf(InvalidCredentialsError);
   });
 
+  it('shortens the refresh window when the machine is declared shared, and only shortens', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute({
+      email: 'a@b.com',
+      password: 'secret-pass-123',
+    });
+
+    const shared = await ctx.login.execute({
+      email: 'a@b.com',
+      password: 'secret-pass-123',
+      sharedWorkstation: true,
+    });
+    const sharedRow = ctx.refreshTokens.tokens.get(
+      parseRefreshToken(shared.refreshToken)!.id,
+    )!;
+    expect(sharedRow.expiresAt.getTime() - sharedRow.createdAt.getTime()).toBe(
+      SHARED_REFRESH_TTL_SECONDS * 1000,
+    );
+
+    // Omitting the flag keeps exactly today's window.
+    const normal = await ctx.login.execute({
+      email: 'a@b.com',
+      password: 'secret-pass-123',
+    });
+    const normalRow = ctx.refreshTokens.tokens.get(
+      parseRefreshToken(normal.refreshToken)!.id,
+    )!;
+    expect(normalRow.expiresAt.getTime() - normalRow.createdAt.getTime()).toBe(
+      REFRESH_TTL_SECONDS * 1000,
+    );
+  });
+
+  it('caps a misconfigured shared TTL at the normal one — the flag cannot stretch', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute({
+      email: 'a@b.com',
+      password: 'secret-pass-123',
+    });
+    const oversharing = new LoginUseCase(
+      ctx.users,
+      ctx.hasher,
+      ctx.sessions,
+      REFRESH_TTL_SECONDS * 2,
+    );
+
+    const session = await oversharing.execute({
+      email: 'a@b.com',
+      password: 'secret-pass-123',
+      sharedWorkstation: true,
+    });
+    const row = ctx.refreshTokens.tokens.get(
+      parseRefreshToken(session.refreshToken)!.id,
+    )!;
+    expect(row.expiresAt.getTime() - row.createdAt.getTime()).toBe(
+      REFRESH_TTL_SECONDS * 1000,
+    );
+  });
+
   it('rejects an unknown email identically, burning hash time against enumeration', async () => {
     const ctx = buildContext();
     const hashCallsBefore = ctx.hasher.hashCalls;
@@ -158,6 +223,45 @@ describe('RefreshSessionUseCase', () => {
     const oldStored = await ctx.refreshTokens.findById(first.refreshTokenId);
     expect(oldStored?.revokedAt).not.toBeNull();
     expect(oldStored?.replacedById).toBe(second.refreshTokenId);
+  });
+
+  it('keeps the born window across rotation: shared stays short, normal stays normal', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute({
+      email: 'a@b.com',
+      password: 'secret-pass-123',
+    });
+
+    const shared = await ctx.login.execute({
+      email: 'a@b.com',
+      password: 'secret-pass-123',
+      sharedWorkstation: true,
+    });
+    const rotatedShared = await ctx.refresh.execute({
+      refreshToken: shared.refreshToken,
+    });
+    const sharedRow = ctx.refreshTokens.tokens.get(
+      rotatedShared.refreshTokenId,
+    )!;
+    // The replacement inherits the window the presented token was born
+    // with — a shared session cannot stretch itself by rotating.
+    expect(sharedRow.expiresAt.getTime() - sharedRow.createdAt.getTime()).toBe(
+      SHARED_REFRESH_TTL_SECONDS * 1000,
+    );
+
+    const normal = await ctx.login.execute({
+      email: 'a@b.com',
+      password: 'secret-pass-123',
+    });
+    const rotatedNormal = await ctx.refresh.execute({
+      refreshToken: normal.refreshToken,
+    });
+    const normalRow = ctx.refreshTokens.tokens.get(
+      rotatedNormal.refreshTokenId,
+    )!;
+    expect(normalRow.expiresAt.getTime() - normalRow.createdAt.getTime()).toBe(
+      REFRESH_TTL_SECONDS * 1000,
+    );
   });
 
   it('rejects an expired token', async () => {

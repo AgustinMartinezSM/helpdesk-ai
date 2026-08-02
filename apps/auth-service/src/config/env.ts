@@ -32,6 +32,16 @@ export const authServiceEnvSchema = baseEnvSchema.extend({
     .max(86400)
     .default(900),
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().min(3600).default(1209600),
+  // Refresh lifetime when the client declares the machine shared (a store
+  // till): a shift and a half instead of two weeks. The flag can only
+  // shrink a session — SessionService caps every requested TTL at the
+  // normal one — so a value above JWT_REFRESH_TTL_SECONDS is inert, not
+  // dangerous.
+  JWT_REFRESH_SHARED_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(3600)
+    .default(43200),
   // Membership is resolved here while a token is minted (ADR 0014), directly
   // rather than through the api-gateway.
   ORGANIZATIONS_SERVICE_URL: z
