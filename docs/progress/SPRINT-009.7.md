@@ -186,8 +186,9 @@ inheritance) plus its integration suite against the real database; web-bff
 22 (cookie shapes, flag forwarding, picker pass-throughs); web 122 across
 17 suites (pick/submit/remember/prefill/forget/stale-drop, the shared
 checkbox posting the flag, and every pre-existing spec untouched); Next
-build green. The full gate plus all nine integration suites and the remote
-CI result are recorded in the handoff as usual.
+build green. The full gate plus all nine integration suites ran green
+locally, and remotely GitHub Actions run `30763430889` on `5b5b7af` was
+green on its first attempt.
 
 ## Documentation
 
