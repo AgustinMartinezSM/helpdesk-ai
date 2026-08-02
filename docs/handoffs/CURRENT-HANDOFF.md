@@ -1,14 +1,14 @@
 # Current handoff
 
 **Date:** 2026-07-31
-**Sprint:** 9.6 — profiles and organization-defined identity fields, implemented; 9.5 and the tenancy migration complete
+**Sprint:** 9.7 — shared-terminal design and sessions, implemented; 9.4-9.6 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
 
-Read `docs/progress/SPRINT-009.6.md` first (DoR, decisions D1-D7, outcome),
-then ADR 0018 — users-service is no longer disposable, and a session that
-forgets that will document fiction. 9.5 and 9.4 are in their own documents.
+Read `docs/progress/SPRINT-009.7.md` first (the five-mode shared-terminal
+evaluation is the durable part), then 9.6's and ADR 0018 — users-service is
+no longer disposable, and a session that forgets that will document fiction.
 
 ## The migration is done. What that means concretely
 
@@ -101,6 +101,24 @@ Three things NOT to do: never let a profile field near authentication (ADR
 0017 — employee_number is an attribute, not a username); never write
 profile columns from a consumer; never put field values in an event.
 
+## Sprint 9.7 in one breath
+
+The shared-terminal design is settled and documented (the five modes in the
+sprint doc: individual login + remembered context built; PIN deferred until
+a pilot proves the need; kiosk rejected as unattributable; manager sessions
+rejected as impersonation). A login can declare the machine shared: the
+refresh TTL drops to `JWT_REFRESH_SHARED_TTL_SECONDS` (capped by min() at
+the normal TTL — the flag can only shrink), the BFF cookie carries no
+Max-Age (dies with the browser), and ROTATION INHERITS THE BORN WINDOW
+(expiresAt − createdAt of the presented token) so a shared session stays
+short forever with no posture column. The web form remembers the PLACE in
+localStorage (`helpdesk.station-context`, ids + labels, never identity —
+ADR 0016), prefills, forgets on request, and drops stale/refused ids.
+
+Two things NOT to do: never store a token or user id in the station
+context; never make rotation read the TTL from env again — the born-window
+derivation IS the posture.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -170,12 +188,12 @@ git-ignored.
 
 ## Exact next action
 
-Sprint 9.5 needs its remote CI confirmation recorded (`gh run list` for the
-pushed tip), and then the dependency map points at Sprint 9.6 — profiles and
-organization-defined identity fields — which needs its own Definition of
-Ready. The short-debt items stand: the template-vocabulary
-decision (its scope-qualifier half shrank — read_branch plus a branch set
-expresses the own-scope cell now), and R9's shared two-tenant fixtures.
+Record 9.7's remote CI result, then Sprint 9.8 — invitations and
+admin-created accounts — with its own Definition of Ready. That is the
+sprint that finally gives organizations-service its public face (gateway
+route + JWT), which has been deliberately deferred three times; treat it as
+the structural decision it is. Short debt unchanged: template vocabulary,
+R9 fixtures, INTERNAL_SERVICE_TOKEN rotation/audit before any deploy.
 
 ## Resume commands
 

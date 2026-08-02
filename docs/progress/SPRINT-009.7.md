@@ -1,9 +1,10 @@
 # Sprint 9.7 — Operational stations and the shared-terminal design
 
-Status: **In progress (2026-08-01).** Definition of Ready below, written and
-checked before any code. This sprint is design-heavier than its neighbors on
-purpose: its done-when includes "security tradeoffs are documented", and
-half of its nominal scope already shipped in 9.5.
+Status: **Implemented and verified locally (2026-08-01).** The Definition of
+Ready below was written and checked before any code; the outcome record at
+the end says what landed against it. Design-heavier than its neighbors on
+purpose: the done-when includes "security tradeoffs are documented", and
+half of the nominal scope already shipped in 9.5.
 
 ## Definition of Ready
 
@@ -143,3 +144,54 @@ idle-timeout UX belongs to the role-experience work); people management
 Dependency complete, state known, the design half is written above, the
 implementation half is additive and revertible, scope fits one coherent
 sprint. Proceeding under the standing autonomous authorization.
+
+## Outcome record (2026-08-01)
+
+The design half is the DoR above; the implementation half landed in one
+commit (`068c246`) plus the opening (`8146291`). Every acceptance criterion
+holds:
+
+- **The posture only shrinks, provably.** min() caps every requested TTL at
+  the configured normal one, so a forged flag or a misconfigured shared TTL
+  is inert; a dedicated test constructs the oversized case and watches the
+  cap win. Rotation inherits the window the presented token was BORN with,
+  derived from the row's own timestamps — a shared session cannot stretch
+  itself by rotating, a normal session keeps exactly its old window, and no
+  posture column exists to drift.
+- **The cookie dies with the browser** in shared mode: no Max-Age, no
+  Expires, pinned by a BFF test that also proves the flag reached
+  auth-service. The BFF decides the cookie shape from the request it itself
+  forwarded — no upstream echo field needed.
+- **The machine remembers the place, never the identity.** localStorage
+  holds ids and labels of a branch and a station; the specs assert the
+  stored value contains no token; a remembered id that no longer exists is
+  dropped and forgotten, and a server 422 clears it too. The
+  no-branches organization renders exactly yesterday's form.
+- **Traceability and its one gap, stated**: requester and station live on
+  the ticket row, org-scoped; ticket events still carry neither (D5), and
+  the v3 payload moment arrives with routing (9.11). Provenance stays
+  advisory until device registration exists — the context is honest
+  labeling, not evidence.
+
+What was deliberately not built matches the DoR's exclusions: no PIN, no
+kiosk, no device binding, no idle-timeout UX. One deviation of wording: the
+DoR sketched es-AR checkbox copy, but the application's UI is English until
+i18n lands in 10.8, so the copy follows the codebase — localization is
+content work for that sprint, not this one.
+
+### Verified
+
+auth-service 45 unit tests (TTL selection both ways, the cap, rotation
+inheritance) plus its integration suite against the real database; web-bff
+22 (cookie shapes, flag forwarding, picker pass-throughs); web 122 across
+17 suites (pick/submit/remember/prefill/forget/stale-drop, the shared
+checkbox posting the flag, and every pre-existing spec untouched); Next
+build green. The full gate plus all nine integration suites and the remote
+CI result are recorded in the handoff as usual.
+
+## Documentation
+
+Meaningfully changed this sprint: this document (the five-mode evaluation
+is the durable part), and the handoff. ADR 0016 needed no amendment — the
+increment implemented is the one it already named. No fictional experience,
+customers, incidents or approvals were introduced.
