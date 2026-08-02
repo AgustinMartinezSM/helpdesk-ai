@@ -247,9 +247,9 @@ index and make re-invitation impossible).
 Every sprint closed with the full gate (format, lint, typecheck, test,
 build) plus all nine integration suites against real PostgreSQL and
 RabbitMQ, and a green remote CI run recorded in its sprint document: the
-tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7 and — locally,
-remote CI still to be recorded — 9.8. The backfill sequence ran once,
-verified clean, and is recorded in tenancy-phase-7-readiness.md.
+tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7 and 9.8. The
+backfill sequence ran once, verified clean, and is recorded in
+tenancy-phase-7-readiness.md.
 
 **One hole worth knowing before trusting the suites**: CI's workflow env
 block sets only `DATABASE_URL`, so `INTERNAL_SERVICE_TOKEN` is never
@@ -270,9 +270,8 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-Record 9.8's remote CI result. Then the next sprint is a product choice
-between three things 9.8 left standing, in rough order of how much they
-unblock:
+The next sprint is a product choice between three things 9.8 left standing,
+in rough order of how much they unblock:
 
 1. **The people-management surface (Block B / UI).** Invitations, the
    directory and profiles are all API-only. Nothing in the product lets an
@@ -311,10 +310,10 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > docs/progress/SPRINT-009.8.md and ADR 0019 before touching anything, and
 > verify the repo state with git first.
 >
-> First: record 9.8's remote CI result. Then pick the next sprint — the
-> handoff's "Exact next action" lays out the three candidates and what each
-> unblocks; the people-management UI is the one that turns 9.8 from an API
-> into a product and closes the last unattributable step in onboarding.
+> Pick the next sprint — the handoff's "Exact next action" lays out the three
+> candidates and what each unblocks; the people-management UI is the one that
+> turns 9.8 from an API into a product and closes the last unattributable step
+> in onboarding.
 >
 > Standing rules: never a permanent shared password or unattributable request
 > path (ADR 0016); profile fields never become credentials (ADR 0017); an

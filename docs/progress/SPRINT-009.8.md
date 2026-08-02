@@ -437,7 +437,10 @@ messaging 69 (the invitation contracts and their payload-stripping guarantee).
 The full gate — format, lint, typecheck, test, build — ran green across all 15
 projects, and all nine integration suites passed locally against real
 PostgreSQL and RabbitMQ. The migration is applied to both
-`helpdesk_organizations` and `helpdesk_organizations_test`.
+`helpdesk_organizations` and `helpdesk_organizations_test`. Remotely, GitHub
+Actions run `30769152405` on `0ecccd4` was green on its first attempt,
+including the integration job against real service containers — which is where
+the new migration ran on a database that had never seen it.
 
 ### Still true after this sprint, and worth restating
 
