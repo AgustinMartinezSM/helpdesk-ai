@@ -1,6 +1,6 @@
 # Current handoff
 
-**Date:** 2026-07-31
+**Date:** 2026-08-01
 **Sprint:** 9.7 — shared-terminal design and sessions, implemented; 9.4-9.6 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
@@ -161,23 +161,23 @@ derivation IS the posture.
   limiting, `PRODUCT-ROADMAP.md`, provider-notice failure path,
   `feat/ai-service` branch deletion.
 
-## Migrations added this session (all applied locally, dev and _test)
+## Migrations (all applied locally, dev and _test)
 
-Phases 5–6: audit `add_organization_index`, analytics
-`scope_analytics_to_organization`, notification `scope_reads_by_organization`,
-users `add_directory_memberships`. Phase 7: `enforce_tenant_not_null` in
-tickets, ai, analytics, notification. Phase 8: users
-`drop_user_profile_roles`.
+Tenancy sprint: audit add_organization_index, analytics
+scope_analytics_to_organization, notification scope_reads_by_organization,
+users add_directory_memberships; enforce_tenant_not_null in tickets, ai,
+analytics, notification; users drop_user_profile_roles. Sprint 9.5:
+organizations branch_structure, tickets add_branch_context_and_structure_refs.
+Sprint 9.6: users add_profile_fields. Sprint 9.7: none.
 
-## Tests executed (2026-07-31, local)
+## Tests executed (through 2026-08-01, local)
 
-Full gate + all nine integration suites green after phases 5–6, and again
-after phases 7–8 — the second pass also proving the not-null net (a
-tenantless insert violates the constraint), the queue unbind against a
-pre-seeded stale binding, and that a legacy v1-typed publish is never
-delivered. Backfill sequence executed and verified clean (details in the
-readiness record). Remote CI: run `30642812316` green for phases 5–6; the
-run for the final tip is recorded in the last docs commit.
+Every sprint closed with the full gate (format, lint, typecheck, test,
+build) plus all nine integration suites against real PostgreSQL and
+RabbitMQ, and a green remote CI run recorded in its sprint document: the
+tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6 and 9.7. The
+backfill sequence ran once, verified clean, and is recorded in
+tenancy-phase-7-readiness.md.
 
 ## Services required / environment variables
 
@@ -208,22 +208,26 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Continue HelpDesk AI. The tenancy migration is COMPLETE (phases 0–8) and
-> Sprint 9.5 (branches, departments, operational stations) is implemented
-> and verified: structure with real FKs in organizations-service, the br
-> claim, projection-validated ticket branch/station context, branch-scoped
-> visibility, pickers in tickets-service, all on `main`. Read
-> `docs/progress/SPRINT-009.5.md` (DoR + outcome) and the handoff before
-> touching anything.
+> Continue HelpDesk AI. Complete and green on main with remote CI: the
+> tenancy migration (phases 0-8), Sprint 9.5 (branches/departments/stations
+> with branch-scoped visibility), Sprint 9.6 (profiles and org-defined
+> fields, ADR 0018: users-service is no longer disposable) and Sprint 9.7
+> (shared-terminal design and sessions). Read
+> docs/handoffs/CURRENT-HANDOFF.md and docs/progress/SPRINT-009.7.md before
+> touching anything, and verify the repo state with git first.
 >
-> Next: Sprint 9.6 (profiles and organization-defined identity fields)
-> starting with its own Definition of Ready — audit the current profile
-> projection, design the org-defined field configuration per the master
-> brief's §14, and mind ADR 0017's line between profile attributes and
-> authentication identifiers. Do not seed role-template rows (vocabulary
-> question still open), do not remove the retiredBindingKeys literals, do
-> not add branch fields to ticket event payloads, and do not give
-> organizations-service a JWT or gateway route yet.
+> Next: Sprint 9.8 — invitations and admin-created accounts — opened with
+> its own Definition of Ready, the pattern the last three sprints set. This
+> is the sprint where organizations-service finally gains its public face
+> (gateway route + JWT), a structural change deliberately deferred three
+> times: treat it as the decision it is, and consider closing the
+> INTERNAL_SERVICE_TOKEN rotation/audit gap alongside it, since invitations
+> widen what that credential's service exposes. Standing rules: never a
+> permanent shared password or unattributable request path (ADR 0016);
+> profile fields never become credentials (ADR 0017); admin-created access
+> never shows a permanent password (master brief 9.8); do not seed
+> role-template rows (vocabulary still open); do not remove the
+> retiredBindingKeys literals; rotation must keep deriving the born window.
 
 ## Repository isolation
 
