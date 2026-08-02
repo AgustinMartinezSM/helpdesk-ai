@@ -64,7 +64,8 @@ never existed), so "rebuild from events" is never the answer:
 | `notifications`                       | notification-service  | NON-REBUILDABLE BY DESIGN: derived state plus per-user readAt; accepted as ephemeral UX, not records                                                                                                                                                                                                                                                              |
 | `audit_events`                        | audit-service         | Not a projection — the trail itself. Append-only; NOT readable by other services for THEIR rebuilds (ADR 0006)                                                                                                                                                                                                                                                    |
 | `suggestions`                         | ai-service            | Not a projection — records of what a model answered. Append-only, NOT rebuildable: regenerating asks a provider again and gets a different answer (ADR 0010)                                                                                                                                                                                                      |
-| `organizations` / `memberships`       | organizations-service | Not a projection — nothing else holds this data. NOT rebuildable; `infrastructure/postgres/operations/backfill-bootstrap-memberships.sh` reconciles it from `helpdesk_auth` (ADR 0013)                                                                                                                                                                            |
+| `organizations` / `memberships`       | organizations-service | Not a projection — nothing else holds this data. NOT rebuildable; `infrastructure/postgres/operations/backfill-bootstrap-memberships.sh` reconciles memberships against `helpdesk_auth` (ADR 0013). The script reconciles ONLY bootstrap memberships: one created by accepting an invitation has no source to reconcile against                                   |
+| `invitations`                         | organizations-service | Not a projection, and NOT reconcilable either — the row keeps only `sha256(secret)` and the code was shown once, so no script can regenerate an outstanding invitation. Losing one means revoking and re-issuing (Sprint 9.8, ADR 0019)                                                                                                                           |
 | `directory_memberships`               | users-service         | Projection of memberships from `membership.*.v1` events, so the directory can be scoped without a synchronous call on every read. Rebuild/reconcile: `infrastructure/postgres/operations/backfill-directory-memberships.sh` reads `helpdesk_organizations` — an operator action, which is why it may cross the database boundary that services may not (ADR 0003) |
 
 ### The tenant column, and what a rebuild has to do about it
@@ -103,6 +104,16 @@ operator script brings it back. The registration consumer and the profile
 API co-own `user_profiles` and must never overlap columns; the schema
 comment names which columns belong to whom, and a test pins that a replayed
 registration leaves profile columns alone.
+
+`invitations` (Sprint 9.8) sits one step further out than anything else in
+this document: it is not a projection, and unlike memberships it is not even
+_reconcilable_. The row keeps only the sha256 of the code's secret half, and
+the code itself was shown exactly once, in the response that created it — so
+there is no store, no event and no script that could reconstruct an
+outstanding invitation. If the row is lost the honest recovery is to issue a
+new one, and the old code simply stops working, which is the correct outcome
+rather than a degraded one. A redemption that already happened is not at risk:
+it produced an ordinary membership, and that membership is the durable fact.
 
 `organizations` and `memberships` are the first data here that is neither a
 projection nor a record of something that already happened. Every other store

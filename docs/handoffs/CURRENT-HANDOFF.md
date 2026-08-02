@@ -1,14 +1,16 @@
 # Current handoff
 
-**Date:** 2026-08-01
-**Sprint:** 9.7 — shared-terminal design and sessions, implemented; 9.4-9.6 complete
+**Date:** 2026-08-02
+**Sprint:** 9.8 — invitations and the public face of organizations-service, implemented; 9.4-9.7 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
 
-Read `docs/progress/SPRINT-009.7.md` first (the five-mode shared-terminal
-evaluation is the durable part), then 9.6's and ADR 0018 — users-service is
-no longer disposable, and a session that forgets that will document fiction.
+Read `docs/progress/SPRINT-009.8.md` and **ADR 0019** first — organizations-service
+has a public face now, which reverses a property three earlier sprints were
+built around and which SECURITY.md leaned on. Then 9.7's (the five-mode
+shared-terminal evaluation) and 9.6's with ADR 0018 — users-service is no
+longer disposable, and a session that forgets either will document fiction.
 
 ## The migration is done. What that means concretely
 
@@ -77,9 +79,9 @@ rows exist but nothing keys on them yet, by scope. ADR 0016's amendment
 records the dropped scope-qualifier experiment.
 
 Three things NOT to do: do not add branch fields to ticket event payloads
-(that is a v3 when a consumer needs it); do not give organizations-service
-a JWT or a gateway route (9.8's structural change); do not make
-Actor.branchIds required yet.
+(that is a v3 when a consumer needs it); do not make Actor.branchIds required
+yet. The third — do not give organizations-service a JWT or a gateway route —
+was 9.8's work and is DONE (ADR 0019); D6 of 9.5 is deliberately reversed.
 
 ## Sprint 9.6 in one breath
 
@@ -119,15 +121,69 @@ Two things NOT to do: never store a token or user id in the station
 context; never make rotation read the TTL from env again — the born-window
 derivation IS the posture.
 
+## Sprint 9.8 in one breath
+
+**organizations-service has a public face.** `/api/organizations` is the
+eighth gateway mount; the service registers `JwtModule` for VERIFICATION only
+and `JwtAccessGuard` as a plain provider, not an `APP_GUARD`, so `/internal/*`
+kept `InternalServiceGuard` and nothing existing changed meaning. ADR 0019
+records it and the three alternatives that lost. The gateway now STRIPS
+`x-internal-service-token` from every inbound request — that strip is what
+replaces the containment property SECURITY.md used to lean on ("a browser has
+no path to it"), and it must not be removed.
+
+**An invitation is not an account and not a credential for one.** Code is
+`<invitationId>.<secret>`, only `sha256(secret)` is stored, constant-time
+compare, single use via a conditional `UPDATE ... WHERE status='pending'`,
+seven days, expiry DERIVED at read time because no scheduler exists anywhere
+in the repo. Redemption consumes the code and inserts the membership in ONE
+transaction — that requirement is the whole reason the table lives in this
+service (no outbox, ADR 0006: a split write burns a code nothing can
+regenerate). Accepting is authenticated but needs no permission and no
+tenant; the addressee comes from the SIGNED `email` claim, never a body field.
+
+**There are no admin-created accounts, and that is decided, not pending.**
+`password_hash` is `TEXT NOT NULL`; a nullable column is its own sprint and a
+placeholder hash is a permanent shared password by another name (ADR 0016).
+The admin creates ACCESS; the person creates the account when they claim it.
+Delivery is out of band by the admin — the platform can send nothing, and
+ADR 0008 left adopting a provider to the project owner. No `sent_at` column,
+and no copy anywhere may say an invitation was sent.
+
+**Privilege cannot travel upward.** The requested template must be a subset of
+the issuer's, read from the STORED membership (tokens outlive a demotion by
+`JWT_ACCESS_TTL_SECONDS`, 900), and `owner` is excluded by constant because it
+and `organization_admin` resolve to the same set — a test pins that premise so
+it speaks up when it stops being true. The ceiling is re-checked at redemption
+along with the organization's status.
+
+**Resolution now prefers a real organization over the bootstrap one.** A
+TIEBREAK, not a filter: everyone who registers lands in the holding pen first,
+so oldest-first alone made an accepted invitation invisible; a legacy user
+whose only membership is the bootstrap one still resolves to it.
+
+Three things NOT to do: never let an invitation code reach a path segment, a
+query string, a log or an event payload (one HTTP response, once); never turn
+the generic redemption refusal into specific ones (it is blind to the cause on
+purpose — the caller is not a member yet); never model expiry as a stored
+status while nothing sweeps.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
   belongs-nowhere → token without tenant claims, refused at writes with 403.
 - **`INTERNAL_SERVICE_TOKEN` lives in three `.env` files** (auth, tickets,
-  organizations) and guards a mutation (the internal status PATCH). Rotation
-  and audit are still not built — SECURITY.md names this the first thing to
-  close before any deployment. tickets-service without it refuses every
+  organizations) and guards a mutation (the internal status PATCH). Since 9.8
+  it is ROTATABLE (`INTERNAL_SERVICE_TOKEN_PREVIOUS`, accepted alongside the
+  current value; runbook in SECURITY.md) and the gateway strips its header
+  inbound. What is still missing is ATTRIBUTION: nothing records which process
+  called, and closing that needs per-caller secrets or a signed service
+  assertion — a self-declared caller header would log a claim the credential
+  does not bind. tickets-service without the credential refuses every
   assignment with 503, by design.
+- **`JWT_ACCESS_SECRET` is now required by organizations-service too.** Seven
+  services verify with it, auth-service signs. A local `.env` from before 9.8
+  will fail that service's boot with a named variable, which is the intent.
 - **The role-template mapping is written twice** (backfill script +
   `roleTemplateFromGlobalRoles`) — change both in the same commit.
 - **`backfill-tenant-columns.sh` refuses to run once a second organization
@@ -147,12 +203,25 @@ derivation IS the posture.
 
 - **Seeded role-template rows + the template-vocabulary/scope-qualifier
   decision** — the code map is the deliberate interim.
-- **R9 beyond tickets-service**: integration suites still teardown with
-  unfiltered `deleteMany()`.
+- **R9 beyond organizations-service**: 9.8 built a scoped two-organization
+  fixture for that service only (its invitations table cascades, so teardown
+  order became load-bearing). The other eight suites still teardown with
+  unfiltered `deleteMany()`; the shared module is still owed.
 - **`mv` is minted and bumped but nothing compares it** — narrowed on
   purpose to "cheap staleness signal" (ADR 0014 amendment).
 - **No organization selector / token exchange**; resolution picks the oldest
-  active membership.
+  active membership, EXCEPT that a real organization now beats the bootstrap
+  one (9.8, D8 — a tiebreak, not a filter). The selector is what retires that
+  tiebreak.
+- **analytics counts a multi-organization person in ONE organization** — the
+  first to claim them. 9.8 stopped the tenant-move race (the stamp no longer
+  overwrites), but `user_snapshots` is still keyed on `userId` alone; counting
+  them in both needs the table rekeyed.
+- **Attribution for internal service calls** (per-caller credentials) — the
+  half of ADR 0011's story 9.8 did not close.
+- **A branch manager invited in 9.8 still gets their branches assigned through
+  the internal operator endpoint**, which no person can be attributed for.
+  That is the next real gap in the onboarding path.
 - **`INTERNAL_SERVICE_TOKEN` stays optional in auth-service** (degrade-open
   with a boot warning): making it required would 503 the auth integration
   suite, which runs without organizations-service — revisit when the suite
@@ -168,32 +237,58 @@ scope_analytics_to_organization, notification scope_reads_by_organization,
 users add_directory_memberships; enforce_tenant_not_null in tickets, ai,
 analytics, notification; users drop_user_profile_roles. Sprint 9.5:
 organizations branch_structure, tickets add_branch_context_and_structure_refs.
-Sprint 9.6: users add_profile_fields. Sprint 9.7: none.
+Sprint 9.6: users add_profile_fields. Sprint 9.7: none. Sprint 9.8:
+organizations invitations (one table, a partial unique index in raw SQL —
+do NOT "simplify" the Prisma model to @@unique, it would generate a total
+index and make re-invitation impossible).
 
-## Tests executed (through 2026-08-01, local)
+## Tests executed (through 2026-08-02, local)
 
 Every sprint closed with the full gate (format, lint, typecheck, test,
 build) plus all nine integration suites against real PostgreSQL and
 RabbitMQ, and a green remote CI run recorded in its sprint document: the
-tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6 and 9.7. The
-backfill sequence ran once, verified clean, and is recorded in
-tenancy-phase-7-readiness.md.
+tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7 and — locally,
+remote CI still to be recorded — 9.8. The backfill sequence ran once,
+verified clean, and is recorded in tenancy-phase-7-readiness.md.
+
+**One hole worth knowing before trusting the suites**: CI's workflow env
+block sets only `DATABASE_URL`, so `INTERNAL_SERVICE_TOKEN` is never
+exercised across a real process boundary by any suite — including now that
+9.8 changed how it is compared. The rotation logic is covered at unit level
+against both values; the cross-process hop is not covered, exactly as before.
 
 ## Services required / environment variables
 
-Unchanged from the phases 5–6 handoff: tickets-service wants
-`ORGANIZATIONS_SERVICE_URL` + `INTERNAL_SERVICE_TOKEN` or assignment answers
-503; users-service consumes membership events. Every real `.env` is
-git-ignored.
+tickets-service wants `ORGANIZATIONS_SERVICE_URL` + `INTERNAL_SERVICE_TOKEN`
+or assignment answers 503; users-service consumes membership events. New in
+9.8: **organizations-service now requires `JWT_ACCESS_SECRET`** (same value
+auth-service signs with) and optionally accepts
+`INTERNAL_SERVICE_TOKEN_PREVIOUS` during a rotation; **api-gateway takes
+`ORGANIZATIONS_SERVICE_URL`** (default `http://localhost:3010`). A local
+`.env` from before 9.8 will fail organizations-service's boot naming the
+missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-Record 9.7's remote CI result, then Sprint 9.8 — invitations and
-admin-created accounts — with its own Definition of Ready. That is the
-sprint that finally gives organizations-service its public face (gateway
-route + JWT), which has been deliberately deferred three times; treat it as
-the structural decision it is. Short debt unchanged: template vocabulary,
-R9 fixtures, INTERNAL_SERVICE_TOKEN rotation/audit before any deploy.
+Record 9.8's remote CI result. Then the next sprint is a product choice
+between three things 9.8 left standing, in rough order of how much they
+unblock:
+
+1. **The people-management surface (Block B / UI).** Invitations, the
+   directory and profiles are all API-only. Nothing in the product lets an
+   admin actually invite anyone, and the interim `/internal/*` operator
+   endpoints stay the only way to assign an invited branch manager to their
+   branches — an onboarding step no person can be attributed for, which is
+   the sharpest remaining edge against ADR 0016.
+2. **Email delivery.** ADR 0008 says adopting a provider needs the project
+   owner's explicit approval and a superseding ADR naming which and why.
+   Until that decision exists, an invitation reaches its recipient only
+   because an admin copied a code out of an API response.
+3. **The template vocabulary**, still blocking seeded role-template rows.
+
+Short debt unchanged otherwise: R9 beyond organizations-service, per-caller
+service credentials (the attribution half of ADR 0011), `mv` compared by
+nobody, `user_snapshots` keyed on `userId` alone.
 
 ## Resume commands
 
@@ -208,26 +303,27 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Continue HelpDesk AI. Complete and green on main with remote CI: the
-> tenancy migration (phases 0-8), Sprint 9.5 (branches/departments/stations
-> with branch-scoped visibility), Sprint 9.6 (profiles and org-defined
-> fields, ADR 0018: users-service is no longer disposable) and Sprint 9.7
-> (shared-terminal design and sessions). Read
-> docs/handoffs/CURRENT-HANDOFF.md and docs/progress/SPRINT-009.7.md before
-> touching anything, and verify the repo state with git first.
+> Continue HelpDesk AI. Complete and green on main: the tenancy migration
+> (phases 0-8), Sprint 9.5 (branches/departments/stations with branch-scoped
+> visibility), 9.6 (profiles and org-defined fields, ADR 0018), 9.7
+> (shared-terminal sessions) and 9.8 (invitations, and organizations-service
+> gaining its public face — ADR 0019). Read docs/handoffs/CURRENT-HANDOFF.md,
+> docs/progress/SPRINT-009.8.md and ADR 0019 before touching anything, and
+> verify the repo state with git first.
 >
-> Next: Sprint 9.8 — invitations and admin-created accounts — opened with
-> its own Definition of Ready, the pattern the last three sprints set. This
-> is the sprint where organizations-service finally gains its public face
-> (gateway route + JWT), a structural change deliberately deferred three
-> times: treat it as the decision it is, and consider closing the
-> INTERNAL_SERVICE_TOKEN rotation/audit gap alongside it, since invitations
-> widen what that credential's service exposes. Standing rules: never a
-> permanent shared password or unattributable request path (ADR 0016);
-> profile fields never become credentials (ADR 0017); admin-created access
-> never shows a permanent password (master brief 9.8); do not seed
-> role-template rows (vocabulary still open); do not remove the
-> retiredBindingKeys literals; rotation must keep deriving the born window.
+> First: record 9.8's remote CI result. Then pick the next sprint — the
+> handoff's "Exact next action" lays out the three candidates and what each
+> unblocks; the people-management UI is the one that turns 9.8 from an API
+> into a product and closes the last unattributable step in onboarding.
+>
+> Standing rules: never a permanent shared password or unattributable request
+> path (ADR 0016); profile fields never become credentials (ADR 0017); an
+> invitation code lives in one HTTP response and never in a path, a log or an
+> event; the redemption refusal stays blind to its cause; expiry stays derived
+> while nothing sweeps; do not seed role-template rows (vocabulary still
+> open); do not remove the retiredBindingKeys literals; do not remove the
+> gateway's x-internal-service-token strip; rotation must keep deriving the
+> born window.
 
 ## Repository isolation
 

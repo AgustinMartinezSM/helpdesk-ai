@@ -1,10 +1,11 @@
 # Sprint 9.8 — Invitations and the public face of organizations-service
 
-Status: **In progress (2026-08-02).** Definition of Ready below, written and
-checked before any code. This sprint carries the structural change that was
-deferred in 9.5, 9.6 and 9.7 — organizations-service stops being a service
-only other services can reach — so the DoR spends its first decisions on
-that rather than on the feature.
+Status: **Implemented and verified locally (2026-08-02).** The Definition of
+Ready below was written and checked before any code; the outcome record at
+the end says what landed against it. This sprint carries the structural
+change that was deferred in 9.5, 9.6 and 9.7 — organizations-service stops
+being a service only other services can reach — so the DoR spends its first
+decisions on that rather than on the feature.
 
 ## Definition of Ready
 
@@ -334,3 +335,134 @@ analytics snapshot moving between tenants — are decided in D8 rather than
 discovered during implementation, which is what the DoR is for. The
 sprint's own name is corrected in D4 instead of being delivered dishonestly.
 Proceeding under the standing autonomous authorization.
+
+## Outcome record (2026-08-02)
+
+Two commits: the opening (`1b691f5` — this DoR and ADR 0019) and the
+implementation (`25203f0`). Every acceptance criterion holds.
+
+**The structural change landed as decided, and nothing else changed meaning.**
+`/api/organizations` is the eighth gateway mount, organizations-service
+registers `JwtModule` for verification only, and `JwtAccessGuard` is a plain
+provider — so the `/internal/*` controllers kept `InternalServiceGuard`
+untouched and no existing route gained or lost a check. The four prose
+assertions the DoR quoted are rewritten, `SECURITY.md`'s paragraph with them.
+The one shared thing that moved is the error filter: it left `app/internal/`
+for `app/`, because it now serves both surfaces.
+
+**The gateway strips the service credential.** One line before
+`fixRequestBody` (which writes the body and can end the request, so order
+matters), plus two tests: the header does not arrive downstream, on the
+organizations route and on an unrelated one, and the body still does.
+
+**Single use is a database guarantee, not a code convention.** An integration
+test issues one invitation and redeems it twice in parallel against real
+PostgreSQL: exactly one succeeds, exactly one is refused, exactly one
+membership row exists. The partial unique index is proved the same way — a
+second pending invitation for the same address is refused, while the _same_
+address may be pending in two organizations at once, and an address can be
+re-invited once its previous invitation is settled.
+
+**Privilege does not travel upward, and the ceiling is read twice.** A test
+asserts the premise the `owner` exclusion rests on — that `owner` and
+`organization_admin` resolve to the same permission set today — so the day
+that stops being true the test says so rather than the exclusion quietly
+becoming redundant. Another builds the exact shape a demoted admin still
+holds: a token carrying `people.invite` over a stored template that does not,
+and watches the stored row win. The redemption-time re-check is covered for
+all three of its cases (issuer deactivated, issuer demoted below the invited
+template, organization suspended), each collapsing into the same refusal.
+
+**The refusals leak nothing.** Unknown id, wrong secret and a malformed code
+answer identically; another organization's invitation is not found rather
+than forbidden, and stays pending after the attempt. The one deliberate
+exception is the addressee mismatch, which is named — someone signed in with
+the wrong one of their own accounts is the common case, and whoever holds the
+code already knows it is real.
+
+**D8's two consequences are closed as decided.** Resolution prefers a real
+organization over the bootstrap one; three tests pin it as a tiebreak rather
+than a filter, including the legacy user whose only membership is the
+bootstrap one. analytics' membership stamp no longer moves a snapshot between
+tenants.
+
+### What the implementation decided that the DoR had left open
+
+- **The addressee mismatch is its own refusal, not the generic one.** The DoR
+  only required that expired / revoked / used / issuer-lost-standing /
+  organization-suspended be indistinguishable. Folding the addressee check in
+  with them would have made "you are signed in as the wrong person" — the most
+  likely honest mistake — unanswerable, in exchange for hiding a fact the
+  code-holder can already deduce.
+- **`invitation.accepted.v1` carries `membershipId` as OPTIONAL.** Someone who
+  already belongs consumes their invitation without a new row, and the first
+  draft would have named a membership id that did not correspond to anything
+  created. The event now omits it, and a contract test pins that the payload
+  validates without it.
+- **The accepting user id is passed to the publisher rather than read off the
+  row.** The domain type makes `acceptedByUserId` nullable — a pending
+  invitation has none — and the adapter's first version coerced the null to an
+  empty string, which would have published an event failing its own `z.uuid()`
+  at the broker and been swallowed by the best-effort catch. Passing it
+  explicitly, like `revokedByUserId`, makes the nullable case unrepresentable.
+- **The "no address on the bus" guarantee is pinned at the contract, not at
+  the publisher fake.** The first version asserted it against the in-memory
+  publisher, which records the whole domain object — so it was testing the
+  fake, not the payload. It moved to `contracts.spec.ts`, where zod's
+  stripping of undeclared keys is what actually enforces it.
+
+### Fixed while in the same files
+
+Two pre-existing gaps, both the same class of bug as something this sprint was
+already closing, both in files it was already editing:
+
+- `branch.*` and `station.*` were missing from audit-service's
+  born-tenant-carrying list. Their `.v1` is tenant-carrying like
+  `membership.*`, so a structure event published without an envelope tenant
+  would have recorded with `organization_id = NULL` — invisible to every
+  tenant-scoped read — instead of dead-lettering inspectably. The list is now
+  a named constant, with `profile.*` explicitly excluded and the reason given.
+- `/api/ai` was mounted at the gateway but absent from the proxy spec's
+  service table, so one existing route had no routing coverage. Added
+  alongside the new one.
+
+### Verified
+
+organizations-service: 174 unit tests across 7 suites (the invitation matrix,
+the grant ceiling both ways, the refusal shapes, the resolution tiebreak, the
+credential rotation) plus 18 integration tests against real PostgreSQL across
+three suites, including the parallel-redemption race and the two-organization
+adversarial set. api-gateway 8 (routing plus the two header-strip tests),
+messaging 69 (the invitation contracts and their payload-stripping guarantee).
+The full gate — format, lint, typecheck, test, build — ran green across all 15
+projects, and all nine integration suites passed locally against real
+PostgreSQL and RabbitMQ. The migration is applied to both
+`helpdesk_organizations` and `helpdesk_organizations_test`.
+
+### Still true after this sprint, and worth restating
+
+No UI exists for any of this; the API is the deliverable, as in 9.5 and 9.6.
+Nothing is deployed. The platform still cannot send an email, so an invitation
+reaches its recipient because an admin passed the code along — and the code's
+confidentiality is only as good as the channel they chose. `mv` is still read
+by nothing, so revoking after acceptance or suspending the new member leaves
+their access token valid for up to `JWT_ACCESS_TTL_SECONDS`. Assigning an
+invited branch manager to their branches still goes through the internal
+operator endpoint, which is an attribution gap this sprint did not close.
+
+## Documentation
+
+Meaningfully changed this sprint: ADR 0019 (new — the public-surface decision
+and the three alternatives that lost), `SECURITY.md` (the
+`INTERNAL_SERVICE_TOKEN` paragraph, whose containment argument this sprint
+falsified, plus the rotation runbook and a rewritten roadmap item that says
+what attribution would actually require), `data-ownership.md` (the
+`invitations` row and its narrative — the first data here that is not even
+reconcilable — and a correction to the `organizations`/`memberships` cell,
+which promised a reconciliation script that only covers bootstrap
+memberships), `tenancy-migration-plan.md` (R9 partially paid and R11's strip
+half delivered), `README.md`'s ADR list (it had drifted two entries behind),
+and this document. Removed: the four comments asserting organizations-service
+has no person-facing surface, and the gateway health check's claim that it
+routes to nothing. No fictional experience, customers, incidents or approvals
+were introduced.
