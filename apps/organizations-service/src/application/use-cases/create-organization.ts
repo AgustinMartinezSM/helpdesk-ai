@@ -1,9 +1,14 @@
 import type { Actor } from '@helpdesk-ai/security';
 import { AlreadyBelongsToOrganizationError } from '../../domain/errors';
-import { grantsAccess, type Membership } from '../../domain/membership';
+import {
+  grantsAccess,
+  OWNER_ROLE_TEMPLATE,
+  type Membership,
+} from '../../domain/membership';
 import {
   BOOTSTRAP_ORGANIZATION_SLUG,
   isReservedSlug,
+  normalizeOrganizationName,
   slugFromName,
   type Organization,
 } from '../../domain/organization';
@@ -76,10 +81,14 @@ export class CreateOrganizationUseCase {
     await this.refuseIfAlreadyPlaced(actor.id);
 
     const now = this.clock.now();
+    // The same normaliser renaming uses (Sprint 10.5). It was a bare trim()
+    // while this was the only path that wrote the column; a second writer is
+    // what made "what a name IS" worth having one answer to.
+    const name = normalizeOrganizationName(input.name);
     const organization: Organization = {
       id: this.ids.next(),
-      slug: await this.availableSlug(input.name),
-      name: input.name.trim(),
+      slug: await this.availableSlug(name),
+      name,
       status: 'active',
       createdAt: now,
       updatedAt: now,
@@ -89,8 +98,10 @@ export class CreateOrganizationUseCase {
       id: this.ids.next(),
       organizationId: organization.id,
       userId: actor.id,
-      // The one place this template is ever written by application code.
-      roleTemplate: 'owner',
+      // One of only two places this template is ever written by application
+      // code; the other is the transfer, which MOVES one rather than minting
+      // one (ADR 0024). Neither is a grant path.
+      roleTemplate: OWNER_ROLE_TEMPLATE,
       status: 'active',
       version: 1,
       createdAt: now,

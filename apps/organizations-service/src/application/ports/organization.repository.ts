@@ -24,6 +24,20 @@ export interface OrganizationRepository {
     organization: Organization,
     owner: Membership,
   ): Promise<CreatedOrganizationRow>;
+  /**
+   * Changes the display name and nothing else.
+   *
+   * The slug is absent from this signature deliberately rather than being an
+   * optional parameter nobody passes: it is what the bootstrap lookup keys on,
+   * what `prisma migrate deploy` collides with, and what ADR 0023 derived
+   * silently so a collision could never be reported. A port that could move it
+   * would make "the slug is stable" a habit instead of a shape.
+   */
+  rename(
+    organizationId: string,
+    name: string,
+    at: Date,
+  ): Promise<Organization | null>;
 }
 
 export const CLOCK = Symbol('CLOCK');

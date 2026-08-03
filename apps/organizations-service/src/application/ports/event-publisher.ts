@@ -1,6 +1,7 @@
 import type { Branch, OperationalStation } from '../../domain/branch';
 import type { SupportTeam } from '../../domain/support-team';
 import type { Invitation } from '../../domain/invitation';
+import type { Organization } from '../../domain/organization';
 import type {
   Membership,
   MembershipStatus,
@@ -41,6 +42,44 @@ export interface MembershipEventPublisher {
   membershipRoleChanged(
     membership: Membership,
     fromTemplate: RoleTemplate,
+    correlationId?: string,
+  ): Promise<void>;
+}
+
+/**
+ * What a completed ownership transfer records. Ids and templates only — the
+ * payload names WHO, never anything about them, for the reason every event in
+ * this service follows: audit keeps payloads opaquely and indefinitely.
+ */
+export interface OwnershipTransfer {
+  organizationId: string;
+  /** The person who initiated it, which is by rule the previous owner. */
+  transferredByUserId: string;
+  previousOwnerUserId: string;
+  newOwnerUserId: string;
+  /** What the new owner's membership carried a moment earlier. */
+  newOwnerPreviousRoleTemplate: RoleTemplate;
+  at: Date;
+}
+
+/**
+ * Outbound events about the organization itself (Sprint 10.5, ADR 0024).
+ *
+ * Their only consumer is the audit trail, and that is enough of one — the same
+ * standing `people.import.completed.v1` has. What would not be enough is
+ * publishing them because the other operations publish something: each of these
+ * records an act the role-changed events cannot express, because those name
+ * the row that moved and never the person who moved it.
+ */
+export interface OrganizationIdentityEventPublisher {
+  organizationRenamed(
+    organization: Organization,
+    previousName: string,
+    renamedByUserId: string,
+    correlationId?: string,
+  ): Promise<void>;
+  organizationOwnershipTransferred(
+    transfer: OwnershipTransfer,
     correlationId?: string,
   ): Promise<void>;
 }
@@ -152,6 +191,7 @@ export interface PeopleImportEventPublisher {
 
 /** What the one wired publisher adapter provides under EVENT_PUBLISHER. */
 export type OrganizationEventPublisher = MembershipEventPublisher &
+  OrganizationIdentityEventPublisher &
   StructureEventPublisher &
   SupportTeamEventPublisher &
   InvitationEventPublisher &

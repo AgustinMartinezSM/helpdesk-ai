@@ -1,0 +1,31 @@
+-- One owner per organization, enforced by the database (Sprint 10.5, ADR 0024).
+--
+-- Ownership becomes transferable in this sprint, which means two rows change
+-- role_template inside one transaction and a concurrent second transfer becomes
+-- a real thing to be wrong about. The transaction and its conditional updates
+-- are the mechanism; this index is what makes "two owners" unrepresentable
+-- rather than merely unlikely, so a future path that forgets the conditions
+-- fails loudly instead of quietly producing an organization with two people at
+-- the top of it.
+--
+-- PARTIAL, and it has to be. A plain unique index on (organization_id) would
+-- mean one membership per organization. Prisma's schema language cannot express
+-- a WHERE clause on an index, so this is raw SQL — the same shape the
+-- invitations migration used for "one pending invitation per address", and the
+-- same warning applies: do NOT "simplify" it into @@unique in schema.prisma,
+-- because that would generate the total index and lock every organization to a
+-- single member.
+--
+-- Additive and true of every existing row. The bootstrap organization is seeded
+-- with no owner at all, and each organization created since Sprint 10.4 was
+-- created with exactly one, in the transaction that created the organization
+-- itself. Nothing is rewritten here.
+--
+-- Not filtered on status. An `owner` membership cannot be suspended or removed
+-- through any surface — ADR 0021 refuses to administer a member whose template
+-- is owner, in both directions — so "the owner row" and "the active owner row"
+-- are the same row, and adding a status predicate would let a second owner
+-- exist the moment that stops being true.
+CREATE UNIQUE INDEX "memberships_one_owner_per_organization"
+    ON "memberships"("organization_id")
+    WHERE "role_template" = 'owner';

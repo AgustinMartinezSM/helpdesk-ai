@@ -34,6 +34,26 @@ export function isActive(organization: Organization): boolean {
 
 /** An organization's display name, as far as the domain constrains it. */
 export const ORGANIZATION_NAME_MAX_LENGTH = 80;
+export const ORGANIZATION_NAME_MIN_LENGTH = 2;
+
+/**
+ * The one shape a display name is stored in, wherever it arrives from.
+ *
+ * Creation and renaming both go through this, which is the point: the two would
+ * otherwise disagree about whether "  Ferretería   Sur  " and "Ferretería Sur"
+ * are the same organization's name, and the second one to be written would look
+ * like a change when nothing changed. Internal runs of whitespace collapse for
+ * the same reason a leading space is trimmed — they are invisible in the
+ * interface and a rename must not be a no-op nobody can see.
+ *
+ * It deliberately does NOT touch case, accents or punctuation. That is the
+ * slug's job (`slugFromName`), and a display name that could not say
+ * "Ferretería Ñandú S.R.L." exactly as its owner writes it would be answering a
+ * URL's problem with the product's copy.
+ */
+export function normalizeOrganizationName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ');
+}
 
 /**
  * Derives a slug from a display name.

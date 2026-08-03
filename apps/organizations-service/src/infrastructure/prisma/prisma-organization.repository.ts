@@ -23,6 +23,28 @@ export class PrismaOrganizationRepository implements OrganizationRepository {
     return row ? toDomain(row) : null;
   }
 
+  async rename(
+    organizationId: string,
+    name: string,
+    at: Date,
+  ): Promise<Organization | null> {
+    // updateMany rather than update: `update` throws when the row is gone, and
+    // an organization that vanished between the caller's read and this write
+    // is a "somebody else got there first" answer for the use case to shape,
+    // not an exception for the error filter to guess at.
+    //
+    // The slug is absent from `data` and there is no code path that could put
+    // it there. It is what provisioning and the bootstrap lookup key on.
+    const updated = await this.prisma.organization.updateMany({
+      where: { id: organizationId },
+      data: { name, updatedAt: at },
+    });
+    if (updated.count === 0) {
+      return null;
+    }
+    return this.findById(organizationId);
+  }
+
   async createWithOwner(
     organization: Organization,
     owner: Membership,

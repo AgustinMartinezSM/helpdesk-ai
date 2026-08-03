@@ -130,6 +130,15 @@ model Membership {
   supportTeamMemberships SupportTeamMembership[]
   responsibleFor         OperationalStation[]
 
+  // "One owner per organization" is a PARTIAL unique index
+  // (WHERE role_template = 'owner'), which Prisma's schema language cannot
+  // express — it is raw SQL in 20260804120000_single_organization_owner.
+  //
+  // Do NOT write it here as @@unique([organizationId]): that would generate a
+  // TOTAL unique index and allow one member per organization. It is also not
+  // declared as a plain @@index, because the partial index already plans the
+  // owner lookup and a second index over the same column would be dead weight
+  // on every membership write.
   @@unique([organizationId, userId])
   @@index([userId])
   @@map("memberships")

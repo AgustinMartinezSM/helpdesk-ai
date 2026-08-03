@@ -325,3 +325,92 @@ export class AlreadyBelongsToOrganizationError extends OrganizationDomainError {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// The organization's own identity and ownership (Sprint 10.5, ADR 0024).
+//
+// Every one of these answers somebody who is already a member of the
+// organization they are asking about, so each says why. There is nothing to
+// conceal from a person being told what they may not do to their OWN
+// organization — and the one thing that would leak, a target in another
+// tenant, is not here: it answers with the scoped MembershipNotFoundError
+// above, exactly as member administration does.
+// ---------------------------------------------------------------------------
+
+/**
+ * Raised when the actor's token carries no `organization.update`. In the use
+ * case rather than a route decorator, per ADR 0015 rule 1.
+ */
+export class ForbiddenOrganizationActionError extends OrganizationDomainError {
+  constructor() {
+    super('you are not allowed to change this organization');
+  }
+}
+
+/**
+ * Raised when somebody who is not the owner tries to hand ownership on.
+ *
+ * Decided from the STORED membership, never from the token: an access token
+ * lives JWT_ACCESS_TTL_SECONDS (900) and nothing compares `mv`, so a former
+ * owner's claims outlive their standing by a quarter of an hour — and this is
+ * the one operation where spending them would be irreversible from inside the
+ * product.
+ *
+ * It also covers the bootstrap organization, which nobody owns: the holding pen
+ * is migration data and a recovery anchor, and a row claiming otherwise would
+ * be a provisioning fault rather than a transfer to honour.
+ */
+export class NotOrganizationOwnerError extends OrganizationDomainError {
+  constructor() {
+    super("only this organization's owner can transfer ownership");
+  }
+}
+
+/**
+ * Raised when the person named to receive ownership is a member but not one
+ * who could exercise it — invited and not yet joined, suspended, or removed.
+ *
+ * Deliberately blind to WHICH of those it is. The caller holds `people.read`
+ * and can see the directory, so this conceals nothing they cannot look up; what
+ * it avoids is a second, subtly different vocabulary for membership status
+ * living on an endpoint that has no business teaching it.
+ */
+export class OwnershipTargetNotEligibleError extends OrganizationDomainError {
+  constructor() {
+    super(
+      'ownership can only be transferred to an active member of this organization',
+    );
+  }
+}
+
+/**
+ * Raised when the target already owns the organization — which, because only
+ * the owner may initiate, is the actor naming themselves.
+ *
+ * A no-op rather than a success, on the same argument the status transition
+ * table makes about self-loops: confirming a change that did not happen leaves
+ * the caller's picture of the row stale, and here that picture is "who runs
+ * this organization".
+ */
+export class OwnershipAlreadyHeldError extends OrganizationDomainError {
+  constructor() {
+    super('that person already owns this organization');
+  }
+}
+
+/**
+ * Raised when the transfer's conditional update found no row to move — the
+ * ownership changed between this request being decided and being written.
+ *
+ * This is what a lost race looks like from the loser's side, and it is a
+ * refusal rather than a retry on purpose: the request was authorized against an
+ * ownership that no longer exists, so repeating it would be deciding again from
+ * the same stale picture.
+ */
+export class OwnershipTransferConflictError extends OrganizationDomainError {
+  constructor() {
+    super(
+      "this organization's ownership changed while you were deciding; read it again and start over",
+    );
+  }
+}

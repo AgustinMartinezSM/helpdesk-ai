@@ -12,6 +12,20 @@ export interface MembershipCreateResult {
   created: boolean;
 }
 
+export interface TransferOwnershipInput {
+  organizationId: string;
+  /** The membership currently carrying `owner`. */
+  fromMembershipId: string;
+  toMembershipId: string;
+  at: Date;
+}
+
+export interface TransferredOwnership {
+  /** The previous owner, now `organization_admin` and still a member. */
+  previousOwner: Membership;
+  newOwner: Membership;
+}
+
 export interface MembershipRepository {
   findByOrganizationAndUser(
     organizationId: string,
@@ -73,4 +87,25 @@ export interface MembershipRepository {
     organizationId: string,
     membershipIds: string[],
   ): Promise<Membership[]>;
+  /**
+   * The organization's owner, or null while it has none.
+   *
+   * Null is a real answer, not a fault: the bootstrap organization is seeded by
+   * a migration with no owner at all, and every read here has to survive that.
+   */
+  findOwner(organizationId: string): Promise<Membership | null>;
+  /**
+   * Moves `owner` from one membership to another, atomically, or answers null
+   * because somebody else moved it first (ADR 0024).
+   *
+   * Null rather than a thrown error, following `InvitationRepository.redeem`:
+   * losing a race is an ordinary outcome this layer reports, and deciding what
+   * it MEANS — a refusal telling the caller to re-read — belongs to the use
+   * case. An implementation must make both writes conditional on the state
+   * this call was decided against, and must leave the original ownership
+   * untouched when either condition no longer holds.
+   */
+  transferOwnership(
+    input: TransferOwnershipInput,
+  ): Promise<TransferredOwnership | null>;
 }

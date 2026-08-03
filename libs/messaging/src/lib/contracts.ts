@@ -404,6 +404,64 @@ export const supportTeamScopeChangedV1 = defineEvent(
 );
 
 // ---------------------------------------------------------------------------
+// Organization events (Sprint 10.5, ADR 0024). Born tenant-carrying, like
+// every contract above them: an organization IS the tenant, so the envelope
+// organizationId is required on the publish path and the payload states the
+// same fact for consumers holding this schema.
+//
+// Their only consumer is the audit trail, and that is a sufficient one — the
+// standing `people.import.completed.v1` already has. What makes them worth
+// existing beside the membership contracts is that a role-changed event names
+// the row that moved and never the person who moved it. Two rows changing
+// template in one transaction says an administrator did some administration;
+// only these say the organization changed hands, and by whose decision.
+//
+// Neither carries anything beyond ids, templates and the names the operation
+// is ABOUT. A display name is the organization's own, chosen to be shown; it
+// is not personal data, and recording the previous one is the difference
+// between a trail that says a rename happened and one that says what it did.
+// ---------------------------------------------------------------------------
+
+export const organizationRenamedV1 = defineEvent(
+  'organization.renamed.v1',
+  z.object({
+    organizationId: z.uuid(),
+    /**
+     * Present so the trail records that it did NOT move. The slug is what the
+     * bootstrap lookup and every provisioning path key on, and a rename that
+     * changed it would be a different event with a migration behind it.
+     */
+    slug: z.string().min(1),
+    previousName: z.string().min(1),
+    name: z.string().min(1),
+    renamedByUserId: z.uuid(),
+    renamedAt: z.iso.datetime(),
+  }),
+);
+
+/**
+ * The organization changed hands.
+ *
+ * Both memberships also publish `membership.role-changed.v1` — that is what
+ * keeps the directory projection right — so this one deliberately does not
+ * repeat the row ids. It records the decision: who handed it over, who has it
+ * now, and what the receiver was a moment before, which is what an auditor
+ * needs to reconstruct the state the transfer was authorized against.
+ */
+export const organizationOwnershipTransferredV1 = defineEvent(
+  'organization.ownership-transferred.v1',
+  z.object({
+    organizationId: z.uuid(),
+    /** By rule the previous owner; carried separately so the rule is auditable. */
+    transferredByUserId: z.uuid(),
+    previousOwnerUserId: z.uuid(),
+    newOwnerUserId: z.uuid(),
+    newOwnerPreviousRoleTemplate: z.string().min(1),
+    transferredAt: z.iso.datetime(),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Profile events. NOT tenant-carrying by name, deliberately: a person-level
 // profile edit can legitimately happen with no organization — the
 // belongs-nowhere state fixes their own phone number — so the envelope

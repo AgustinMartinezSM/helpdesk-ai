@@ -3,7 +3,11 @@
  * with which role template. It is the substrate every authorization decision
  * reads (ADR 0015).
  */
-import { ROLE_TEMPLATES, type RoleTemplate } from '@helpdesk-ai/security';
+import {
+  OWNER_ROLE_TEMPLATE,
+  ROLE_TEMPLATES,
+  type RoleTemplate,
+} from '@helpdesk-ai/security';
 
 export const MEMBERSHIP_STATUSES = [
   'invited',
@@ -23,7 +27,19 @@ export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
  * What did NOT move is the mapping from a template to permissions. That is the
  * evaluator, and ADR 0013 keeps it here.
  */
-export { ROLE_TEMPLATES, type RoleTemplate };
+export { OWNER_ROLE_TEMPLATE, ROLE_TEMPLATES, type RoleTemplate };
+
+/**
+ * The template ownership hands to the person it leaves behind.
+ *
+ * A transfer demotes the previous owner rather than removing them (ADR 0024).
+ * `organization_admin` is the answer because it is the only template that keeps
+ * every permission they were exercising a moment earlier: owner and admin
+ * resolve to the same set, so nothing they had open stops working mid-session,
+ * and an organization does not silently lose an administrator because somebody
+ * handed over the top of it.
+ */
+export const SUCCEEDED_OWNER_ROLE_TEMPLATE: RoleTemplate = 'organization_admin';
 
 export interface Membership {
   readonly id: string;

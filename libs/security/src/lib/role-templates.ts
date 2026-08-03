@@ -69,6 +69,18 @@ export const ROLE_TEMPLATES = Object.keys(
   ROLE_TEMPLATE_SCOPES,
 ) as readonly RoleTemplate[];
 
+/**
+ * The template at the top of an organization, named rather than spelled out.
+ *
+ * It earns a constant because three separate mechanisms compare against it and
+ * none of them is a grant: the exclusion below (nobody may hand it out),
+ * organization creation (the first one is written directly — ADR 0023), and
+ * ownership transfer (it moves between two rows in one transaction — ADR
+ * 0024). A literal in three places that must agree is a literal that will one
+ * day not.
+ */
+export const OWNER_ROLE_TEMPLATE: RoleTemplate = 'owner';
+
 export function isRoleTemplate(value: string): value is RoleTemplate {
   return value in ROLE_TEMPLATE_SCOPES;
 }
@@ -91,13 +103,20 @@ export function roleScopeOf(template: RoleTemplate): RoleScope {
  *   unseat the person already holding it. Two mechanisms, because one of them
  *   is currently blind.
  *
- * Every grant path reads this: invitations, role changes, and the CSV import
- * that does not exist yet. That is the point — there is nothing for the import
- * sprint to re-decide.
+ * Every grant path reads this: invitations, role changes, and the CSV import.
+ * That is the point — there was nothing for the import sprint to re-decide.
+ *
+ * **Two paths write `owner` and neither is a grant path**, which is why they do
+ * not read this list and must never be "unified" with something that does.
+ * Creation writes the first one (ADR 0023) and transfer moves it between two
+ * rows of one organization in a single transaction (ADR 0024). A grant hands a
+ * template out of this set to somebody; those two do something else, and
+ * routing them through here would mean widening the set to make them fit.
  */
 export const ORGANIZATION_GRANTABLE_TEMPLATES = ROLE_TEMPLATES.filter(
   (template) =>
-    ROLE_TEMPLATE_SCOPES[template] === 'organization' && template !== 'owner',
+    ROLE_TEMPLATE_SCOPES[template] === 'organization' &&
+    template !== OWNER_ROLE_TEMPLATE,
 );
 
 /**

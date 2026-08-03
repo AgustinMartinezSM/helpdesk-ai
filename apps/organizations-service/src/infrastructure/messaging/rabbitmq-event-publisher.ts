@@ -8,6 +8,8 @@ import {
   membershipCreatedV1,
   membershipRoleChangedV1,
   membershipStatusChangedV1,
+  organizationOwnershipTransferredV1,
+  organizationRenamedV1,
   stationCreatedV1,
   stationUpdatedV1,
   supportTeamCreatedV1,
@@ -19,8 +21,10 @@ import {
 } from '@helpdesk-ai/messaging';
 import type {
   OrganizationEventPublisher,
+  OwnershipTransfer,
   PeopleImportCompleted,
 } from '../../application/ports/event-publisher';
+import type { Organization } from '../../domain/organization';
 import type { Branch, OperationalStation } from '../../domain/branch';
 import type { SupportTeam } from '../../domain/support-team';
 import type { Invitation } from '../../domain/invitation';
@@ -113,6 +117,52 @@ export class RabbitMqEventPublisher implements OrganizationEventPublisher {
         changedAt: membership.updatedAt.toISOString(),
       },
       membership.organizationId,
+      correlationId,
+    );
+  }
+
+  async organizationRenamed(
+    organization: Organization,
+    previousName: string,
+    renamedByUserId: string,
+    correlationId?: string,
+  ): Promise<void> {
+    await this.safePublish(
+      organizationRenamedV1,
+      {
+        organizationId: organization.id,
+        // Carried so the trail records that the slug did NOT move, which is
+        // the whole shape of this decision (ADR 0024).
+        slug: organization.slug,
+        previousName,
+        name: organization.name,
+        renamedByUserId,
+        renamedAt: organization.updatedAt.toISOString(),
+      },
+      organization.id,
+      correlationId,
+    );
+  }
+
+  async organizationOwnershipTransferred(
+    transfer: OwnershipTransfer,
+    correlationId?: string,
+  ): Promise<void> {
+    // Ids and templates. No name, no address, nothing about either person —
+    // audit binds the firehose with '#' and keeps payloads opaquely and
+    // indefinitely, and this event is one the trail keeps for as long as the
+    // organization exists.
+    await this.safePublish(
+      organizationOwnershipTransferredV1,
+      {
+        organizationId: transfer.organizationId,
+        transferredByUserId: transfer.transferredByUserId,
+        previousOwnerUserId: transfer.previousOwnerUserId,
+        newOwnerUserId: transfer.newOwnerUserId,
+        newOwnerPreviousRoleTemplate: transfer.newOwnerPreviousRoleTemplate,
+        transferredAt: transfer.at.toISOString(),
+      },
+      transfer.organizationId,
       correlationId,
     );
   }

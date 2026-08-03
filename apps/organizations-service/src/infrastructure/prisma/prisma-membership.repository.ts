@@ -1,11 +1,15 @@
 import type {
   MembershipCreateResult,
   MembershipRepository,
+  TransferOwnershipInput,
+  TransferredOwnership,
 } from '../../application/ports/membership.repository';
-import type {
-  Membership,
-  MembershipStatus,
-  RoleTemplate,
+import {
+  OWNER_ROLE_TEMPLATE,
+  SUCCEEDED_OWNER_ROLE_TEMPLATE,
+  type Membership,
+  type MembershipStatus,
+  type RoleTemplate,
 } from '../../domain/membership';
 import type { Membership as MembershipRow } from '../../generated/prisma/client';
 import { PrismaService } from './prisma.service';
@@ -132,7 +136,112 @@ export class PrismaMembershipRepository implements MembershipRepository {
     });
     return rows.map(toDomain);
   }
+
+  async findOwner(organizationId: string): Promise<Membership | null> {
+    // findFirst rather than findUnique: the "one owner per organization" rule
+    // is a PARTIAL unique index (WHERE role_template = 'owner'), which Prisma's
+    // schema language cannot express, so the generated client has no unique
+    // lookup for it. The index still plans this query and still refuses a
+    // second owner at write time, which is where it matters.
+    const row = await this.prisma.membership.findFirst({
+      where: { organizationId, roleTemplate: OWNER_ROLE_TEMPLATE },
+    });
+    return row ? toDomain(row) : null;
+  }
+
+  async transferOwnership(
+    input: TransferOwnershipInput,
+  ): Promise<TransferredOwnership | null> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        /**
+         * DEMOTE BEFORE PROMOTE, and the order is not stylistic: the partial
+         * unique index allows at most one `owner` row per organization and is
+         * checked per statement, not deferred to commit. Promoting first would
+         * make the transaction fail against its own index every time.
+         *
+         * Both statements are CONDITIONAL updateMany calls, the shape
+         * invitation redemption uses. The first one carries the whole
+         * concurrency argument: `role_template = 'owner'` in the WHERE clause
+         * is what serializes two transfers of the same organization. The second
+         * request blocks on this row's lock, re-reads it after the first
+         * commits, no longer matches, and reports count 0 — so the loser
+         * changes nothing rather than racing the winner to a second owner.
+         */
+        const demoted = await tx.membership.updateMany({
+          where: {
+            id: input.fromMembershipId,
+            organizationId: input.organizationId,
+            roleTemplate: OWNER_ROLE_TEMPLATE,
+          },
+          data: {
+            roleTemplate: SUCCEEDED_OWNER_ROLE_TEMPLATE,
+            version: { increment: 1 },
+            updatedAt: input.at,
+          },
+        });
+        if (demoted.count !== 1) {
+          throw new StaleOwnership();
+        }
+
+        // `status: 'active'` is re-checked here rather than trusted from the
+        // use case's read: between that read and this write somebody holding
+        // people.suspend could have suspended the person about to be handed
+        // the organization.
+        const promoted = await tx.membership.updateMany({
+          where: {
+            id: input.toMembershipId,
+            organizationId: input.organizationId,
+            status: 'active',
+            roleTemplate: { not: OWNER_ROLE_TEMPLATE },
+          },
+          data: {
+            roleTemplate: OWNER_ROLE_TEMPLATE,
+            version: { increment: 1 },
+            updatedAt: input.at,
+          },
+        });
+        if (promoted.count !== 1) {
+          // The throw is the point: it rolls the demotion back, so a transfer
+          // that cannot finish leaves the original owner exactly as they were
+          // rather than leaving the organization with nobody at the top.
+          throw new StaleOwnership();
+        }
+
+        const [previousOwner, newOwner] = await Promise.all([
+          tx.membership.findUnique({ where: { id: input.fromMembershipId } }),
+          tx.membership.findUnique({ where: { id: input.toMembershipId } }),
+        ]);
+        if (!previousOwner || !newOwner) {
+          // Both were written inside this transaction; their absence means
+          // something deleted them underneath it. Rolling back beats reporting
+          // a transfer whose result cannot be read back.
+          throw new Error(
+            `membership ${input.fromMembershipId} or ${input.toMembershipId} disappeared during an ownership transfer`,
+          );
+        }
+
+        return {
+          previousOwner: toDomain(previousOwner),
+          newOwner: toDomain(newOwner),
+        };
+      });
+    } catch (error) {
+      if (error instanceof StaleOwnership) {
+        return null;
+      }
+      throw error;
+    }
+  }
 }
+
+/**
+ * Thrown to roll the transaction back, caught immediately outside it, never
+ * seen by a caller. Returning null from inside the callback would COMMIT the
+ * demotion that had already run — which is the exact half-transfer this whole
+ * method exists to make impossible.
+ */
+class StaleOwnership extends Error {}
 
 function toDomain(row: MembershipRow): Membership {
   return {

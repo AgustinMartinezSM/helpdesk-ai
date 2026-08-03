@@ -37,6 +37,11 @@ import {
   type OperationalStationRepository,
 } from '../application/ports/structure.repository';
 import { CreateOrganizationUseCase } from '../application/use-cases/create-organization';
+import {
+  GetOrganizationUseCase,
+  RenameOrganizationUseCase,
+} from '../application/use-cases/organization-identity';
+import { TransferOrganizationOwnershipUseCase } from '../application/use-cases/transfer-organization-ownership';
 import { AcceptInvitationUseCase } from '../application/use-cases/accept-invitation';
 import { ChangeMembershipRoleUseCase } from '../application/use-cases/change-membership-role';
 import { ChangeMembershipStatusUseCase } from '../application/use-cases/change-membership-status';
@@ -632,6 +637,44 @@ export class AppModule {
             MEMBERSHIP_REPOSITORY,
             CLOCK,
             ID_GENERATOR,
+            EVENT_PUBLISHER,
+          ],
+        },
+        {
+          provide: GetOrganizationUseCase,
+          useFactory: (
+            organizations: OrganizationRepository,
+            memberships: MembershipRepository,
+          ) => new GetOrganizationUseCase(organizations, memberships),
+          inject: [ORGANIZATION_REPOSITORY, MEMBERSHIP_REPOSITORY],
+        },
+        {
+          provide: RenameOrganizationUseCase,
+          useFactory: (
+            organizations: OrganizationRepository,
+            clock: Clock,
+            events: OrganizationEventPublisher,
+          ) => new RenameOrganizationUseCase(organizations, clock, events),
+          inject: [ORGANIZATION_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+        },
+        {
+          provide: TransferOrganizationOwnershipUseCase,
+          useFactory: (
+            organizations: OrganizationRepository,
+            memberships: MembershipRepository,
+            clock: Clock,
+            events: OrganizationEventPublisher,
+          ) =>
+            new TransferOrganizationOwnershipUseCase(
+              organizations,
+              memberships,
+              clock,
+              events,
+            ),
+          inject: [
+            ORGANIZATION_REPOSITORY,
+            MEMBERSHIP_REPOSITORY,
+            CLOCK,
             EVENT_PUBLISHER,
           ],
         },

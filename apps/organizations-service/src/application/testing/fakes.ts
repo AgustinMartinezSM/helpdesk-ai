@@ -4,10 +4,12 @@ import type {
   Department,
   OperationalStation,
 } from '../../domain/branch';
-import type {
-  Membership,
-  MembershipStatus,
-  RoleTemplate,
+import {
+  OWNER_ROLE_TEMPLATE,
+  SUCCEEDED_OWNER_ROLE_TEMPLATE,
+  type Membership,
+  type MembershipStatus,
+  type RoleTemplate,
 } from '../../domain/membership';
 import type { Invitation, InvitationStatus } from '../../domain/invitation';
 import type { SupportTeam } from '../../domain/support-team';
@@ -19,6 +21,7 @@ import type { Organization } from '../../domain/organization';
 import { DuplicatePendingInvitationError } from '../../domain/errors';
 import type {
   OrganizationEventPublisher,
+  OwnershipTransfer,
   PeopleImportCompleted,
 } from '../ports/event-publisher';
 import type {
@@ -30,6 +33,8 @@ import type {
 import type {
   MembershipCreateResult,
   MembershipRepository,
+  TransferOwnershipInput,
+  TransferredOwnership,
 } from '../ports/membership.repository';
 import type {
   Clock,
@@ -101,6 +106,23 @@ export class InMemoryOrganizationRepository implements OrganizationRepository {
     return { organization, membership: owner };
   }
 
+  async rename(
+    organizationId: string,
+    name: string,
+    at: Date,
+  ): Promise<Organization | null> {
+    const existing = this.organizations.get(organizationId);
+    if (!existing) {
+      return null;
+    }
+    // Everything but the name and the timestamp is copied through, which is
+    // the property the port promises: a fake that rebuilt the row would let a
+    // repository that quietly recomputed the slug pass its tests.
+    const renamed: Organization = { ...existing, name, updatedAt: at };
+    this.organizations.set(organizationId, renamed);
+    return renamed;
+  }
+
   /**
    * The membership store this fake writes the owner row into. Set by a spec
    * that exercises creation; left undefined by the many specs that only read
@@ -111,6 +133,29 @@ export class InMemoryOrganizationRepository implements OrganizationRepository {
 
 export class InMemoryMembershipRepository implements MembershipRepository {
   readonly memberships: Membership[] = [];
+
+  /**
+   * The partial unique index, in memory: at most one `owner` row per
+   * organization (Sprint 10.5's migration). Every write that could mint one
+   * goes through it, so a future path that tries to produce a second owner
+   * fails here instead of passing against a doll the database would refuse.
+   */
+  private refuseSecondOwner(membership: Membership, exceptId?: string): void {
+    if (membership.roleTemplate !== OWNER_ROLE_TEMPLATE) {
+      return;
+    }
+    const held = this.memberships.some(
+      (existing) =>
+        existing.organizationId === membership.organizationId &&
+        existing.roleTemplate === OWNER_ROLE_TEMPLATE &&
+        existing.id !== exceptId,
+    );
+    if (held) {
+      throw new Error(
+        `organization ${membership.organizationId} already has an owner`,
+      );
+    }
+  }
 
   async findByOrganizationAndUser(
     organizationId: string,
@@ -141,6 +186,7 @@ export class InMemoryMembershipRepository implements MembershipRepository {
     if (existing) {
       return { membership: existing, created: false };
     }
+    this.refuseSecondOwner(membership);
     this.memberships.push(membership);
     return { membership, created: true };
   }
@@ -183,6 +229,7 @@ export class InMemoryMembershipRepository implements MembershipRepository {
       version: this.memberships[index].version + 1,
       updatedAt: at,
     };
+    this.refuseSecondOwner(updated, updated.id);
     this.memberships[index] = updated;
     return updated;
   }
@@ -209,6 +256,68 @@ export class InMemoryMembershipRepository implements MembershipRepository {
           membership.organizationId === organizationId,
       ) ?? null
     );
+  }
+
+  async findOwner(organizationId: string): Promise<Membership | null> {
+    return (
+      this.memberships.find(
+        (membership) =>
+          membership.organizationId === organizationId &&
+          membership.roleTemplate === OWNER_ROLE_TEMPLATE,
+      ) ?? null
+    );
+  }
+
+  /**
+   * Mirrors the SQL the Prisma adapter runs, not a convenient version of it —
+   * the rule R2 recorded and 9.12 repeated. Both writes re-check the state the
+   * caller decided against, and NEITHER lands unless both do, so a use case
+   * that stopped checking the actor's template, or a repository that stopped
+   * conditioning its updates, fails here rather than passing against a fake
+   * more permissive than production.
+   *
+   * The demotion is applied to a copy and only committed at the end, which is
+   * this store's version of "the transaction rolls back": an array does not
+   * have one, and reverting by hand is how a half-transfer would sneak in.
+   */
+  async transferOwnership(
+    input: TransferOwnershipInput,
+  ): Promise<TransferredOwnership | null> {
+    const fromIndex = this.memberships.findIndex(
+      (membership) =>
+        membership.id === input.fromMembershipId &&
+        membership.organizationId === input.organizationId &&
+        membership.roleTemplate === OWNER_ROLE_TEMPLATE,
+    );
+    if (fromIndex < 0) {
+      return null;
+    }
+    const toIndex = this.memberships.findIndex(
+      (membership) =>
+        membership.id === input.toMembershipId &&
+        membership.organizationId === input.organizationId &&
+        membership.status === 'active' &&
+        membership.roleTemplate !== OWNER_ROLE_TEMPLATE,
+    );
+    if (toIndex < 0) {
+      return null;
+    }
+
+    const previousOwner: Membership = {
+      ...this.memberships[fromIndex],
+      roleTemplate: SUCCEEDED_OWNER_ROLE_TEMPLATE,
+      version: this.memberships[fromIndex].version + 1,
+      updatedAt: input.at,
+    };
+    const newOwner: Membership = {
+      ...this.memberships[toIndex],
+      roleTemplate: OWNER_ROLE_TEMPLATE,
+      version: this.memberships[toIndex].version + 1,
+      updatedAt: input.at,
+    };
+    this.memberships[fromIndex] = previousOwner;
+    this.memberships[toIndex] = newOwner;
+    return { previousOwner, newOwner };
   }
 }
 
@@ -632,6 +741,37 @@ export class FakeOrganizationEventPublisher implements OrganizationEventPublishe
     revokedByUserId: string;
     correlationId?: string;
   }[] = [];
+  readonly renamed: {
+    organization: Organization;
+    previousName: string;
+    renamedByUserId: string;
+    correlationId?: string;
+  }[] = [];
+  readonly ownershipTransfers: {
+    transfer: OwnershipTransfer;
+    correlationId?: string;
+  }[] = [];
+
+  async organizationRenamed(
+    organization: Organization,
+    previousName: string,
+    renamedByUserId: string,
+    correlationId?: string,
+  ): Promise<void> {
+    this.renamed.push({
+      organization,
+      previousName,
+      renamedByUserId,
+      correlationId,
+    });
+  }
+
+  async organizationOwnershipTransferred(
+    transfer: OwnershipTransfer,
+    correlationId?: string,
+  ): Promise<void> {
+    this.ownershipTransfers.push({ transfer, correlationId });
+  }
 
   async supportTeamCreated(
     team: SupportTeam,

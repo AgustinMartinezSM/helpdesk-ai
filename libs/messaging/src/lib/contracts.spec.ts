@@ -9,6 +9,8 @@ import {
   membershipCreatedV1,
   membershipRoleChangedV1,
   membershipStatusChangedV1,
+  organizationOwnershipTransferredV1,
+  organizationRenamedV1,
   profileUpdatedV1,
   MissingTenantContextError,
   requireEnvelopeOrganization,
@@ -374,6 +376,105 @@ describe('membership contracts', () => {
       ).toBe(false);
     },
   );
+});
+
+describe('organization contracts', () => {
+  const OWNER = '2f9d3a34-9c1e-4c5a-8f68-1af6a1c1a111';
+  const SUCCESSOR = '3a0e4b45-ad2f-4d6b-9a79-2bf7b2d2b222';
+
+  const RENAMED = {
+    organizationId: ORGANIZATION_ID,
+    slug: 'ferreteria-sur',
+    previousName: 'Ferretería Sur',
+    name: 'Ferretería Sur S.R.L.',
+    renamedByUserId: OWNER,
+    renamedAt: '2026-08-04T12:00:00.000Z',
+  };
+
+  const TRANSFERRED = {
+    organizationId: ORGANIZATION_ID,
+    transferredByUserId: OWNER,
+    previousOwnerUserId: OWNER,
+    newOwnerUserId: SUCCESSOR,
+    newOwnerPreviousRoleTemplate: 'organization_admin',
+    transferredAt: '2026-08-04T12:00:00.000Z',
+  };
+
+  it('accepts a valid organization.renamed.v1 payload', () => {
+    expect(organizationRenamedV1.payloadSchema.safeParse(RENAMED).success).toBe(
+      true,
+    );
+  });
+
+  it('requires the slug, so the trail records that it did not move', () => {
+    const { slug, ...withoutSlug } = RENAMED;
+    expect(
+      organizationRenamedV1.payloadSchema.safeParse(withoutSlug).success,
+    ).toBe(false);
+  });
+
+  it('requires both names: a rename with one side missing says nothing', () => {
+    expect(
+      organizationRenamedV1.payloadSchema.safeParse({
+        ...RENAMED,
+        previousName: '',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires the person who renamed it', () => {
+    // Attribution is why these exist beside the membership contracts.
+    const { renamedByUserId, ...anonymous } = RENAMED;
+    expect(
+      organizationRenamedV1.payloadSchema.safeParse(anonymous).success,
+    ).toBe(false);
+  });
+
+  it('accepts a valid organization.ownership-transferred.v1 payload', () => {
+    expect(
+      organizationOwnershipTransferredV1.payloadSchema.safeParse(TRANSFERRED)
+        .success,
+    ).toBe(true);
+  });
+
+  it.each([
+    'transferredByUserId',
+    'previousOwnerUserId',
+    'newOwnerUserId',
+  ] as const)('requires %s on a transfer', (field) => {
+    const payload = { ...TRANSFERRED };
+    delete payload[field];
+    expect(
+      organizationOwnershipTransferredV1.payloadSchema.safeParse(payload)
+        .success,
+    ).toBe(false);
+  });
+
+  it('does not constrain the receiver’s previous template to a vocabulary', () => {
+    // Same unfrozen vocabulary the membership contracts keep: an enum here
+    // would make settling the template names a breaking contract change.
+    expect(
+      organizationOwnershipTransferredV1.payloadSchema.safeParse({
+        ...TRANSFERRED,
+        newOwnerPreviousRoleTemplate: 'invented_after_this_contract_shipped',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('carries no membership ids, no email and no name of a person', () => {
+    // The role-changed events already name the rows that moved. This one
+    // records the decision, and zod strips anything an adapter tries to add —
+    // audit keeps payloads opaquely and indefinitely.
+    const parsed = organizationOwnershipTransferredV1.payloadSchema.parse({
+      ...TRANSFERRED,
+      previousOwnerEmail: 'titular@empresa.com',
+      newOwnerName: 'Ada Lovelace',
+      membershipId: '9d0c1b2a-3e4f-4a5b-8c6d-7e8f9a0b1c2d',
+    } as never);
+    expect(parsed).not.toHaveProperty('previousOwnerEmail');
+    expect(parsed).not.toHaveProperty('newOwnerName');
+    expect(parsed).not.toHaveProperty('membershipId');
+  });
 });
 
 describe('branch and station contracts', () => {

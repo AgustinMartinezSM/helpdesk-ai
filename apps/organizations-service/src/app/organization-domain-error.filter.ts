@@ -15,6 +15,7 @@ import {
   DuplicateStationCodeError,
   ForbiddenInvitationActionError,
   ForbiddenMembershipActionError,
+  ForbiddenOrganizationActionError,
   ForbiddenStructureActionError,
   InvalidMembershipTransitionError,
   InvalidRoleTemplateError,
@@ -23,8 +24,12 @@ import {
   InvitationNotRedeemableError,
   MembershipNotAdministrableError,
   MembershipNotFoundError,
+  NotOrganizationOwnerError,
   OrganizationDomainError,
   OrganizationNotFoundError,
+  OwnershipAlreadyHeldError,
+  OwnershipTargetNotEligibleError,
+  OwnershipTransferConflictError,
   RoleTemplateNotGrantableError,
   SameRoleTemplateError,
   SelfMembershipAdministrationError,
@@ -96,7 +101,14 @@ function describe(
     // Creating a second organization: the caller's own membership state
     // refuses it, and re-reading is exactly what they should do — the
     // product will tell them which organization they are already in.
-    exception instanceof AlreadyBelongsToOrganizationError
+    exception instanceof AlreadyBelongsToOrganizationError ||
+    // Ownership transfer, all three for the same reason: the rows exist and
+    // the caller may act on them, but the state they are in right now refuses
+    // the move. The conflict one is the lost race, where re-reading is not
+    // merely advisable but the only correct next step.
+    exception instanceof OwnershipAlreadyHeldError ||
+    exception instanceof OwnershipTargetNotEligibleError ||
+    exception instanceof OwnershipTransferConflictError
   ) {
     // The row exists; its current state refuses the move. 409 tells the
     // caller to re-read rather than retry the same request.
@@ -105,7 +117,13 @@ function describe(
   if (
     exception instanceof ForbiddenInvitationActionError ||
     exception instanceof ForbiddenMembershipActionError ||
+    exception instanceof ForbiddenOrganizationActionError ||
     exception instanceof ForbiddenStructureActionError ||
+    // Not the owner. 403 rather than 404 for the reason the rest of this arm
+    // gives: the caller is a member of the organization they are asking
+    // about, so there is nothing here to conceal from them — and a silent
+    // not-found would suggest the organization does not exist.
+    exception instanceof NotOrganizationOwnerError ||
     exception instanceof MembershipNotAdministrableError ||
     exception instanceof SelfMembershipAdministrationError ||
     exception instanceof RoleTemplateNotGrantableError ||

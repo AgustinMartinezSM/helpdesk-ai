@@ -91,6 +91,13 @@ describe('isTenantCarryingEventType', () => {
     );
   });
 
+  it('covers organization.* at v1: the organization IS the tenant', () => {
+    expect(isTenantCarryingEventType('organization.renamed.v1')).toBe(true);
+    expect(
+      isTenantCarryingEventType('organization.ownership-transferred.v1'),
+    ).toBe(true);
+  });
+
   it('leaves unversioned types out of the rule', () => {
     expect(isTenantCarryingEventType('wormhole.opened')).toBe(false);
   });
@@ -143,6 +150,23 @@ describe('RecordAuditEventUseCase', () => {
         id: '00000000-0000-4000-8000-000000000009',
         type: 'membership.created.v1',
         occurredAt: '2026-07-28T12:00:00.000Z',
+        payload: {},
+      }),
+    ).rejects.toBeInstanceOf(MissingTenantContextError);
+    expect(ctx.events.events.size).toBe(0);
+  });
+
+  it('rejects a tenantless organization.*.v1 envelope', async () => {
+    // An ownership transfer with no organization on the envelope names two
+    // people and nothing they changed hands over. Dead-lettering it is what
+    // keeps the trail from recording an unanswerable row.
+    const ctx = buildContext();
+
+    await expect(
+      ctx.record.execute({
+        id: '00000000-0000-4000-8000-00000000000a',
+        type: 'organization.ownership-transferred.v1',
+        occurredAt: '2026-08-04T12:00:00.000Z',
         payload: {},
       }),
     ).rejects.toBeInstanceOf(MissingTenantContextError);

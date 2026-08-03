@@ -29,6 +29,11 @@ const BORN_TENANT_CARRYING_PREFIXES = [
   'branch.',
   'station.',
   'invitation.',
+  // Sprint 10.5. An organization IS the tenant, so an `organization.*` event
+  // that arrived without one would be describing nothing — and these two say
+  // the organization was renamed and that it changed hands, which are exactly
+  // the facts an auditor would go looking for years later.
+  'organization.',
 ];
 
 /**
