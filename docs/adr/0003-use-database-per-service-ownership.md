@@ -49,3 +49,57 @@ Highest production fidelity. Rejected for local development: five-plus PostgreSQ
 ## Revisit Criteria
 
 Revisit this decision if the operational overhead (projection maintenance, event plumbing, per-service database administration) demonstrably outweighs the autonomy gained — for example, if most services turn out to need most of each other's data and the system is effectively rebuilding a shared database out of projections.
+
+## Amendment — Sprint 9.16: how a projection is rebuilt without crossing a database
+
+"Consequences" above says projections lag and must be designed for. It did not
+say how one gets **repaired**, and the omission had a cost: tickets-service
+deployed after organizations-service starts with an empty structure projection
+and refuses every located ticket, because a durable queue does not exist before
+its consumer's first boot and a topic exchange discards a message with no bound
+queue. This amendment records how that is fixed without weakening rule 1.
+
+**organizations-service remains the source of truth.** `branch_refs`,
+`station_refs`, `team_refs` and `team_branch_refs` in `helpdesk_tickets` are
+caches of `helpdesk_organizations`, and nothing about a rebuild changes which
+one is authoritative. The projection converges toward the owner; the owner never
+reads back.
+
+**tickets-service never reads another service's database — it asks the owner
+over HTTP.** The rebuild is integration path 1 of the three listed above, not a
+fourth one. Rule 1 is unamended: a service's tables stay private, credentials
+stay separate, and a cross-database read would still fail at connection time.
+The operator scripts in `infrastructure/postgres/operations` remain the only
+things in this repository that read one database and write another, and they
+are operator actions run by hand, not runtime coupling.
+
+**The snapshot surface is read-only and keyset paginated.** Three endpoints
+under `/internal/structure/*` on organizations-service — branches, stations,
+teams — behind `InternalServiceGuard` and `INTERNAL_SERVICE_TOKEN`, absent from
+the api-gateway's routing table, with the gateway stripping that header from
+every inbound request. Nothing there writes. Pagination is by id rather than by
+offset or timestamp so a row edited mid-walk keeps its place and is read exactly
+once; ordering on a mutable column would let a row updated behind the cursor be
+skipped entirely.
+
+**The read is global rather than per organization, and the row carries the
+tenant.** A consumer rebuilding a cold cache cannot enumerate organizations it
+has never seen, and a tenant with branches and no tickets yet is exactly the
+cold-start case — so scoping the request was not available. Each row states its
+own `organizationId` and the consumer writes that value, which is what makes a
+global read unable to produce a cross-tenant row. This is the one repository in
+organizations-service that is deliberately not organization-scoped; every other
+one stays scoped, and weakening them is not licensed by this.
+
+**Three specific reads for four specific projections, and not a data layer.** A
+general cross-service data-access mechanism is exactly the coupling this ADR
+exists to prevent, and it would erode the boundary faster than a shared schema
+because it would look principled. If a fifth projection needs rebuilding, it
+gets its own decision, not a query parameter here.
+
+The procedure an operator follows is
+`docs/architecture/projection-reconciliation.md`; the ordering that makes it
+safe against concurrent events is in ADR 0005's Sprint 9.16 amendment. The
+projections without a rebuild path are still listed honestly in
+`docs/architecture/data-ownership.md` and `docs/architecture/pilot-readiness.md`
+— this closed one, not the class.

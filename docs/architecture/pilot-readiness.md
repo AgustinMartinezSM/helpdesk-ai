@@ -1,9 +1,15 @@
 # Pilot readiness — validación integral
 
-Status: **Assessment, 2026-08-03, at `main` after Sprint 9.15.** Nothing here
+Status: **Assessment, 2026-08-03, at `main` after Sprint 9.15, amended after
+Sprint 9.16.** Nothing here
 is a plan that was approved; it is what I found when I went looking, with the
 evidence for each item and what closing it would take. Items are ordered by
 what would hurt a pilot first, not by how hard they are.
+
+Item 1 was the reason Sprint 9.16 happened, and it is now **partly resolved** —
+the verified defect is fixed, the class of problem is not. The numbering is kept
+so the record of what was found stays readable; the item says exactly which half
+closed and how it was proven.
 
 This document exists because the debt was scattered: some in the handoff, some
 in sprint outcome records, some only in a comment. A reader deciding whether to
@@ -16,7 +22,12 @@ true if there were one.
 
 ## 1. A projection that starts empty and has no way to catch up
 
-**Severity: highest. Verified this session, by reproducing it.**
+**Severity: was highest. RESOLVED for tickets-service in Sprint 9.16; still
+open for four other projections (see "What Sprint 9.16 did not close" below).**
+The finding is kept as it was written, because what closed it only makes sense
+against what was found.
+
+### The finding, as it stood after Sprint 9.15
 
 Every consumer declares a **durable** queue at boot
 (`libs/messaging/src/lib/messaging-client.ts`, `assertQueue(..., { durable: true })`).
@@ -46,8 +57,9 @@ re-emit an event. The refusal is correct; the emptiness is not.
 analytics-service (`ticket_snapshots`, `user_snapshots`),
 notification-service (`ticket_refs`).
 
-**What closing it takes.** A reconciliation path per projection — either a
-replay endpoint on the owning service that re-emits current state, or a
+**What closing it takes** (written before Sprint 9.16, and worth keeping
+because the estimate was half right). A reconciliation path per projection —
+either a replay endpoint on the owning service that re-emits current state, or a
 read-through fallback that asks the owner when a lookup misses. The first is
 more work and keeps the hot path fast; the second is smaller and puts a
 synchronous call on a path ADR 0014 deliberately kept asynchronous. It is a
@@ -60,6 +72,58 @@ one.
 read `prisma.branch` and `prisma.department` — organizations-service's **own
 tables**, which are the source of truth rather than a copy of one. The import
 reads no projection anywhere.
+
+### What closed it, for tickets-service (Sprint 9.16)
+
+Neither of the two options above was taken. A **snapshot pulled from the owner**
+was: organizations-service offers three read-only, keyset-paginated endpoints
+under `/internal/structure/*` (branches, stations, teams with their branch scope
+inline), and tickets-service walks them at boot — after its subscription is
+live — and on demand. No service reads another's database; the hot path is
+unchanged, so 9.5's D4 stands. ADR 0003 and ADR 0005 carry the amendments; the
+operator procedure is `docs/architecture/projection-reconciliation.md`.
+
+The ordering is the safety argument and it needed no new mechanism: `subscribe()`
+resolves only after the queue is bound, and every apply is last-write-wins on the
+source's own timestamp, so an update landing mid-walk wins rather than being
+overwritten by an older snapshot row. Reversing the two calls reopens the window.
+
+**The proof is a real broker and a real database, not mocks, and it is the part
+of this that matters.** `apps/tickets-service/src/app/messaging/projection-cold-start.int.spec.ts`
+deletes the durable queue so the start is genuine, publishes branch and team
+events against real RabbitMQ with nothing bound, and then **asserts the
+projection in real PostgreSQL is still empty** — which is what proves the events
+were discarded rather than merely delayed, and it is the one step that cannot be
+faked with a stub. It then shows a located ticket refused, reconciles, and shows
+the same ticket accepted and routed to both an organization-wide and a
+branch-scoped team. It also covers an event arriving after the rebuild, an older
+snapshot row failing to overwrite a newer event, and a dry run writing nothing.
+Reproducing the defect first is what makes the fix a fix rather than a claim.
+
+The reproduction that opened this item — `team_refs` and `branch_refs` empty in
+the tickets dev database — is now repaired by a boot rather than by editing a
+branch to make it re-emit.
+
+### What Sprint 9.16 did not close
+
+Four projections still have the same exposure and no equivalent path:
+users-service's `directory_memberships`, analytics-service's `ticket_snapshots`
+and `user_snapshots`, and notification-service's `ticket_refs`. Their documented
+rebuild paths in `docs/architecture/data-ownership.md` are HTTP refetches with
+known gaps (auth-service exposes no user listing; a rebuild must still be
+followed by the tenant backfill), not a reconciliation. Their consequences are
+milder than the one above — a stale directory or a missing analytics row does not
+refuse anybody's ticket — which is why this drops from "highest" rather than
+disappearing.
+
+Two smaller residuals, stated so nobody assumes otherwise: **nothing schedules
+the check** (there is no scheduler anywhere in this repository — it runs at boot
+and when an operator asks), and **drift produces a log line and an HTTP response,
+not a metric or an alert**, so it is found by somebody looking. Both are
+instances of the observability gap this document names at the end.
+
+Departments are not in that list and never will be: they publish no contract, so
+there is nothing to project or reconcile (ADR 0022's Sprint 9.16 amendment).
 
 ## 2. Nothing limits how much a caller can ask for
 
@@ -80,14 +144,30 @@ shared database should know that before somebody discovers it.
 
 ## 3. Service-to-service calls are authenticated but not attributed
 
-**Severity: medium. Carried, and narrower than it was.**
+**Severity: medium. Carried, and the surface behind the credential grew in
+Sprint 9.16 — read this rather than the older one-line version of it.**
 
-`INTERNAL_SERVICE_TOKEN` guards no mutation anywhere since Sprint 9.11 — what
-remains behind it is two read-only membership lookups. So an unattributed call
-can no longer change anything, which is why this is medium rather than high.
-What is still missing is knowing WHICH process called: the credential is shared,
-and a self-declared caller header would log a claim the credential does not
-bind. Closing it means per-caller secrets or a signed service assertion.
+From Sprint 9.11 until 9.16 the accurate statement was that
+`INTERNAL_SERVICE_TOKEN` guarded no mutation anywhere: what sat behind it was
+two read-only membership lookups. **That sentence is no longer literally true**,
+and the difference is worth stating rather than leaving somebody to find it.
+Sprint 9.16 added three read-only snapshot endpoints on organizations-service
+and, on tickets-service, an on-demand reconcile that **writes** — so the
+credential now opens one write path.
+
+What it writes is the distinction. Reconciliation touches projection rows only:
+it can create no ticket, no membership and no domain entity, it can delete
+nothing, and every row it writes is one the event stream would have written
+anyway. The endpoints 9.10 and 9.11 deleted were different in kind — they
+changed domain state on behalf of a person with nobody attached, so "who decided
+this" had a subject and no answer. Here that question has no subject: the walk
+expresses no human decision. The justification is written in the controller
+rather than assumed, and it is why this stays medium.
+
+What is still missing is unchanged and is the actual finding: knowing WHICH
+process called. The credential is shared, and a self-declared caller header
+would log a claim the credential does not bind. Closing it means per-caller
+secrets or a signed service assertion.
 
 The credential is rotatable (`INTERNAL_SERVICE_TOKEN_PREVIOUS`, runbook in
 SECURITY.md) and the gateway strips the header from every inbound request.
@@ -132,6 +212,14 @@ breaks the day two suites share a database or run in parallel.
 Sprint 9.15 added a fifth file to the organizations fixture's care
 (`people-import.int.spec.ts`) and used the scoped fixture, so it did not make
 this worse.
+
+Sprint 9.16 did add to the pile, and it should be said plainly:
+`projection-cold-start.int.spec.ts` tears down the four structure projections
+and `tickets` with unfiltered `deleteMany()`, because tickets-service has no
+scoped fixture to use. It is the same debt, one file larger. That suite also
+deletes and re-declares its own durable queue, which is deliberate — it is how
+the cold start is made genuine — and it is a second reason not to run these
+suites in parallel against one broker.
 
 ## 6. Smaller things, each verified
 

@@ -124,3 +124,56 @@ None of this weakens the rule above. Changing a payload shape still means a
 new contract and a compatibility window; `ticket.created.v2` exists precisely
 because the alternative — mutating the stream every consumer already reads —
 is what this ADR forbids.
+
+## Amendment — Sprint 9.16: what a durable queue does not do, and the ordering that repairs it
+
+"Consequences" said projections can be rebuilt. This amendment says what that
+costs, because a property of the topology above turned out to have a
+consequence nobody had written down.
+
+**A durable queue survives a restart; it does not exist before its consumer's
+first boot.** `startConsumer` is what declares and binds it, and a topic
+exchange **discards** a message with no bound queue. So a service deployed
+after its producers have been working starts with an empty projection and fills
+only from the next event — silently, with no dead letter to inspect, because
+nothing was ever routed. For tickets-service that meant refusing every located
+ticket: creation validates the branch against the projection and fails closed
+(Sprint 9.5, D4). It was reproduced on this machine before Sprint 9.15, not
+theorized.
+
+**Subscriptions are live before reconciliation begins.** The rule is subscribe
+first, snapshot second, and it lives inside
+`StructureEventsConsumer.onApplicationBootstrap` rather than in two coordinated
+call sites, because separating them is how somebody reorders them later.
+`subscribe()` resolves only after the queue is declared and bound, so from that
+moment nothing published can be discarded — it waits in the queue whether or not
+the consumer is still catching up. Reversing the two reopens exactly the window
+this closes: an event published between the snapshot read and the binding would
+go nowhere.
+
+**Source timestamps give last-write-wins, and that is what makes the two paths
+composable.** Every apply — from an event or from a snapshot row — is guarded by
+`stored.updated_at <= incoming`, carrying the source's own timestamp rather than
+the receiver's clock. So an update published before the snapshot read is already
+in the snapshot; one published after is queued and applied later, winning on its
+newer timestamp; one published during is in one, the other or both, and the
+guard settles it either way. **No update can be lost across the handover, and it
+takes no cursor table, no pause and no lock** — only these two properties
+composed. Idempotent handlers were already required by this ADR; this is the
+same requirement doing a second job.
+
+**What is reconciled, and what is not.** tickets-service's branch, station and
+support-team projections (`branch_refs`, `station_refs`, `team_refs`,
+`team_branch_refs`). Departments are deliberately absent — they publish no
+contract at all, so there is nothing to consume and nothing to reconcile (ADR
+0022's Sprint 9.16 amendment). The other consumers in the platform —
+users-service's directory, analytics' snapshots, notification's ticket refs —
+have the same cold-start exposure and no equivalent path;
+`docs/architecture/pilot-readiness.md` keeps that open rather than implying this
+sprint closed it.
+
+Rebuilding still does not mean replaying. There is no event store: the exchange
+retains nothing after routing, the outbox is deferred (ADR 0006), and audit's
+trail is another service's database. The snapshot is read from the service that
+owns the data, over HTTP (ADR 0003's Sprint 9.16 amendment). The operator
+procedure is `docs/architecture/projection-reconciliation.md`.

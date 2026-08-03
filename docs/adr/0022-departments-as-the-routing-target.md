@@ -161,6 +161,34 @@ Negative / accepted:
   the one place where "cannot see unauthorized branches" means "was never
   given them" rather than "is filtered out now".
 
+## Amendment — Sprint 9.16: departments publish nothing, so there is nothing to project
+
+Sprint 9.16 built a reconciliation path for tickets-service's structure
+projections, and its brief named a `department_refs` among them. None was
+created, and the reason belongs in this ADR rather than in a sprint record,
+because the next plan that lists the structure entities will name departments
+again.
+
+**tickets-service does not project departments, and that is a decision rather
+than an omission.** The decision above makes a department the requester's
+organizational area and the support team the group that resolves the ticket.
+Nothing in ticket validation or routing keys on a department: creation validates
+branch and station, and routing targets a team. There is no consumer.
+
+**Departments therefore publish no event contract at all.** Branches, stations
+and support teams each have one because something downstream consumes them. A
+department contract would be a promise made to nobody, and every published
+contract is a shape that can never be mutated afterwards (ADR 0005) — so
+publishing one "for later" costs a permanent commitment to buy nothing. **No
+consumer, no promise.**
+
+The consequence to keep: `branch_refs`, `station_refs`, `team_refs` and
+`team_branch_refs` are reconciled from organizations-service; there is no fourth
+projection and no fifth endpoint. If routing on the requester's department ever
+lands — the increment "Consequences" above leaves open — it introduces the first
+department contract, and that is when a projection becomes a real question.
+Adding one before then would invent a promise to satisfy a name in a plan.
+
 ## Related
 
 ADR 0016 (the branch/department/station shape, and what a department is), ADR

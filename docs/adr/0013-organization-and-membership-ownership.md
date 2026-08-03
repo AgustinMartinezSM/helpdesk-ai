@@ -174,8 +174,44 @@ instead — `infrastructure/postgres/operations/backfill-bootstrap-memberships.s
 — which reads one database and writes another, a thing a migration may do and
 a service may not.
 
+## Amendment — Sprint 9.16: other services cache this graph, and it stays a cache
+
+Sprint 9.5 gave tickets-service local copies of branches and stations, and 9.12
+added support teams, all fed by events. Sprint 9.16 gave those copies a way to
+be rebuilt, and that is worth recording here because a rebuild path is exactly
+the kind of thing that quietly turns a cache into a second source of truth.
+
+**organizations-service remains the source of truth for the whole
+organizational graph.** Branches, departments, operational stations, support
+teams and their branch scope are its rows, with real intra-service foreign
+keys — which is the property this ADR chose a separate service to get. What
+lives in `helpdesk_tickets` is `branch_refs`, `station_refs`, `team_refs` and
+`team_branch_refs`: denormalized copies that exist so ticket creation can
+validate locally instead of asking synchronously (Sprint 9.5, D4). They hold no
+fact of their own.
+
+**The direction of repair is one-way, always.** The projection converges toward
+organizations-service by reading three read-only snapshot endpoints it offers;
+nothing flows back, and no reconciliation can create, rename or archive a
+branch, a station or a team. The endpoints are reads behind the same service
+credential Sprint 9.11 left holding two read-only membership lookups, and they
+are absent from the api-gateway.
+
+**A local row the owner does not offer is reported, never removed.** The domain
+archives rather than deletes and archiving does not cascade (Sprint 9.11, D4),
+so an unexplained projection row is a fact nothing accounts for rather than a
+deletion to mirror. It is counted as `orphaned`; acting on it stays a human
+decision. Silently deleting it would be this service's ownership being used to
+justify destroying somebody else's row on the strength of one HTTP response.
+
+Nothing here applies to `memberships`. They are not a projection anywhere and
+they have no snapshot: the reconciliation for those is still the operator script
+this ADR already names, for the reason it already gives.
+
 ## Related
 
-ADR 0003 (no cross-service foreign keys) is the binding constraint. ADR 0012
-decides the isolation mechanism; ADR 0014 decides how membership reaches a
-request; ADR 0015 defines the permission model this service evaluates.
+ADR 0003 (no cross-service foreign keys) is the binding constraint, and its
+Sprint 9.16 amendment records how a projection is rebuilt without crossing a
+database. ADR 0012 decides the isolation mechanism; ADR 0014 decides how
+membership reaches a request; ADR 0015 defines the permission model this service
+evaluates.

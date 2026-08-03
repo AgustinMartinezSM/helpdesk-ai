@@ -1,6 +1,7 @@
 # Sprint 9.16 — Projection bootstrap and reconciliation
 
-Status: **Implemented, closure incomplete (2026-08-03).** The Definition of Ready below was written and
+Status: **Implemented; closing pass done, remote CI pending (2026-08-03).** The
+Definition of Ready below was written and
 checked against the repository before any code.
 
 ## Definition of Ready
@@ -39,10 +40,12 @@ way to know when they are finished.
 **There is no `department_refs`, and this sprint must not create one.**
 tickets-service projects `branch_refs`, `station_refs`, `team_refs` and
 `team_branch_refs`, and nothing else. Departments publish **no contract at
-all** — ADR 0022 states it directly: _"there is no department contract on
-purpose (no consumer, no promise)"_, and 9.12 recorded that departments are the
-requester's area with no bearing on ticket validation or routing. Building a
-projection for them would invent a promise to satisfy a name in a plan.
+all**: ADR 0022 makes a department the requester's organizational area, with no
+bearing on ticket validation or routing, so nothing downstream consumes one.
+Building a projection for them would invent a promise to satisfy a name in a
+plan. (The rule was implicit in that ADR rather than written in it — the closing
+pass added it as an amendment, "no consumer, no promise", so the next plan that
+lists the structure entities finds the answer where it belongs.)
 
 **`station_refs` belongs in scope even though the brief does not name it.** It
 is a projection with the same cold-start failure and it participates in ticket
@@ -273,10 +276,146 @@ nothing.
 
 No migration. No schema change.
 
-### Not done in this sprint
+## The closing pass (2026-08-03)
 
-The runbook and the ADR/pilot-readiness updates are owed. The remaining eight
-integration suites were not re-run after the final change, and remote CI has
-not run. The snapshot endpoints have no controller-level spec of their own yet
-— the reconciliation covers everything downstream of "the snapshot answered",
-and the guard refusal on those three routes is untested.
+The outcome record above was written with five things owed. This is what
+closing them produced.
+
+### The operator runbook
+
+`docs/architecture/projection-reconciliation.md`. It covers the bootstrap (what
+happens without anybody asking, and the log lines that confirm it ran), the
+dry-run integrity check, the repair, how to read the seven counters, a
+symptom-to-cause table for every failure the code can produce, and safe
+recovery. It sits in `architecture/` beside `local-development.md`, which is the
+existing precedent for an operational document in this repository, rather than
+in a new directory holding one file.
+
+Two things in it are worth naming here because they are easy to get wrong
+later. **Re-running from the beginning is the recovery mechanism**, not a
+fallback — the resume cursors are a convenience and a resumed run deliberately
+reports no orphans, because it never saw the pages before its cursor. And
+**deleting projection rows to force a rebuild is never the right move**: it
+makes every located ticket unfileable until the walk finishes and corrects
+nothing the walk would not have corrected in place.
+
+### The ADR amendments
+
+Four, each in the document that owns the decision rather than in a new file:
+
+- **ADR 0003** — how a projection is rebuilt without crossing a database.
+  organizations-service remains the source of truth; tickets-service asks the
+  owner over HTTP and never reads another service's database; the snapshot
+  surface is read-only and keyset-paginated by id (so a row edited mid-walk
+  keeps its place); the read is global and the row carries the tenant; three
+  specific reads, not a data layer.
+- **ADR 0005** — what a durable queue does not do, and the ordering that
+  repairs it. Subscriptions are live before reconciliation begins, source
+  timestamps give last-write-wins, and those two composed are the whole
+  no-update-is-lost argument. It also names which projections are reconciled
+  and which four still are not.
+- **ADR 0013** — other services cache this graph and it stays a cache. Repair
+  is one-way, reconciliation can create no domain entity, and an orphan is
+  reported rather than removed.
+- **ADR 0022** — departments publish nothing, so there is nothing to project.
+
+**One correction the closing pass had to make.** The Definition of Ready above
+quoted ADR 0022 saying _"there is no department contract on purpose (no
+consumer, no promise)"_. **That sentence was not in ADR 0022.** The rule was
+real and derivable from the decision it does state, but the quotation was not,
+and a fabricated citation is worse than a missing one. The sentence is corrected
+above, and the rule is now written into ADR 0022 as an amendment so the next
+plan that lists the structure entities finds the answer where it belongs.
+
+### The readiness update
+
+`pilot-readiness.md` item 1 is **partly resolved**, and says so in those words.
+The verified defect — a cold tickets-service refusing every located ticket — is
+fixed and the proof is cited: the integration spec that publishes against real
+RabbitMQ with nothing bound and then asserts the projection in real PostgreSQL
+is still empty, which is the step that cannot be faked with a stub. The four
+projections with the same exposure and no path (`directory_memberships`,
+`ticket_snapshots`, `user_snapshots`, `ticket_refs`) stay open, as do the two
+residuals this sprint created rather than closed: nothing schedules the check,
+and drift produces a log line rather than an alert.
+
+Two other items needed correcting for accuracy rather than for this sprint's
+credit. **Item 3 said `INTERNAL_SERVICE_TOKEN` guards no mutation anywhere.**
+That was true from 9.11 until this sprint and is not any more — the on-demand
+reconcile writes. The item now states the change and the distinction that keeps
+it medium rather than high, instead of leaving a sentence that had quietly
+stopped being true. And **item 5 (R9) grew by one file**: the cold-start spec
+tears down with unfiltered `deleteMany()` because tickets-service has no scoped
+fixture, which is the same debt one file larger.
+
+### The controller spec
+
+`internal-structure-snapshot.controller.spec.ts`, 14 tests over the real guard
+and the real validation path with a recording fake repository. It covers the
+credential (absent, wrong, and a **valid organization_admin access token**,
+which opens nothing — these routes are guarded by the service credential
+alone), keyset pagination walked to exhaustion with the arguments the
+controller forwarded asserted, the default page size, empty query values
+treated as absent, a malformed cursor refused **before the repository is
+touched**, limits outside their bounds refused, and what a row states: each
+branch's own organization so two tenants can share a code, a station's tenant
+derived through its branch, a team's reach inline with the empty array meaning
+organization-wide, and the source timestamp the last-write-wins guard needs.
+
+What it does **not** cover, stated rather than implied: the Prisma keyset SQL
+itself has no database-level test. The controller test uses a fake that
+paginates by the same rule, so what is pinned is the controller's half — that
+`after` and `limit` arrive unchanged and `nextCursor` round-trips. A repository
+integration spec against real PostgreSQL is the next increment for anyone who
+wants the SQL pinned too.
+
+### Verified in the closing pass
+
+Full gate, local, all green: `format:check` (clean across the whole repository —
+which also confirms the implementation pass left no unrelated formatting
+changes), `lint` (0 errors), `typecheck`, `test` (325 unit tests, 15 suites),
+`build` (15 projects), `git diff --check`, and a scan of the outgoing diff for
+credential-shaped strings (nothing but variable names, prose, and the
+`helpdesk_local_only_*` values already published in `.env.example` and
+`SECURITY.md`).
+
+**All nine integration suites against real PostgreSQL and RabbitMQ**, not just
+tickets-service — 75 tests: messaging 6, auth 6, tickets 19, users 3, audit 5,
+notification 2, analytics 4, ai 7, organizations 23. The contract tests are
+`libs/messaging/src/lib/contracts.spec.ts` in the unit run plus
+`messaging.int.spec.ts` in the first integration suite; there is no separate
+contract target in this workspace.
+
+## Documentation
+
+Meaningfully improved:
+
+- **`docs/architecture/projection-reconciliation.md`** — new. The operator
+  runbook: bootstrap, integrity check, repair, counters, failure diagnosis,
+  safe recovery, and an explicit list of what it does **not** cover.
+- **ADR 0003, 0005, 0013 and 0022** — amendments recording, respectively, how a
+  projection is rebuilt without crossing a database; the queue property that
+  caused the defect and the subscribe-then-reconcile ordering with
+  last-write-wins that repairs it; that other services hold a cache of the
+  organizational graph and repair is one-way; and that departments publish
+  nothing so there is nothing to project.
+- **`docs/architecture/data-ownership.md`** — the four structure projections
+  were missing from the rebuild-path table entirely. They now have a row, and
+  it points at the runbook.
+- **`docs/architecture/pilot-readiness.md`** — item 1 partly resolved with its
+  proof cited and its remainder kept; item 3 corrected because this sprint made
+  its central sentence false; item 5 grown by the one file this sprint added to
+  it.
+- **`docs/handoffs/CURRENT-HANDOFF.md`** — the 9.16 section, the debt list and
+  the next-action list.
+
+Removed or corrected wording: the fabricated ADR 0022 quotation in this
+document's Definition of Ready (see "The ADR amendments" above), and
+pilot-readiness item 3's claim that the service credential guards no mutation
+anywhere — true when written, false after this sprint.
+
+No fictional experience, employer, customer, production incident, team
+discussion, user research or external approval was introduced. Every result
+recorded here was produced by a command run on this machine, and the two things
+that are not covered — the Prisma keyset SQL and the four projections without a
+reconciliation path — are stated as gaps rather than left to be assumed closed.
