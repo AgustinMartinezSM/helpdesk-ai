@@ -431,8 +431,16 @@ spec) and `612bea2` (the runbook, ADR amendments and readiness update). The
 workflow ran `format:check`, `lint`, `typecheck`, `test`, `build` and all nine
 integration suites against the service containers.
 
-The commit that records this result is itself pushed to `main` and runs the
-same workflow, as every closing commit here does.
+The closing commit that first recorded this result, `8b28263`, ran the same
+workflow and was **green too**: run
+[`30799187949`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30799187949).
+
+There is one link no sprint can close about itself: the commit carrying this
+paragraph is the tip, and its own run finishes after the paragraph is written.
+Every sprint here has that property and previous ones left it to the next
+sprint's opening commit to note. This one says so out loud instead, because
+"green" with an unstated exception is the kind of claim this repository tries
+not to make. The run is visible in Actions on `main`.
 
 ### Sprint closed
 

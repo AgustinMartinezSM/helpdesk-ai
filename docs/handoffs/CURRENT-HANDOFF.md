@@ -735,10 +735,11 @@ its first attempt, 9.13 is run `30788005358` on `ec065aa`, green on its first
 attempt, 9.14 is run `30791213751` on `3aa7070`, green on its first attempt,
 9.15's run is recorded in `SPRINT-009.15.md`, and **9.16 is run `30798798526`
 on `612bea2`, green on its first attempt** — one run covering all five of that
-sprint's commits, which were pushed together. Its closing pass also ran the nine
-suites locally: 75 integration tests (messaging 6, auth 6, tickets 19, users 3,
-audit 5, notification 2, analytics 4, ai 7, organizations 23) plus 325 unit
-tests.
+sprint's commits, which were pushed together — **plus run `30799187949` on
+`8b28263`, the closing record, green as well**. Its closing pass also ran the
+nine suites locally: 75 integration tests (messaging 6, auth 6, tickets 19,
+users 3, audit 5, notification 2, analytics 4, ai 7, organizations 23) plus 325
+unit tests.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
