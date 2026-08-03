@@ -3,9 +3,15 @@
  *
  * Helpi is a written guide, not a chatbot and not AI. Every string here is
  * authored by hand and selected by route; nothing is generated. That is a
- * hard constraint, not a style choice: the whole public site states that
- * AI assistance is `Planned`, so a companion that behaved (or read) like
- * an AI assistant would contradict the product's own honesty claims.
+ * hard constraint, not a style choice, and the reason is structural rather
+ * than a matter of current status: nothing here is generated, so a companion
+ * that behaved (or read) like an AI assistant would promise a kind of answer
+ * nothing behind it can produce.
+ *
+ * The old wording rested this on "the whole public site states that AI
+ * assistance is planned", which had been false since Sprint 9.0 — four AI
+ * capabilities are built and reachable. Resting a hard constraint on a
+ * status that moves is how a constraint quietly stops applying.
  *
  * Rules for adding a hint:
  * - One or two short sentences, second person, under ~90 characters.

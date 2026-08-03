@@ -148,7 +148,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
       <footer className={styles.footer}>
-        HelpDesk AI — AI-assisted support
+        HelpDesk AI — help desk for internal requests
       </footer>
     </div>
   );

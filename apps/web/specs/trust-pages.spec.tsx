@@ -177,10 +177,23 @@ describe('Engineering page', () => {
     ]) {
       expect(screen.getByText(app)).toBeTruthy();
     }
-    // organizations-service exists and is listed, but nothing in the product
-    // uses it yet — the page must never sell tenancy as a capability.
+    /**
+     * This used to assert that the page never mentions tenancy, on the
+     * premise that "nothing in the product uses organizations-service yet".
+     * That premise died in Sprint 9.8 (ADR 0019 gave the service a public
+     * face) and the assertion then FORBADE the page from telling the truth
+     * about it — a test enforcing a stale claim, which is worse than no
+     * test at all. Sprint 10.1 replaced it.
+     *
+     * What is worth pinning is the thing that would actually be a lie: the
+     * page may say the platform is multi-tenant, because it is and the
+     * database enforces it; it may not imply somebody is running it.
+     */
+    expect(
+      screen.getByText(/its own public surface behind the gateway/i),
+    ).toBeTruthy();
     expect(document.body.textContent).not.toMatch(
-      /multi-?tenan|tenant isolation|per-organization/i,
+      /tenants? (are|is) (live|in production)|customers? organizations?/i,
     );
     // The CI story stays honest in both directions. It really has run on a
     // remote, so the page must not go back to claiming otherwise — and it

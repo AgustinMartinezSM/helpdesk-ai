@@ -74,7 +74,7 @@ const APPLICATIONS = [
   {
     name: 'organizations-service',
     kind: 'NestJS + Prisma',
-    role: 'Organizations and memberships — read only by auth-service, no product surface yet',
+    role: 'Organizations, memberships, branches, support teams and invitations — with its own public surface behind the gateway',
   },
 ];
 
@@ -97,12 +97,23 @@ const LIBRARIES = [
   },
 ];
 
+/**
+ * A sample of the twenty-one published contracts, not the whole list — one
+ * per family, so the shape of the vocabulary is visible without a wall of
+ * chips. Until Sprint 10.1 this listed five names, four of which had been
+ * DELETED: the v1 ticket contracts went in the tenancy migration's phase 8,
+ * so the page was advertising routing keys nothing publishes and every
+ * durable queue unbinds at boot.
+ */
 const EVENTS = [
   'user.registered.v1',
-  'ticket.created.v1',
-  'ticket.status-changed.v1',
-  'ticket.assigned.v1',
-  'ticket.comment-added.v1',
+  'ticket.created.v2',
+  'ticket.status-changed.v2',
+  'membership.created.v1',
+  'branch.updated.v1',
+  'support-team.scope-changed.v1',
+  'invitation.accepted.v1',
+  'ai.suggestion.created.v2',
 ];
 
 const STACK = [
@@ -240,15 +251,17 @@ export default function EngineeringPage() {
             <h3 className={styles.contrastTitle}>Implemented today</h3>
             <p className={styles.contrastText}>
               Authentication, the full ticket lifecycle, comments, internal
-              notes and history — plus audit, notification and analytics
+              notes and history; organizations, memberships, branches, support
+              teams and invitations — plus audit, notification, analytics and AI
               services consuming these events behind the gateway.
             </p>
           </article>
           <article className={styles.contrastCard}>
-            <h3 className={styles.contrastTitle}>Target architecture</h3>
+            <h3 className={styles.contrastTitle}>What the backbone bought</h3>
             <p className={styles.contrastText}>
-              The event backbone the AI service will plug into already runs.
-              Adding AI means adding a consumer, not rewiring the platform.
+              Every capability added since has been a consumer rather than a
+              rewiring: the AI service, the projections that decide who can see
+              which ticket, and the recovery path that rebuilds them.
             </p>
           </article>
           <article className={styles.contrastCard}>
