@@ -40,11 +40,18 @@ export class TicketsController {
   list(
     @Req() req: BrowserRequest,
     @Query('status') status?: string,
+    @Query('branchId') branchId?: string,
+    @Query('assignedTeamId') assignedTeamId?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ): Promise<unknown> {
+    // Named one by one rather than passed through wholesale: the upstream
+    // runs `forbidNonWhitelisted`, so an unknown parameter arriving from a
+    // stale page would turn a listing into a 400.
     const query = new URLSearchParams();
     if (status) query.set('status', status);
+    if (branchId) query.set('branchId', branchId);
+    if (assignedTeamId) query.set('assignedTeamId', assignedTeamId);
     if (skip) query.set('skip', skip);
     if (take) query.set('take', take);
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
@@ -104,6 +111,24 @@ export class TicketsController {
       req,
       'PATCH',
       `/api/tickets/${encodeURIComponent(id)}/assignee`,
+      body,
+    );
+  }
+
+  @Patch(':id/team')
+  route(
+    @Req() req: BrowserRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    // Routing a ticket to the support team that should resolve it. The
+    // upstream's generic 422 — archived, foreign, out of scope, or a
+    // branchless ticket sent to a scoped team — arrives here as one answer
+    // and leaves as one answer.
+    return this.forward(
+      req,
+      'PATCH',
+      `/api/tickets/${encodeURIComponent(id)}/team`,
       body,
     );
   }

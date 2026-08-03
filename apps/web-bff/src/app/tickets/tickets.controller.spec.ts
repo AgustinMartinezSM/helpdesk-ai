@@ -102,6 +102,54 @@ describe('BFF tickets passthrough (stub gateway)', () => {
     expect(received[0].url).toBe('/api/tickets?status=open&take=5');
   });
 
+  it('passes the branch and team filters through, and nothing else', async () => {
+    nextResponse = { status: 200, body: { items: [], total: 0 } };
+
+    await request(app.getHttpServer())
+      .get('/tickets')
+      .query({
+        branchId: 'b1',
+        assignedTeamId: 't1',
+        // The upstream runs forbidNonWhitelisted, so anything this layer does
+        // not name must be dropped rather than relayed into a 400.
+        somethingElse: 'x',
+      })
+      .set('authorization', 'Bearer user-token')
+      .expect(200);
+
+    expect(received[0].url).toBe('/api/tickets?branchId=b1&assignedTeamId=t1');
+  });
+
+  it('forwards routing, including the null that clears it', async () => {
+    nextResponse = { status: 200, body: { id: 't1', assignedTeamId: null } };
+
+    await request(app.getHttpServer())
+      .patch('/tickets/t1/team')
+      .set('authorization', 'Bearer user-token')
+      .send({ teamId: null })
+      .expect(200);
+
+    expect(received[0].url).toBe('/api/tickets/t1/team');
+    expect(received[0].body).toEqual({ teamId: null });
+
+    // The one refusal that covers archived, foreign, out-of-scope and a
+    // branchless ticket alike arrives with its message intact.
+    nextResponse = {
+      status: 422,
+      body: {
+        statusCode: 422,
+        message:
+          'The support team cannot take this ticket in this organization',
+      },
+    };
+    const refused = await request(app.getHttpServer())
+      .patch('/tickets/t1/team')
+      .set('authorization', 'Bearer user-token')
+      .send({ teamId: 'archived-team' })
+      .expect(422);
+    expect(refused.body.message).toContain('support team');
+  });
+
   it('forwards nested routes (status, comments) and error statuses untouched', async () => {
     nextResponse = {
       status: 409,

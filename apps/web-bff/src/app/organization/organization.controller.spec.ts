@@ -206,6 +206,73 @@ describe('Organization setup endpoints (stub gateway)', () => {
     expect(response.body.error).toBe('Not Found');
   });
 
+  it('forwards the support-team paths, including the literal mine', async () => {
+    gateway.respond('GET /api/organizations/teams', 200, []);
+    gateway.respond('GET /api/organizations/teams/mine', 200, []);
+    gateway.respond('POST /api/organizations/teams', 201, { teamId: 't1' });
+    gateway.respond('GET /api/organizations/teams/t1', 200, { teamId: 't1' });
+    gateway.respond('PATCH /api/organizations/teams/t1', 200, {
+      teamId: 't1',
+    });
+    gateway.respond('PATCH /api/organizations/teams/t1/members', 200, {
+      teamId: 't1',
+    });
+    gateway.respond('PATCH /api/organizations/teams/t1/branches', 200, {
+      teamId: 't1',
+    });
+
+    const token = 'Bearer jwt-access';
+    await request(app.getHttpServer())
+      .get('/organization/teams')
+      .set('authorization', token)
+      .expect(200);
+    // If ':teamId' had been declared first, this would forward to
+    // /api/organizations/teams/mine as an id and still work here — the
+    // upstream is what would then answer 400. Pinning the URL is the net.
+    await request(app.getHttpServer())
+      .get('/organization/teams/mine')
+      .set('authorization', token)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/organization/teams')
+      .set('authorization', token)
+      .send({ code: 'it', name: 'IT support' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .get('/organization/teams/t1')
+      .set('authorization', token)
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch('/organization/teams/t1')
+      .set('authorization', token)
+      .send({ status: 'archived' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch('/organization/teams/t1/members')
+      .set('authorization', token)
+      .send({ userIds: [] })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch('/organization/teams/t1/branches')
+      .set('authorization', token)
+      .send({ branchIds: [] })
+      .expect(200);
+
+    expect(gateway.requests.map((entry) => entry.url)).toEqual([
+      '/api/organizations/teams',
+      '/api/organizations/teams/mine',
+      '/api/organizations/teams',
+      '/api/organizations/teams/t1',
+      '/api/organizations/teams/t1',
+      '/api/organizations/teams/t1/members',
+      '/api/organizations/teams/t1/branches',
+    ]);
+    // The empty array survives the hop: it is what makes a team
+    // organization-wide, and a BFF that dropped it would silently mean
+    // "unchanged" (ADR 0022).
+    expect(gateway.requests[6].body).toEqual({ branchIds: [] });
+  });
+
   it('adds no authorization of its own', async () => {
     gateway.respond('POST /api/organizations/branches', 401, {
       statusCode: 401,

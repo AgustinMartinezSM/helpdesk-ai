@@ -33,6 +33,11 @@ interface BrowserRequest {
  * reads. It lived under `/people` in Sprint 9.10, when that editor was its
  * only caller; one door per upstream resource is worth more than a prefix
  * that matches whichever screen asked first.
+ *
+ * Sprint 9.13 added the support-team paths for the same reason and with the
+ * same discipline: `teams/mine` needs no permission upstream while everything
+ * else needs `teams.manage`, and knowing which is which is not this layer's
+ * business.
  */
 @Controller('organization')
 export class OrganizationController {
@@ -131,6 +136,90 @@ export class OrganizationController {
       req,
       'PATCH',
       `/api/organizations/stations/${encodeURIComponent(stationId)}`,
+      body,
+    );
+  }
+
+  /*
+   * Support teams (Sprint 9.13). They sit under /organization because they
+   * are organization-owned setup, next to branches — but a team is NOT a
+   * department and none of these paths goes anywhere near one. Whose
+   * department somebody works in says nothing about which tickets they
+   * resolve (ADR 0022).
+   */
+
+  @Get('teams')
+  teams(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(req, 'GET', '/api/organizations/teams');
+  }
+
+  // Before ':teamId', matching the upstream declaration order: 'mine' is a
+  // literal segment, not a team id.
+  @Get('teams/mine')
+  myTeams(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(req, 'GET', '/api/organizations/teams/mine');
+  }
+
+  @Post('teams')
+  createTeam(
+    @Req() req: BrowserRequest,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.forward(req, 'POST', '/api/organizations/teams', body);
+  }
+
+  @Get('teams/:teamId')
+  team(
+    @Req() req: BrowserRequest,
+    @Param('teamId') teamId: string,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'GET',
+      `/api/organizations/teams/${encodeURIComponent(teamId)}`,
+    );
+  }
+
+  @Patch('teams/:teamId')
+  updateTeam(
+    @Req() req: BrowserRequest,
+    @Param('teamId') teamId: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'PATCH',
+      `/api/organizations/teams/${encodeURIComponent(teamId)}`,
+      body,
+    );
+  }
+
+  @Patch('teams/:teamId/members')
+  setTeamMembers(
+    @Req() req: BrowserRequest,
+    @Param('teamId') teamId: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'PATCH',
+      `/api/organizations/teams/${encodeURIComponent(teamId)}/members`,
+      body,
+    );
+  }
+
+  @Patch('teams/:teamId/branches')
+  setTeamScope(
+    @Req() req: BrowserRequest,
+    @Param('teamId') teamId: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    // The body's empty array is meaningful — it makes the team
+    // organization-wide — and forwarding it unshaped is what preserves that.
+    return this.forward(
+      req,
+      'PATCH',
+      `/api/organizations/teams/${encodeURIComponent(teamId)}/branches`,
       body,
     );
   }
