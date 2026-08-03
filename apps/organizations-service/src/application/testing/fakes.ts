@@ -73,6 +73,40 @@ export class InMemoryOrganizationRepository implements OrganizationRepository {
   async findById(id: string): Promise<Organization | null> {
     return this.organizations.get(id) ?? null;
   }
+
+  /**
+   * Honours the unique index FOR REAL, both of them: a duplicate slug and a
+   * duplicate (organization, user) pair each throw, the way the database
+   * would. A fake that accepted them would let a use case with a missing
+   * uniqueness check pass its tests — the failure R2 recorded and 9.12
+   * repeated with the team predicate.
+   */
+  async createWithOwner(
+    organization: Organization,
+    owner: Membership,
+  ): Promise<{ organization: Organization; membership: Membership }> {
+    if (await this.findBySlug(organization.slug)) {
+      throw new Error(`duplicate slug: ${organization.slug}`);
+    }
+    const clash = this.memberships?.memberships.find(
+      (existing) =>
+        existing.organizationId === owner.organizationId &&
+        existing.userId === owner.userId,
+    );
+    if (clash) {
+      throw new Error('duplicate membership for (organization, user)');
+    }
+    this.organizations.set(organization.id, organization);
+    this.memberships?.memberships.push(owner);
+    return { organization, membership: owner };
+  }
+
+  /**
+   * The membership store this fake writes the owner row into. Set by a spec
+   * that exercises creation; left undefined by the many specs that only read
+   * organizations, so they do not have to know creation exists.
+   */
+  memberships?: InMemoryMembershipRepository;
 }
 
 export class InMemoryMembershipRepository implements MembershipRepository {

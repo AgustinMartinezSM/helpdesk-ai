@@ -306,3 +306,22 @@ export class SameRoleTemplateError extends OrganizationDomainError {
     super(`membership already has the role template "${template}"`);
   }
 }
+
+/**
+ * Raised when somebody who already belongs to a real organization tries to
+ * create another one.
+ *
+ * The reason is a platform limit rather than a policy: there is no
+ * organization selector and no token exchange (ADR 0014 defers both), so
+ * membership resolution picks the oldest non-bootstrap membership at every
+ * mint. A second organization would be one its own creator could never
+ * reach. The message says that, because a refusal a person cannot act on
+ * reads as a bug.
+ */
+export class AlreadyBelongsToOrganizationError extends OrganizationDomainError {
+  constructor() {
+    super(
+      'you already belong to an organization, and the product cannot yet move you between them',
+    );
+  }
+}

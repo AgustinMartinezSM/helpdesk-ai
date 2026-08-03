@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { NoOrganizationContextError } from '@helpdesk-ai/security';
 import {
+  AlreadyBelongsToOrganizationError,
   BranchNotFoundError,
   DepartmentNotFoundError,
   DuplicateBranchCodeError,
@@ -91,7 +92,11 @@ function describe(
     exception instanceof DuplicateDepartmentNameError ||
     exception instanceof DuplicateStationCodeError ||
     exception instanceof DuplicatePendingInvitationError ||
-    exception instanceof InvitationNotRedeemableError
+    exception instanceof InvitationNotRedeemableError ||
+    // Creating a second organization: the caller's own membership state
+    // refuses it, and re-reading is exactly what they should do — the
+    // product will tell them which organization they are already in.
+    exception instanceof AlreadyBelongsToOrganizationError
   ) {
     // The row exists; its current state refuses the move. 409 tells the
     // caller to re-read rather than retry the same request.

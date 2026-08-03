@@ -36,6 +36,7 @@ import {
   type DepartmentRepository,
   type OperationalStationRepository,
 } from '../application/ports/structure.repository';
+import { CreateOrganizationUseCase } from '../application/use-cases/create-organization';
 import { AcceptInvitationUseCase } from '../application/use-cases/accept-invitation';
 import { ChangeMembershipRoleUseCase } from '../application/use-cases/change-membership-role';
 import { ChangeMembershipStatusUseCase } from '../application/use-cases/change-membership-status';
@@ -87,6 +88,7 @@ import { PrismaSupportTeamRepository } from '../infrastructure/prisma/prisma-sup
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { UuidGenerator } from '../infrastructure/uuid-generator';
 import { HealthController } from './health/health.controller';
+import { OrganizationsController } from './organizations/organizations.controller';
 import { InvitationsController } from './invitations/invitations.controller';
 import { MembershipsController } from './memberships/memberships.controller';
 import { PeopleImportController } from './people-import/people-import.controller';
@@ -130,6 +132,7 @@ export class AppModule {
       ],
       controllers: [
         HealthController,
+        OrganizationsController,
         InvitationsController,
         MembershipsController,
         SupportTeamsController,
@@ -607,6 +610,30 @@ export class AppModule {
             events: OrganizationEventPublisher,
           ) => new RevokeInvitationUseCase(invitations, clock, events),
           inject: [INVITATION_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+        },
+        {
+          provide: CreateOrganizationUseCase,
+          useFactory: (
+            organizations: OrganizationRepository,
+            memberships: MembershipRepository,
+            clock: Clock,
+            ids: IdGenerator,
+            events: OrganizationEventPublisher,
+          ) =>
+            new CreateOrganizationUseCase(
+              organizations,
+              memberships,
+              clock,
+              ids,
+              events,
+            ),
+          inject: [
+            ORGANIZATION_REPOSITORY,
+            MEMBERSHIP_REPOSITORY,
+            CLOCK,
+            ID_GENERATOR,
+            EVENT_PUBLISHER,
+          ],
         },
         {
           provide: AcceptInvitationUseCase,
