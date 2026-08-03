@@ -55,6 +55,7 @@ import {
   UpdateSupportTeamUseCase,
 } from '../application/use-cases/support-teams';
 import { ListGrantableRoleTemplatesUseCase } from '../application/use-cases/grantable-role-templates';
+import { ImportPeopleUseCase } from '../application/use-cases/import-people';
 import { ListInvitationsUseCase } from '../application/use-cases/list-invitations';
 import {
   GetMembershipBranchesUseCase,
@@ -86,6 +87,7 @@ import { UuidGenerator } from '../infrastructure/uuid-generator';
 import { HealthController } from './health/health.controller';
 import { InvitationsController } from './invitations/invitations.controller';
 import { MembershipsController } from './memberships/memberships.controller';
+import { PeopleImportController } from './people-import/people-import.controller';
 import { SupportTeamsController } from './teams/teams.controller';
 import {
   OrganizationStructureController,
@@ -128,6 +130,7 @@ export class AppModule {
         InvitationsController,
         MembershipsController,
         SupportTeamsController,
+        PeopleImportController,
         OrganizationStructureController,
         OrganizationStructureItemsController,
         InternalMembershipsController,
@@ -509,6 +512,36 @@ export class AppModule {
             BRANCH_REPOSITORY,
             BRANCH_MEMBERSHIP_REPOSITORY,
             CLOCK,
+          ],
+        },
+        {
+          provide: ImportPeopleUseCase,
+          useFactory: (
+            invitations: InvitationRepository,
+            memberships: MembershipRepository,
+            branches: BranchRepository,
+            departments: DepartmentRepository,
+            clock: Clock,
+            ids: IdGenerator,
+            events: OrganizationEventPublisher,
+          ) =>
+            new ImportPeopleUseCase(
+              invitations,
+              memberships,
+              branches,
+              departments,
+              clock,
+              ids,
+              events,
+            ),
+          inject: [
+            INVITATION_REPOSITORY,
+            MEMBERSHIP_REPOSITORY,
+            BRANCH_REPOSITORY,
+            DEPARTMENT_REPOSITORY,
+            CLOCK,
+            ID_GENERATOR,
+            EVENT_PUBLISHER,
           ],
         },
         {

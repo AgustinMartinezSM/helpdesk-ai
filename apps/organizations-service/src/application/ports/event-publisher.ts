@@ -128,8 +128,31 @@ export interface InvitationEventPublisher {
   ): Promise<void>;
 }
 
+/**
+ * A bulk import finished. Counts only — the invitations it created published
+ * themselves, and copying a few hundred addresses in here would duplicate
+ * personal data into the audit store to answer a question already answered.
+ */
+export interface PeopleImportCompleted {
+  organizationId: string;
+  importedByUserId: string;
+  total: number;
+  invited: number;
+  skipped: number;
+  failed: number;
+  at: Date;
+}
+
+export interface PeopleImportEventPublisher {
+  peopleImportCompleted(
+    summary: PeopleImportCompleted,
+    correlationId?: string,
+  ): Promise<void>;
+}
+
 /** What the one wired publisher adapter provides under EVENT_PUBLISHER. */
 export type OrganizationEventPublisher = MembershipEventPublisher &
   StructureEventPublisher &
   SupportTeamEventPublisher &
-  InvitationEventPublisher;
+  InvitationEventPublisher &
+  PeopleImportEventPublisher;

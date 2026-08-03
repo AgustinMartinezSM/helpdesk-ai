@@ -17,7 +17,10 @@ import type {
 } from '../ports/support-team.repository';
 import type { Organization } from '../../domain/organization';
 import { DuplicatePendingInvitationError } from '../../domain/errors';
-import type { OrganizationEventPublisher } from '../ports/event-publisher';
+import type {
+  OrganizationEventPublisher,
+  PeopleImportCompleted,
+} from '../ports/event-publisher';
 import type {
   InvitationListFilter,
   InvitationRepository,
@@ -206,6 +209,32 @@ export class InMemoryInvitationRepository implements InvitationRepository {
       this.invitations.find((invitation) => invitation.id === invitationId) ??
       null
     );
+  }
+
+  async findStatusesByEmails(
+    organizationId: string,
+    emails: readonly string[],
+  ): Promise<Map<string, 'pending' | 'accepted'>> {
+    const wanted = new Set(emails);
+    const statuses = new Map<string, 'pending' | 'accepted'>();
+    for (const invitation of this.invitations) {
+      if (
+        invitation.organizationId !== organizationId ||
+        !wanted.has(invitation.inviteeEmail) ||
+        (invitation.status !== 'pending' && invitation.status !== 'accepted')
+      ) {
+        continue;
+      }
+      // accepted wins, as in the SQL: somebody re-invited after joining has
+      // both rows, and being a member is the stronger fact.
+      if (
+        invitation.status === 'accepted' ||
+        !statuses.has(invitation.inviteeEmail)
+      ) {
+        statuses.set(invitation.inviteeEmail, invitation.status);
+      }
+    }
+    return statuses;
   }
 
   async findByOrganizationAndId(
@@ -522,6 +551,10 @@ export class InMemoryBranchMembershipRepository implements BranchMembershipRepos
 }
 
 export class FakeOrganizationEventPublisher implements OrganizationEventPublisher {
+  readonly peopleImports: {
+    summary: PeopleImportCompleted;
+    correlationId?: string;
+  }[] = [];
   readonly created: { membership: Membership; correlationId?: string }[] = [];
   readonly statusChanged: {
     membership: Membership;
@@ -638,6 +671,13 @@ export class FakeOrganizationEventPublisher implements OrganizationEventPublishe
     correlationId?: string,
   ): Promise<void> {
     this.invitationsIssued.push({ invitation, correlationId });
+  }
+
+  async peopleImportCompleted(
+    summary: PeopleImportCompleted,
+    correlationId?: string,
+  ): Promise<void> {
+    this.peopleImports.push({ summary, correlationId });
   }
 
   async invitationAccepted(

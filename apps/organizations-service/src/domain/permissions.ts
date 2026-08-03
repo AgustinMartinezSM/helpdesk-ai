@@ -139,6 +139,10 @@ const ORGANIZATION_ADMIN_PERMISSIONS: ReadonlySet<string> = new Set([
   // widening of what every branch manager can do.
   PERMISSIONS.PEOPLE_SUSPEND,
   PERMISSIONS.PEOPLE_ASSIGN_ROLES,
+  // Sprint 9.15. Matrix ● cells for owner and admin, and blank for everyone
+  // else including branch_manager — whose ○ on people.invite is still
+  // unrepresented, and importing is the wider act of the two.
+  PERMISSIONS.PEOPLE_IMPORT,
   // The matrix gives branches.read to nearly every template and
   // branches.manage_members ○ to branch_manager. Both stay narrow here for
   // the reason people.invite's ○ cell has since 9.8: a branch-scoped grant

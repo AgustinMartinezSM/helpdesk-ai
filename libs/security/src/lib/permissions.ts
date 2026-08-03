@@ -65,6 +65,16 @@ export const PERMISSIONS = {
    */
   PEOPLE_INVITE: 'people.invite',
   /**
+   * Bringing people in from a file, in bulk (Sprint 9.15).
+   *
+   * Separate from `people.invite` because the matrix separates them, and
+   * because the acts differ in blast radius rather than in kind: one wrong
+   * choice in a spreadsheet is repeated over every row of it. It does not
+   * REPLACE the invite key at row level — an import still issues invitations,
+   * and every row is bounded by the same grant ceiling a single invitation is.
+   */
+  PEOPLE_IMPORT: 'people.import',
+  /**
    * Moving a membership along the status transition table: suspend,
    * reinstate, and remove (which is a deactivation, never a deleted row —
    * ADR 0021).

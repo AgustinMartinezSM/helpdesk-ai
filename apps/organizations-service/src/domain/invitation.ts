@@ -33,6 +33,23 @@ export interface Invitation {
   /** sha256 of the code's secret half. The code itself is never stored. */
   readonly codeHash: string;
   readonly invitedByUserId: string;
+  /**
+   * Where this person will work, carried from a CSV import (Sprint 9.15) and
+   * applied at redemption in the same transaction that inserts the membership.
+   *
+   * Null for every invitation issued from the single-invitation form, and null
+   * forever is legitimate — an organization that configured no branches has
+   * nowhere to place anybody. Sprint 9.8 predicted this shape: branch_manager's
+   * own-scope `people.invite` "needs the branch set on the invitation itself",
+   * and this is that column arriving for a different caller.
+   */
+  readonly branchId: string | null;
+  /**
+   * The requester's organizational area, never a support team (ADR 0022), and
+   * only meaningful inside `branchId` — `Department.branchId` is a required
+   * foreign key, so an import refuses a department named without one.
+   */
+  readonly departmentId: string | null;
   readonly expiresAt: Date;
   readonly acceptedByUserId: string | null;
   readonly acceptedAt: Date | null;

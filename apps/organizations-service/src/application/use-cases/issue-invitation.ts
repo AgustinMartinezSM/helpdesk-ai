@@ -116,6 +116,12 @@ export class IssueInvitationUseCase {
       status: 'pending',
       codeHash: hashInvitationSecret(secret),
       invitedByUserId: actor.id,
+      // Null from this path, always. A placement arrives on an invitation only
+      // through a CSV import (Sprint 9.15), which knows a branch and a
+      // department to put there; this form asks for neither, and inventing a
+      // default would place people somewhere nobody chose.
+      branchId: null,
+      departmentId: null,
       expiresAt: expiresAtFrom(now),
       acceptedByUserId: null,
       acceptedAt: null,

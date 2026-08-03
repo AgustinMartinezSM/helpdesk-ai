@@ -3,6 +3,7 @@ import {
   branchUpdatedV1,
   invitationAcceptedV1,
   invitationIssuedV1,
+  peopleImportCompletedV1,
   invitationRevokedV1,
   membershipCreatedV1,
   membershipRoleChangedV1,
@@ -16,7 +17,10 @@ import {
   type MessagingClient,
   type MessagingLogger,
 } from '@helpdesk-ai/messaging';
-import type { OrganizationEventPublisher } from '../../application/ports/event-publisher';
+import type {
+  OrganizationEventPublisher,
+  PeopleImportCompleted,
+} from '../../application/ports/event-publisher';
 import type { Branch, OperationalStation } from '../../domain/branch';
 import type { SupportTeam } from '../../domain/support-team';
 import type { Invitation } from '../../domain/invitation';
@@ -246,6 +250,30 @@ export class RabbitMqEventPublisher implements OrganizationEventPublisher {
         changedAt: team.updatedAt.toISOString(),
       },
       team.organizationId,
+      correlationId,
+    );
+  }
+
+  async peopleImportCompleted(
+    summary: PeopleImportCompleted,
+    correlationId?: string,
+  ): Promise<void> {
+    // Counts and the actor. Same rule as every invitation event below: no
+    // address, no code, nothing personal — audit keeps payloads opaquely and
+    // indefinitely, and a batch is exactly where a few hundred addresses would
+    // otherwise leak into that store at once.
+    await this.safePublish(
+      peopleImportCompletedV1,
+      {
+        organizationId: summary.organizationId,
+        importedByUserId: summary.importedByUserId,
+        total: summary.total,
+        invited: summary.invited,
+        skipped: summary.skipped,
+        failed: summary.failed,
+        completedAt: summary.at.toISOString(),
+      },
+      summary.organizationId,
       correlationId,
     );
   }

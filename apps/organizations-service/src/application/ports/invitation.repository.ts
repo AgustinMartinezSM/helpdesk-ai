@@ -50,6 +50,25 @@ export interface InvitationRepository {
   ): Promise<Invitation | null>;
   list(filter: InvitationListFilter): Promise<Invitation[]>;
   /**
+   * What this organization already knows about a batch of addresses, in one
+   * query (Sprint 9.15).
+   *
+   * `pending` means a live code is already out there and `accepted` means they
+   * came in through one — which is how a CSV import stays idempotent without a
+   * new mechanism: both are skips, so re-running a file converges. Addresses
+   * with no invitation are simply absent from the map.
+   *
+   * It answers from rows THIS service owns. An address that became a member
+   * without an invitation — the first administrator, made in SQL, or a legacy
+   * backfilled user — is not in the map, so an import would issue them a code;
+   * redeeming it is harmless, because the membership insert skips duplicates
+   * and leaves their existing role alone.
+   */
+  findStatusesByEmails(
+    organizationId: string,
+    emails: readonly string[],
+  ): Promise<Map<string, 'pending' | 'accepted'>>;
+  /**
    * Consume the invitation and create the membership in ONE transaction.
    *
    * This is the whole reason invitations live in this service (ADR 0019):

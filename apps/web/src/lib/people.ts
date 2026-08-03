@@ -325,3 +325,121 @@ export function roleLabel(template: string | undefined): string {
   }
   return ROLE_LABELS[template] ?? template;
 }
+
+/* Bulk import (Sprint 9.15). The file travels as text in a JSON field, not as
+ * multipart: the gateway client speaks JSON, and a payload this size does not
+ * justify a new transport through three processes. */
+
+export type ImportRowFailure =
+  | { code: 'email_missing' }
+  | { code: 'email_malformed'; value: string }
+  | { code: 'duplicate_in_file'; value: string; firstSeenOnLine: number }
+  | { code: 'role_unknown'; value: string }
+  | { code: 'role_not_grantable'; value: string }
+  | { code: 'branch_unknown'; value: string }
+  | { code: 'branch_archived'; value: string }
+  | { code: 'department_without_branch'; value: string }
+  | { code: 'department_unknown'; value: string; branch: string }
+  | { code: 'department_wrong_branch'; value: string; branch: string };
+
+export type ImportRowOutcome =
+  | { status: 'invited'; code: string }
+  | { status: 'would_invite' }
+  | { status: 'already_invited' }
+  | { status: 'already_member' }
+  | { status: 'failed'; reason: ImportRowFailure };
+
+export interface ImportRowResult {
+  /** 1-based and counting the header, so it matches the spreadsheet. */
+  line: number;
+  email: string;
+  outcome: ImportRowOutcome;
+}
+
+export interface ImportSummary {
+  dryRun: boolean;
+  total: number;
+  invited: number;
+  alreadyInvited: number;
+  alreadyMember: number;
+  failed: number;
+}
+
+export interface ImportResult {
+  summary: ImportSummary;
+  rows: ImportRowResult[];
+}
+
+export function getImportTemplate(
+  accessToken: string,
+): Promise<{ filename: string; csv: string }> {
+  return call(accessToken, 'GET', '/people/import/template');
+}
+
+/** Reports what the file WOULD do. Writes nothing. */
+export function previewImport(
+  accessToken: string,
+  csv: string,
+): Promise<ImportResult> {
+  return call(accessToken, 'POST', '/people/import/preview', { csv });
+}
+
+/**
+ * Applies the file. Per row, no batch rollback, safe to re-run — a second run
+ * of the same file reports every row as already invited or already a member.
+ */
+export function applyImport(
+  accessToken: string,
+  csv: string,
+): Promise<ImportResult> {
+  return call(accessToken, 'POST', '/people/import', { csv });
+}
+
+/** One row's outcome, in the words an administrator can act on. */
+export function importFailureMessage(reason: ImportRowFailure): string {
+  switch (reason.code) {
+    case 'email_missing':
+      return 'No email address in this row.';
+    case 'email_malformed':
+      return `"${reason.value}" does not look like an email address.`;
+    case 'duplicate_in_file':
+      return `Already in this file on line ${reason.firstSeenOnLine}.`;
+    case 'role_unknown':
+      return `There is no role called "${reason.value}".`;
+    case 'role_not_grantable':
+      return `You cannot grant the role "${reason.value}".`;
+    case 'branch_unknown':
+      return `There is no branch called "${reason.value}".`;
+    case 'branch_archived':
+      return `The branch "${reason.value}" is archived.`;
+    case 'department_without_branch':
+      return `"${reason.value}" needs a branch — a department belongs to one.`;
+    case 'department_unknown':
+      return `"${reason.branch}" has no department called "${reason.value}".`;
+    case 'department_wrong_branch':
+      return `"${reason.value}" is a department of another branch, not "${reason.branch}".`;
+  }
+}
+
+/**
+ * The failed rows, as a file the administrator fixes and re-uploads.
+ *
+ * Built in the browser from the response the server already returned: no
+ * temporary file, nothing stored, nothing to expire. The `error` column is
+ * added on the end so the file stays readable by the same parser once it is
+ * removed — and re-uploading it with the column still there is refused, which
+ * is the honest outcome of an unknown header.
+ */
+export function buildErrorReport(rows: ImportRowResult[]): string {
+  const failed = rows.filter((row) => row.outcome.status === 'failed');
+  const lines = failed.map((row) => {
+    const reason =
+      row.outcome.status === 'failed'
+        ? importFailureMessage(row.outcome.reason)
+        : '';
+    return [row.line, row.email, reason]
+      .map((field) => `"${String(field).replaceAll('"', '""')}"`)
+      .join(',');
+  });
+  return ['line,email,error', ...lines].join('\n') + '\n';
+}

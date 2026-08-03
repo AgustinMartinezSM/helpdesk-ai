@@ -78,6 +78,46 @@ export class PeopleController {
     );
   }
 
+  /*
+   * Bulk import (Sprint 9.15). Three doors, no policy — the CSV travels as
+   * text in a JSON field, so this layer forwards a body it does not read.
+   * Which rows are acceptable is organizations-service's answer, and a second
+   * opinion here would be a second thing to keep in step.
+   */
+
+  @Get('import/template')
+  importTemplate(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(
+      req,
+      'GET',
+      '/api/organizations/people-import/template',
+    );
+  }
+
+  @Post('import/preview')
+  previewImport(
+    @Req() req: BrowserRequest,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'POST',
+      '/api/organizations/people-import/preview',
+      body,
+    );
+  }
+
+  @Post('import')
+  applyImport(
+    @Req() req: BrowserRequest,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    // The response carries one code per invited row, once. It is forwarded
+    // verbatim and never logged here, the same rule the single-invitation
+    // response has followed since Sprint 9.8.
+    return this.forward(req, 'POST', '/api/organizations/people-import', body);
+  }
+
   @Get('me')
   myProfile(@Req() req: BrowserRequest): Promise<unknown> {
     return this.forward(req, 'GET', '/api/users/me');

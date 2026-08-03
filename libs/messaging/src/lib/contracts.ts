@@ -458,6 +458,32 @@ export const invitationIssuedV1 = defineEvent(
 );
 
 /**
+ * A bulk import finished (Sprint 9.15).
+ *
+ * COUNTS ONLY. Every invitation the import created already published
+ * `invitation.issued.v1`, so who was invited is attributable without this;
+ * what this adds is that they arrived as one batch, by whose hand. Putting the
+ * addresses here would copy a few hundred people's personal data into the
+ * audit store — a second retention boundary — to answer a question the
+ * per-invitation events already answer.
+ *
+ * Published only on a real run. A dry run writes nothing and is not an event:
+ * an audit trail full of previews nobody applied is a trail nobody reads.
+ */
+export const peopleImportCompletedV1 = defineEvent(
+  'people.import.completed.v1',
+  z.object({
+    organizationId: z.uuid(),
+    importedByUserId: z.uuid(),
+    total: z.number().int().nonnegative(),
+    invited: z.number().int().nonnegative(),
+    skipped: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    completedAt: z.iso.datetime(),
+  }),
+);
+
+/**
  * The invitation was redeemed. `membershipId` is present only when this
  * acceptance actually inserted a membership: someone who already belonged to
  * the organization consumes their invitation without a second row, and an

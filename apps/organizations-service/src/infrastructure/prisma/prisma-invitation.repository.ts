@@ -72,6 +72,35 @@ export class PrismaInvitationRepository implements InvitationRepository {
     return rows.map(toDomain);
   }
 
+  async findStatusesByEmails(
+    organizationId: string,
+    emails: readonly string[],
+  ): Promise<Map<string, 'pending' | 'accepted'>> {
+    if (emails.length === 0) {
+      return new Map();
+    }
+    const rows = await this.prisma.invitation.findMany({
+      where: {
+        organizationId,
+        inviteeEmail: { in: [...new Set(emails)] },
+        status: { in: ['pending', 'accepted'] },
+      },
+      select: { inviteeEmail: true, status: true },
+    });
+
+    const statuses = new Map<string, 'pending' | 'accepted'>();
+    for (const row of rows) {
+      // `accepted` wins over `pending`: somebody re-invited after joining has
+      // both, and being a member is the stronger fact — reporting them as
+      // merely invited would suggest an outstanding code that means nothing.
+      const status = row.status as 'pending' | 'accepted';
+      if (status === 'accepted' || !statuses.has(row.inviteeEmail)) {
+        statuses.set(row.inviteeEmail, status);
+      }
+    }
+    return statuses;
+  }
+
   async redeem(
     input: RedeemInvitationInput,
   ): Promise<RedeemInvitationResult | null> {
@@ -120,6 +149,43 @@ export class PrismaInvitationRepository implements InvitationRepository {
         throw new Error(
           `invitation ${input.invitationId} or its membership disappeared during redemption`,
         );
+      }
+
+      // The placement a CSV import put on the invitation (Sprint 9.15),
+      // applied HERE so it lands in the same transaction as the membership it
+      // belongs to — a second write outside would be the split this service
+      // exists to avoid (ADR 0019), and would leave a member placed nowhere
+      // with nothing to retry it.
+      //
+      // skipDuplicates, so redeeming a second invitation for somebody already
+      // in that branch is not an error. Only applied when the membership row
+      // is new: an existing member keeps the placement they have, for the same
+      // reason they keep their existing role.
+      if (inserted.count === 1) {
+        if (invitation.branchId) {
+          await tx.branchMembership.createMany({
+            data: [
+              {
+                membershipId: membership.id,
+                branchId: invitation.branchId,
+                createdAt: input.at,
+              },
+            ],
+            skipDuplicates: true,
+          });
+        }
+        if (invitation.departmentId) {
+          await tx.departmentMembership.createMany({
+            data: [
+              {
+                membershipId: membership.id,
+                departmentId: invitation.departmentId,
+                createdAt: input.at,
+              },
+            ],
+            skipDuplicates: true,
+          });
+        }
       }
 
       return {
@@ -171,6 +237,8 @@ function toRow(invitation: Invitation) {
     status: invitation.status,
     codeHash: invitation.codeHash,
     invitedByUserId: invitation.invitedByUserId,
+    branchId: invitation.branchId,
+    departmentId: invitation.departmentId,
     expiresAt: invitation.expiresAt,
     acceptedByUserId: invitation.acceptedByUserId,
     acceptedAt: invitation.acceptedAt,
@@ -201,6 +269,8 @@ function toDomain(row: InvitationRow): Invitation {
     status: row.status as InvitationStatus,
     codeHash: row.codeHash,
     invitedByUserId: row.invitedByUserId,
+    branchId: row.branchId,
+    departmentId: row.departmentId,
     expiresAt: row.expiresAt,
     acceptedByUserId: row.acceptedByUserId,
     acceptedAt: row.acceptedAt,

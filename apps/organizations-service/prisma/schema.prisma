@@ -65,6 +65,23 @@ model Invitation {
   invitedByUserId String   @map("invited_by_user_id") @db.Uuid
   expiresAt       DateTime @map("expires_at") @db.Timestamptz(3)
 
+  /// Where the invited person will work, carried from a CSV import (Sprint
+  /// 9.15) and applied at redemption inside the transaction that inserts the
+  /// membership. Real foreign keys, unlike every cross-service id in this
+  /// platform, because branches live in THIS database (ADR 0013) — which is
+  /// what lets the database refuse a department that does not belong to the
+  /// branch beside it rather than trusting the importer to have checked.
+  ///
+  /// Nullable forever: the single-invitation form leaves both null, and an
+  /// organization with no branches has nowhere to place anybody.
+  /// ON DELETE SET NULL, not CASCADE: archiving or removing a branch must not
+  /// silently destroy a pending invitation somebody is waiting to redeem.
+  branchId String? @map("branch_id") @db.Uuid
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  departmentId String?     @map("department_id") @db.Uuid
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
   acceptedByUserId String?   @map("accepted_by_user_id") @db.Uuid
   acceptedAt       DateTime? @map("accepted_at") @db.Timestamptz(3)
 
@@ -146,6 +163,7 @@ model Branch {
   stations           OperationalStation[]
   branchMemberships  BranchMembership[]
   supportTeamScopes  SupportTeamBranch[]
+  invitations        Invitation[]
 
   @@unique([organizationId, code])
   @@map("branches")
@@ -169,6 +187,7 @@ model Department {
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
 
   departmentMemberships DepartmentMembership[]
+  invitations           Invitation[]
 
   @@unique([branchId, name])
   @@map("departments")
