@@ -114,6 +114,21 @@ export class ListTicketsQueryDto {
   @IsUUID()
   branchId?: string;
 
+  /**
+   * The team half of the same idea. `ListTicketsUseCase` has honoured it
+   * since Sprint 9.12, but this DTO did not declare it and the service runs
+   * `forbidNonWhitelisted`, so the parameter answered 400 rather than
+   * filtering — a supported input with no way in.
+   */
+  @ApiPropertyOptional({
+    description:
+      'Narrow to one support team. Organization-wide for read_all; ' +
+      "intersected with the caller's team set for read_team.",
+  })
+  @IsOptional()
+  @IsUUID()
+  assignedTeamId?: string;
+
   @ApiPropertyOptional({ minimum: 0 })
   @IsOptional()
   @Type(() => Number)

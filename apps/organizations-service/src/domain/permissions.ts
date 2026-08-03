@@ -66,11 +66,29 @@ const DESK_AND_TEAM_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
  * ticket; the team manager does neither, per the matrix (`teams.manage` is ○
  * for them — their own team only — and own-scope has no representation in a
  * flat set, the same call the last two sprints made).
+ *
+ * The last two keys are what Sprint 9.13 needed to make `teams.manage` usable
+ * through the product rather than through a bearer token:
+ *
+ * `branches.read` is a matrix ● cell for this template that had no call site
+ * until the branch-coverage editor. A team's reach is a set of branches, and
+ * an editor that may not read them can only offer identifiers.
+ *
+ * `people.read` is the THIRD marked interim widening in this file, and it is
+ * a widening rather than a matrix cell: the matrix grants it ○, own scope
+ * only. A member picker cannot work from own scope by construction — it exists
+ * to add somebody who is NOT in the team yet — and own-scope still has no
+ * representation in a flat set of strings. So the flat key goes in, marked,
+ * and it shrinks when the scope-qualifier vocabulary lands. The narrower
+ * alternative was a picker that takes user ids, which is an operator interface
+ * wearing a product's clothes (the argument Sprint 9.11 made for stations).
  */
 const SERVICE_DESK_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
   ...DESK_AND_TEAM_MANAGER_PERMISSIONS,
   PERMISSIONS.TEAMS_MANAGE,
   PERMISSIONS.ROUTING_MANAGE,
+  PERMISSIONS.BRANCHES_READ,
+  PERMISSIONS.PEOPLE_READ,
 ]);
 
 /**

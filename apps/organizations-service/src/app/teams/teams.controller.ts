@@ -20,6 +20,7 @@ import type { SupportTeam } from '../../domain/support-team';
 import {
   CreateSupportTeamUseCase,
   GetSupportTeamUseCase,
+  ListMySupportTeamsUseCase,
   ListSupportTeamsUseCase,
   SetSupportTeamMembersUseCase,
   SetSupportTeamScopeUseCase,
@@ -78,6 +79,7 @@ interface SupportTeamDetailResponse extends SupportTeamResponse {
 export class SupportTeamsController {
   constructor(
     private readonly listTeams: ListSupportTeamsUseCase,
+    private readonly myTeams: ListMySupportTeamsUseCase,
     private readonly getTeam: GetSupportTeamUseCase,
     private readonly createTeam: CreateSupportTeamUseCase,
     private readonly updateTeam: UpdateSupportTeamUseCase,
@@ -106,6 +108,20 @@ export class SupportTeamsController {
         name: dto.name,
       }),
     );
+  }
+
+  // Declared BEFORE ':teamId': Nest matches in declaration order, so a
+  // literal 'mine' after the parameter route would be read as a team id.
+  // The UUID pipe would refuse it with a 400, which is a confusing answer to
+  // a correct request rather than a harmless one.
+  @Get('mine')
+  @ApiOperation({
+    summary:
+      "The caller's own active teams. No permission key — see the use case.",
+  })
+  async mine(@Req() req: AuthenticatedRequest): Promise<SupportTeamResponse[]> {
+    const teams = await this.myTeams.execute(actorOf(req));
+    return teams.map(toResponse);
   }
 
   @Get(':teamId')

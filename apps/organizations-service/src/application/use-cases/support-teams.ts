@@ -144,6 +144,61 @@ export class ListSupportTeamsUseCase {
   }
 }
 
+/**
+ * The teams the caller themselves works in.
+ *
+ * NO PERMISSION KEY, and that is the decision rather than an omission. The
+ * matrix has no read key for teams, `teams.manage` is for administering them,
+ * and the people this exists for — a team manager, an agent, an auditor —
+ * hold none of it. What they do hold is `tm`, a list of the very team ids this
+ * returns: the token already carries the answer, and without this route the
+ * only thing a screen can show for the team that owns a ticket is a UUID.
+ *
+ * Read through the SAME repository method the `tm` claim is minted from, so
+ * the claim and the names can never disagree about which teams are archived.
+ * Duplicating the filter here is how they would.
+ */
+export class ListMySupportTeamsUseCase {
+  constructor(
+    private readonly teams: SupportTeamRepository,
+    private readonly memberships: MembershipRepository,
+  ) {}
+
+  async execute(actor: Actor): Promise<SupportTeam[]> {
+    const organizationId = requireOrganization(actor);
+
+    const membership = await this.memberships.findByOrganizationAndUser(
+      organizationId,
+      actor.id,
+    );
+    // Nobody to be in a team as. An empty list, not a refusal: belonging to no
+    // team is ordinary, and so is a token minted moments before the membership
+    // it describes (ADR 0014).
+    if (!membership) {
+      return [];
+    }
+
+    const teamIds = await this.teams.listActiveTeamIdsForMembership(
+      membership.id,
+    );
+    if (teamIds.length === 0) {
+      return [];
+    }
+
+    // Re-read through the organization-scoped finder rather than trusting the
+    // ids: every lookup on this port says whose team it is asking for, and
+    // this one keeps that property instead of becoming the exception.
+    const teams = await Promise.all(
+      teamIds.map((teamId) =>
+        this.teams.findByOrganizationAndId(organizationId, teamId),
+      ),
+    );
+    return teams
+      .filter((team): team is SupportTeam => team !== null)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
+
 export interface SupportTeamDetail {
   team: SupportTeam;
   /** User ids, not membership ids: the public surface speaks userId. */

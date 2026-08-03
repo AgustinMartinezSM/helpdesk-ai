@@ -48,6 +48,7 @@ import { ListBranchStructureUseCase } from '../application/use-cases/list-branch
 import {
   CreateSupportTeamUseCase,
   GetSupportTeamUseCase,
+  ListMySupportTeamsUseCase,
   ListSupportTeamsUseCase,
   SetSupportTeamMembersUseCase,
   SetSupportTeamScopeUseCase,
@@ -388,6 +389,14 @@ export class AppModule {
           useFactory: (teams: SupportTeamRepository) =>
             new ListSupportTeamsUseCase(teams),
           inject: [SUPPORT_TEAM_REPOSITORY],
+        },
+        {
+          provide: ListMySupportTeamsUseCase,
+          useFactory: (
+            teams: SupportTeamRepository,
+            memberships: MembershipRepository,
+          ) => new ListMySupportTeamsUseCase(teams, memberships),
+          inject: [SUPPORT_TEAM_REPOSITORY, MEMBERSHIP_REPOSITORY],
         },
         {
           provide: GetSupportTeamUseCase,

@@ -12,6 +12,7 @@ import {
   InvalidBranchError,
   InvalidStationError,
   InvalidStatusTransitionError,
+  InvalidTeamContextError,
   MembershipVerificationUnavailableError,
   TicketDomainError,
   TicketNotFoundError,
@@ -85,12 +86,21 @@ function describe(exception: TicketDomainError | NoOrganizationContextError): {
   }
   if (
     exception instanceof InvalidBranchError ||
-    exception instanceof InvalidStationError
+    exception instanceof InvalidStationError ||
+    exception instanceof InvalidTeamContextError
   ) {
-    // The assignee reasoning, applied to places: a well-formed create
-    // naming an unusable branch or station. Each error's single generic
-    // message covers nonexistent, archived and foreign alike — confirming
+    // The assignee reasoning, applied to places and to the group that
+    // resolves the work: a well-formed request naming an unusable branch,
+    // station or support team. Each error's single generic message covers
+    // nonexistent, archived, out-of-scope and foreign alike — confirming
     // existence is the leak.
+    //
+    // The team arm was missing until Sprint 9.13. Sprint 9.12 built the
+    // refusal and tested it at the use case, where it never crossed this
+    // filter, so routing to an archived team answered 500 over HTTP while
+    // the sprint documented a 422. The fallback below is what made that
+    // visible rather than turning it into a plausible 404 — which is the
+    // argument for keeping the fallback at 500.
     return {
       status: HttpStatus.UNPROCESSABLE_ENTITY,
       error: 'Unprocessable Entity',

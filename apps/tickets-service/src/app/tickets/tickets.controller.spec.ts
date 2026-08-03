@@ -9,6 +9,7 @@ import { MEMBERSHIP_VERIFIER } from '../../application/ports/membership-verifier
 import {
   BRANCH_REF_REPOSITORY,
   STATION_REF_REPOSITORY,
+  TEAM_REF_REPOSITORY,
 } from '../../application/ports/structure-refs.repository';
 import { TICKET_REPOSITORY } from '../../application/ports/ticket.repository';
 import {
@@ -16,6 +17,7 @@ import {
   FakeMembershipVerifier,
   InMemoryBranchRefRepository,
   InMemoryStationRefRepository,
+  InMemoryTeamRefRepository,
   InMemoryTicketRepository,
 } from '../../application/testing/fakes';
 import { ticketsServiceEnvSchema } from '../../config/env';
@@ -30,6 +32,12 @@ import {
 } from '../../testing/fixtures';
 import { AppModule } from '../app.module';
 
+/** An organization-wide support team: no branch rows, so it reaches every
+ * ticket (ADR 0022). */
+const CENTRAL_TEAM = '00000000-0000-4000-8000-0000000000c1';
+/** Archived — one of the four reasons a team is unusable, all one 422. */
+const ARCHIVED_TEAM = '00000000-0000-4000-8000-0000000000c9';
+
 const TEST_ENV = {
   NODE_ENV: 'test',
   LOG_LEVEL: 'fatal',
@@ -43,10 +51,12 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
   let userToken: string;
   let otherToken: string;
   let agentToken: string;
+  let deskManagerToken: string;
   // Shared with the tests so they can add rows and simulate an outage.
   const memberships = new FakeMembershipVerifier();
   const branchRefs = new InMemoryBranchRefRepository();
   const stationRefs = new InMemoryStationRefRepository();
+  const teamRefs = new InMemoryTeamRefRepository();
 
   beforeAll(async () => {
     const env = validateEnv(ticketsServiceEnvSchema, TEST_ENV);
@@ -60,6 +70,25 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
       aBranchRef({ id: OTHER_BRANCH, organizationId: OTHER_ORGANIZATION }),
     );
     stationRefs.seed(aStationRef());
+    // One organization-wide team (no branch rows) and one archived: enough to
+    // prove the routing route and the refusal it shares with every other
+    // unusable team.
+    teamRefs.seed({
+      id: CENTRAL_TEAM,
+      organizationId: TEST_ORGANIZATION,
+      name: 'IT support',
+      status: 'active',
+      branchIds: [],
+      updatedAt: new Date(),
+    });
+    teamRefs.seed({
+      id: ARCHIVED_TEAM,
+      organizationId: TEST_ORGANIZATION,
+      name: 'Old desk',
+      status: 'archived',
+      branchIds: [],
+      updatedAt: new Date(),
+    });
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
@@ -80,6 +109,8 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
       .useValue(branchRefs)
       .overrideProvider(STATION_REF_REPOSITORY)
       .useValue(stationRefs)
+      .overrideProvider(TEAM_REF_REPOSITORY)
+      .useValue(teamRefs)
       .compile();
 
     app = moduleRef.createNestApplication({ logger: false });
@@ -129,6 +160,22 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
         perms: agentPerms,
       },
       { subject: '33333333-3333-4333-8333-333333333333' },
+    );
+    // The service desk manager: routes work, and reads only what their teams
+    // own plus their own requests. The `tm` claim is what carries the second
+    // half — an absent claim would deny it (Sprint 9.12, D7).
+    deskManagerToken = await jwt.signAsync(
+      {
+        email: 'desk@x.com',
+        org: TEST_ORGANIZATION,
+        perms: [
+          PERMISSIONS.ROUTING_MANAGE,
+          PERMISSIONS.TICKETS_READ_TEAM,
+          PERMISSIONS.TICKETS_READ_OWN,
+        ],
+        tm: [CENTRAL_TEAM],
+      },
+      { subject: '44444444-4444-4444-8444-444444444444' },
     );
   });
 
@@ -379,5 +426,105 @@ describe('Tickets HTTP API (fakes, real JWT verification)', () => {
         branchId: OTHER_BRANCH,
       })
       .expect(422);
+  });
+
+  it('routes a ticket to a support team and takes it back', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/tickets')
+      .set(asUser(userToken))
+      .send({ title: 'Payroll export fails', description: 'Every month end' })
+      .expect(201);
+    const id = created.body.id;
+
+    const routed = await request(app.getHttpServer())
+      .patch(`/tickets/${id}/team`)
+      .set(asUser(deskManagerToken))
+      .send({ teamId: CENTRAL_TEAM })
+      .expect(200);
+    expect(routed.body.assignedTeamId).toBe(CENTRAL_TEAM);
+
+    // The move is in the history like every other change, under the existing
+    // 'assigned' action — a fifth verb would be a contract change the audit
+    // consumers never agreed to.
+    const details = await request(app.getHttpServer())
+      .get(`/tickets/${id}`)
+      .set(asUser(deskManagerToken))
+      .expect(200);
+    expect(details.body.history.at(-1)).toEqual(
+      expect.objectContaining({ action: 'assigned' }),
+    );
+
+    const cleared = await request(app.getHttpServer())
+      .patch(`/tickets/${id}/team`)
+      .set(asUser(deskManagerToken))
+      .send({ teamId: null })
+      .expect(200);
+    expect(cleared.body.assignedTeamId).toBeNull();
+  });
+
+  it('refuses routing without routing.manage, and an unusable team with one 422', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/tickets')
+      .set(asUser(userToken))
+      .send({ title: 'Printer offline', description: 'Third floor' })
+      .expect(201);
+    const id = created.body.id;
+
+    // The agent token holds assign_agent and read_all and still cannot route:
+    // routing decides who SEES the ticket, so it is its own key.
+    await request(app.getHttpServer())
+      .patch(`/tickets/${id}/team`)
+      .set(asUser(agentToken))
+      .send({ teamId: CENTRAL_TEAM })
+      .expect(403);
+
+    // Archived, foreign and nonexistent are one answer on purpose — telling
+    // them apart would make this route an oracle for another tenant's ids.
+    for (const teamId of [
+      ARCHIVED_TEAM,
+      '00000000-0000-4000-8000-0000000000cf',
+    ]) {
+      await request(app.getHttpServer())
+        .patch(`/tickets/${id}/team`)
+        .set(asUser(deskManagerToken))
+        .send({ teamId })
+        .expect(422);
+    }
+  });
+
+  it('accepts ?assignedTeamId= instead of answering 400 (9.13 D5)', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/tickets')
+      .set(asUser(userToken))
+      .send({ title: 'Scanner jams', description: 'Aisle 4' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .patch(`/tickets/${created.body.id}/team`)
+      .set(asUser(deskManagerToken))
+      .send({ teamId: CENTRAL_TEAM })
+      .expect(200);
+
+    // Sprint 9.12 taught the use case this filter and the DTO never declared
+    // it, so `forbidNonWhitelisted` answered 400 to a supported input.
+    const mine = await request(app.getHttpServer())
+      .get(`/tickets?assignedTeamId=${CENTRAL_TEAM}`)
+      .set(asUser(deskManagerToken))
+      .expect(200);
+    expect(mine.body.items.map((t: { id: string }) => t.id)).toContain(
+      created.body.id,
+    );
+
+    // A team outside the caller's set is the empty page, never an error: a
+    // 4xx would confirm the team exists.
+    const foreign = await request(app.getHttpServer())
+      .get('/tickets?assignedTeamId=00000000-0000-4000-8000-0000000000cf')
+      .set(asUser(deskManagerToken))
+      .expect(200);
+    expect(foreign.body).toEqual({ items: [], total: 0 });
+
+    await request(app.getHttpServer())
+      .get('/tickets?assignedTeamId=not-a-uuid')
+      .set(asUser(deskManagerToken))
+      .expect(400);
   });
 });
