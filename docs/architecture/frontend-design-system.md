@@ -8,12 +8,17 @@ library, no animation library. Everything below is CSS custom properties
 plus one CSS Module per component or page. This document is the
 reference for extending it.
 
-**This describes the system as built.** Sprint 10.0 decided a different
-direction for it — warm neutrals, an achromatic action colour, the brand
-yellow promoted to signature, and the mark rebuilt — in
-[brand-strategy.md](brand-strategy.md), with the measurements it rests on.
-Sprint 10.1 implements that; until it does, everything below is still what
-the code does, and the two documents disagree on purpose.
+**Sprint 10.1 implemented the direction Sprint 10.0 decided**, so the colour
+half of this document is out of date and now lives in
+[design-system.md](design-system.md): the token families, the measurements,
+the section bands, the mark, and what changed about Helpi. What stays here is
+still accurate and still owns its subject — the component inventory, the
+motion catalogue, Helpi's behavioural contract, the content voice and the
+rules for extending.
+
+The one thing to unlearn while reading below: **indigo is gone**, and the
+"Accent and feedback" section describes a token that is now an alias. Ink
+acts, yellow marks, chroma states.
 
 ## Principles
 
