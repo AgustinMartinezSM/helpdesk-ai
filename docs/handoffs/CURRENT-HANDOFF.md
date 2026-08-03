@@ -1,7 +1,7 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** 9.13 — support teams in the interface, implemented; 9.4-9.12 complete
+**Sprint:** 9.14 — role and scope vocabulary, implemented; 9.4-9.13 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -358,12 +358,9 @@ the ticket list gained a filter over the caller's own teams.
 **`service_desk_manager` gained two keys, and only one is a matrix cell.**
 `branches.read` is theirs by the matrix and finally had a call site — a team's
 reach is a set of branches and the coverage editor cannot name what it may not
-read. **`people.read` is a WIDENING** of an own-scope ○ cell, the third marked
-one in the map after the agent's: a member picker exists to add somebody who is
-NOT in the team yet, so own scope cannot serve it by construction. Reading is
-as far as it goes and tests pin that — no invite, no suspend, no role
-assignment, no branch writes. Both shrink when the scope-qualifier vocabulary
-lands.
+read. The other was a flat `people.read` widening; **Sprint 9.14 retired it
+after one sprint** and gave them `people.read_assignable` instead. Read 9.14's
+entry below rather than acting on this paragraph.
 
 **`GET /organizations/teams/mine` has NO permission key**, deliberately. The
 people who need to turn `assignedTeamId` into a name — team_manager, agent,
@@ -393,6 +390,60 @@ never gate `/teams/mine` on `teams.manage` — the people it exists for do not
 hold it; never let the coverage editor treat an empty selection as "no change"
 — the empty array is the instruction that makes a team organization-wide, and a
 browser pass confirmed it round-trips to zero rows.
+
+## Sprint 9.14 in one breath
+
+**The vocabulary question that blocked seeded role-template rows since 9.4 is
+settled, and the rows are still not built.** That is deliberate: what was
+blocking was a decision, and what is left is mechanism (a migration, a
+repository, an evaluator read). Nobody is waiting on an answer any more.
+
+**The stable role keys are the snake_case values already stored**, and they now
+live in `libs/security` (`role-templates.ts`) beside the permission keys, with
+the same rule: keys are shared, the template→permission MAP stays in
+organizations-service (ADR 0013). Four spellings existed before — lowercase
+prose in ADR 0015, `SCREAMING_SNAKE` in the target-state table, `ORG_ADMIN` in
+the matrix columns, snake_case in code. Nothing was renamed: those strings are
+in `memberships.role_template` and `invitations.role_template`, so a rename is
+a data migration bought for a cosmetic.
+
+**Every template declares a scope, and grantability derives from it.** ADR
+0015 says no organization may produce a platform super admin; that held BY
+ABSENCE until now, because the grantable list was "everything except `owner`"
+and nothing platform-scoped existed. A test builds a platform-scoped template
+the way a future sprint would and watches the derivation refuse it. **Do not
+re-derive the grantable list anywhere** — invitation, role change and the CSV
+import that does not exist yet all read `ORGANIZATION_GRANTABLE_TEMPLATES`.
+
+**`people.read_assignable` retired 9.13's widening after one sprint.** A member
+picker cannot work from own scope, because it exists to add somebody who is NOT
+in the team yet — so the KEY narrowed instead of the scope. It answers active
+members as `{userId, name, email}` and nothing else, and the desk manager lost
+the directory, `GET /users/:userId`, the People screen and everybody's role,
+status and phone. Verified over HTTP: 200 on `/people/assignable`, 403 on
+`/people`, same token.
+
+**That narrowing nearly made `service_desk_manager` ungrantable by anybody.**
+The ceiling compares permission sets, so a template holding a key its granter
+does not literally hold is the exact failure `tickets.read_branch` caused in
+9.10. `people.read` now implies `people.read_assignable` in
+`IMPLIED_PERMISSIONS` — the second time that table's warning comment has been
+needed. **Add a line whenever a key is narrowed or split.**
+
+**`GET /organizations/memberships/role-templates` answers per actor** from the
+stored membership, and the browser's hardcoded seven-template array is gone. An
+agent used to be offered every role and refused all of them on submit.
+
+**The ticket list's team control is a "Show" group, not a filter.** The server's
+team scope is `assignedTeamId IN (…) OR requesterId = me` — a visibility union,
+deliberate since 9.5 — so choosing a team keeps your own requests. 9.13's
+"Filter by support team" promised a narrowing it does not perform.
+
+Three things NOT to do: never rename a role-template key without a data
+migration (they are stored values, not labels); never let `○` back into the
+evaluator — it is matrix notation, and every cell is now classified (a) a
+distinct key, (b) domain logic, or (c) deferred; never let a screen build its
+own list of grantable roles again.
 
 ## Things that will bite you if you do not know them
 
@@ -443,6 +494,13 @@ browser pass confirmed it round-trips to zero rows.
   walk and were never seen in a browser. The `.claude/launch.json` entries that
   define them are **git-ignored**, so they are on that machine only and have to
   be written again elsewhere; only `web` was ever in a fresh checkout.
+- **A stuck login form is usually a stuck `submitting` flag.** `handleSubmit`
+  returns early while `submitting` is true, and a first attempt that raced a
+  starting auth-service leaves it stuck with no error rendered — the button
+  looks dead and nothing reaches the network. Reload the page. Also on this
+  run, the preview tool's `form_input` set input values without React
+  registering them, so credentials had to be typed with real keystrokes; when a
+  form submits nothing, check the React state before suspecting the handler.
 - **`next dev` 404s on every route if `.next` holds a production build.**
   Running the full gate (which ends in `next build`) and then starting the dev
   server gives a Turbopack server that answers 404 for `/`, `/register`,
@@ -460,11 +518,10 @@ browser pass confirmed it round-trips to zero rows.
 
 ## Work incomplete / deliberately deferred
 
-- **Seeded role-template rows + the template-vocabulary/scope-qualifier
-  decision** — the code map is the deliberate interim. It now bounds three
-  things: the seeded rows, every own-scope (○) cell three sprints have left
-  unrepresented, and the flat `people.read` 9.13 gave `service_desk_manager`
-  because a member picker cannot work from own scope.
+- **Seeded role-template rows** — the code map is still the interim, but the
+  reason changed in 9.14. The vocabulary decision that blocked them is made;
+  what remains is a migration, a repository and an evaluator read. Whoever
+  picks it up is doing engineering, not adjudication.
 - **R9 beyond organizations-service**: 9.8 built a scoped two-organization
   fixture for that service only (its invitations table cascades, so teardown
   order became load-bearing). The other eight suites still teardown with
@@ -526,8 +583,8 @@ tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
 9.10 — the last of those is run `30780847286` on `5d1534b`, green on its first
 attempt, and 9.11 is run `30783298165` on `5cc0036`, green on its first and the
 second of two for that sprint, 9.12 is run `30785560179` on `f6a2600`, green on
-its first attempt, and 9.13 is run `30788005358` on `ec065aa` — the tip of
-`main`, green on its first attempt.
+its first attempt, 9.13 is run `30788005358` on `ec065aa`, green on its first
+attempt, and 9.14's run is recorded in `SPRINT-009.14.md`.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
@@ -559,17 +616,18 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-The next sprint is a product choice, and 9.13 closed the one that was top of
-this list:
+The next sprint is a product choice, and 9.14 cleared the blocker that stood in
+front of the first item:
 
-1. **Bulk/CSV import.** Now the strongest candidate. The people it loads have a
-   screen to appear on, an administrator who can fix what the import got wrong,
-   branches to be assigned to, and — since 9.13 — support teams to be put in.
-2. **The template vocabulary.** Still blocking seeded role-template rows, and
-   now bounding three things rather than two: the own-scope (○) cells that
-   three sprints have left unrepresented, and the `people.read` widening 9.13
-   had to make for the desk manager's member picker. It is the debt that keeps
-   growing rather than the one that keeps waiting.
+1. **Bulk/CSV import.** Now unblocked as well as strongest. The people it loads
+   have a screen to appear on, an administrator who can fix what the import got
+   wrong, branches to be assigned to, support teams to be put in — and, since
+   9.14, one derivation that answers which role templates it may write.
+   `ORGANIZATION_GRANTABLE_TEMPLATES` plus the per-actor ceiling is the whole
+   answer; do not build a second one.
+2. **Seeded role-template rows.** Mechanism, not a decision, for the first time
+   since 9.4. Turns the code map into rows and is what custom roles would later
+   reuse.
 3. **Email delivery.** Unchanged and still the project owner's decision: ADR
    0008 requires explicit approval and a superseding ADR naming which provider
    and why. Until then an invitation reaches its recipient because an admin
@@ -607,10 +665,12 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > a browser that decides what to render from permissions rather than role names
 > — ADR 0020), 9.10 (member administration — ADR 0021), 9.11 (organization
 > setup, after which INTERNAL_SERVICE_TOKEN guards no mutation anywhere),
-> 9.12 (support teams and ticket routing — ADR 0022) and 9.13 (that surface in
+> 9.12 (support teams and ticket routing — ADR 0022), 9.13 (that surface in
 > the product: the Support teams section, manual routing on a ticket, and the
-> team filter on the ticket list). Read docs/handoffs/CURRENT-HANDOFF.md,
-> docs/progress/SPRINT-009.13.md, SPRINT-009.12.md and ADR 0022 before touching
+> team scope control on the ticket list) and 9.14 (the role-template and
+> permission-scope vocabulary, which closed the question that had blocked
+> ADR 0015's seeded rows since 9.4). Read docs/handoffs/CURRENT-HANDOFF.md,
+> docs/progress/SPRINT-009.14.md, SPRINT-009.13.md and ADR 0022 before touching
 > anything, and verify the repo state with git first.
 >
 > **The one thing not to get wrong**: a support team and a department are
@@ -629,12 +689,20 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > filter had no arm for it. Both had shipped in the sprint before. When a
 > sprint adds a domain rule, add the controller-level test in the same commit.
 >
+> **What 9.14 makes true, and must stay true**: role-template keys are STORED
+> values, so renaming one is a data migration and not a rename. Grantability is
+> derived from a template's declared scope in `@helpdesk-ai/security`, which is
+> what makes ADR 0015's no-platform-privilege invariant structural rather than
+> a property of a list that happens to be short — every grant path reads that
+> one derivation, including the CSV import when it lands. And `○` in the matrix
+> is notation for readers, never something the evaluator represents.
+>
 > Pick the next sprint — the handoff's "Exact next action" lays out the
-> candidates and what each unblocks. Bulk/CSV import is the strongest now that
+> candidates. Bulk/CSV import is the strongest and is now unblocked as well:
 > the people it loads have a screen, an administrator, branches and teams to
-> land in; the template vocabulary is the debt that keeps growing rather than
-> waiting. Open whichever you choose with its own Definition of Ready, the
-> pattern the last nine sprints set.
+> land in, and one derivation that answers which roles it may write. Open
+> whichever you choose with its own Definition of Ready, the pattern the last
+> ten sprints set.
 >
 > Standing rules: never a permanent shared password or unattributable request
 > path (ADR 0016); profile fields never become credentials (ADR 0017); an

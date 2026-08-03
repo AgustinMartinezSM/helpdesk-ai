@@ -322,6 +322,36 @@ Full workspace gate green: format, lint, typecheck, test and build across all
 new), web-bff 44 (3 new), apps/web 190 (9 new). All nine integration suites
 green against real PostgreSQL and RabbitMQ.
 
+**The narrowing was verified in a browser and then across real processes.** In
+the browser, signed in as the `service_desk_manager` whose template this sprint
+changed: the **People entry is gone from the navigation** — the clearest thing
+the narrowing does, since that link is gated on `people.read` — the Organization
+screen still renders branches and support teams, and the team panel requests
+`/people/assignable` rather than `/people`.
+
+The responses were then confirmed through the full chain (browser client →
+web-bff → api-gateway → users-service / organizations-service), with tokens
+carrying exactly the permission sets the map now resolves:
+
+| Request                      | Token                  | Result                                   |
+| ---------------------------- | ---------------------- | ---------------------------------------- |
+| `GET /people/assignable`     | `service_desk_manager` | **200**, rows of `{userId, name, email}` |
+| `GET /people`                | `service_desk_manager` | **403** — required case 2                |
+| `GET /people/assignable`     | `team_manager`         | **403** — required case 3                |
+| `GET /people`                | `team_manager`         | **403** — required case 3                |
+| `GET /people/role-templates` | `organization_admin`   | seven templates, no `owner` — cases 1, 4 |
+| `GET /people/role-templates` | `service_desk_manager` | `[]` — grants no roles                   |
+
+Two ceilings on the browser pass, both recorded rather than implied. The
+five-preview limit bit again — auth-service and users-service cannot both run
+alongside web, web-bff, api-gateway and organizations-service — so the team
+picker's populated state was not seen rendered; its response was verified over
+HTTP instead, and the spec suite covers the rendering. And `form_input` set
+input values without React registering them on this run, so the login form had
+to be driven with real keystrokes; a first submit that raced a starting
+auth-service left the page's `submitting` flag stuck, which looks exactly like
+a dead button and is worth knowing before diagnosing one.
+
 **A browser smoke test over the Sprint 9.13 routing surface ran BEFORE this
 sprint opened** and passed all seven required steps, over six real processes as
 a `service_desk_manager`: a ticket opened, routed to a support team
