@@ -282,8 +282,9 @@ transfer, no import. Proceeding under the standing autonomous authorization.
 
 ## Outcome record (2026-08-03)
 
-Three commits: the opening (`9c75a6c` — this DoR and ADR 0021), the services
-(`4694fab`), and the BFF and screen (`4277d8b`).
+Three commits of work: the opening (`9c75a6c` — this DoR and ADR 0021), the
+services (`4694fab`), and the BFF and screen (`4277d8b`), plus the
+documentation pass and one correction to it.
 
 **Every membership change in the product is now attributable to a person, and
 the path that was not is gone.** The status PATCH, the role PATCH and the
@@ -348,6 +349,11 @@ administration controls asserted by swapping the session fixture's permissions.
 The full gate — format, lint, typecheck, test, build — ran green across all 15
 projects, and all nine integration suites passed against real PostgreSQL and
 RabbitMQ.
+
+**Remote CI: GitHub Actions run `30780847286` on `5d1534b` was green on its
+first attempt**, every step included — format, lint, typecheck, test, build,
+and the integration tests against the real PostgreSQL and RabbitMQ service
+containers. 3m55s.
 
 **An end-to-end walk through every process** (browser client → web-bff →
 api-gateway → auth-service / users-service / organizations-service, six

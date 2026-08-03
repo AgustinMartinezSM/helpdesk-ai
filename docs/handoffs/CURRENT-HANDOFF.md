@@ -372,7 +372,8 @@ Every sprint closed with the full gate (format, lint, typecheck, test,
 build) plus all nine integration suites against real PostgreSQL and
 RabbitMQ, and a green remote CI run recorded in its sprint document: the
 tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
-9.10. The backfill sequence ran once, verified clean, and is recorded in
+9.10 — the last of those is run `30780847286` on `5d1534b`, green on its first
+attempt. The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
 9.10 also ran a manual end-to-end walk across six real processes (browser
