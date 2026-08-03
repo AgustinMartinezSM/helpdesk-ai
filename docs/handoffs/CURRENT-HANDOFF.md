@@ -416,8 +416,7 @@ build) plus all nine integration suites against real PostgreSQL and
 RabbitMQ, and a green remote CI run recorded in its sprint document: the
 tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
 9.10 — the last of those is run `30780847286` on `5d1534b`, green on its first
-attempt. **9.11 has the full local gate and all nine integration suites green
-but NO remote CI run recorded yet**; that is the first thing to do with it.
+attempt, and 9.11 is run `30782752211` on `4a80a15`, also green on its first.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
@@ -446,10 +445,7 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-**First: push 9.11 and record its remote CI run** in
-`docs/progress/SPRINT-009.11.md`, the way every sprint since 9.8 closes.
-
-Then the next sprint is a product choice, and 9.11 changed the list again:
+The next sprint is a product choice, and 9.11 changed the list again:
 
 1. **Routing (9.12), the number this sprint borrowed from and gave back.**
    Departments now have a screen and rows and still nothing keys on them;
@@ -499,11 +495,7 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.11.md and ADR 0021
 > before touching anything, and verify the repo state with git first.
 >
-> 9.11 is green locally across the full gate and all nine integration suites
-> but has NO remote CI run recorded — push it and record the result in its
-> sprint document first, the way every sprint since 9.8 closes.
->
-> Then pick the next sprint — the handoff's "Exact next action" lays out five
+> Pick the next sprint — the handoff's "Exact next action" lays out five
 > candidates and what each unblocks. Routing is the natural one: departments
 > now have a screen, rows and no behaviour, unrouted intake still falls to the
 > central view, and 9.11 handed the number 9.12 back to it. Open whichever you
