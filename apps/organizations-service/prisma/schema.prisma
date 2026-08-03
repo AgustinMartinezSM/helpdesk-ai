@@ -149,7 +149,7 @@ model Branch {
 }
 
 // Departments exist per ADR 0016's shape but nothing keys on them yet —
-// routing will (Sprint 9.11). Rows and memberships only, no behavior.
+// routing will (Sprint 9.12). Rows and memberships only, no behavior.
 model Department {
   id String @id @db.Uuid
 

@@ -18,7 +18,7 @@ export interface CreateDepartmentInput {
 /**
  * Adds a department under a branch. Rows and memberships exist per
  * ADR 0016's shape, but nothing keys on them yet — routing will
- * (Sprint 9.11).
+ * (Sprint 9.12).
  *
  * NO event, deliberately: no consumer exists, and a contract nobody reads
  * is a promise nobody keeps. When routing needs departments, that sprint

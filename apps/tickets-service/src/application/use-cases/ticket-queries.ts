@@ -106,7 +106,7 @@ export class ListTicketsUseCase {
       // survives the branch narrowing: a manager's own requests are theirs
       // to see wherever they were filed. Branchless tickets fail the
       // IN-set leg by construction — unrouted intake belongs to the
-      // central view until routing (9.11) exists.
+      // central view until routing (9.12) exists.
       return this.tickets.list({
         organizationId,
         branchScope: {

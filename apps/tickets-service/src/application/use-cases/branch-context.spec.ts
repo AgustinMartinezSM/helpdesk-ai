@@ -261,7 +261,7 @@ describe('canView — the branch visibility matrix', () => {
 
   it('keeps a branchless ticket invisible to the branch manager', () => {
     // Deliberate: unrouted intake belongs to the central view until routing
-    // (9.11) exists. A branch manager does not see unrouted tickets.
+    // (9.12) exists. A branch manager does not see unrouted tickets.
     expect(canView(BRANCH_MANAGER, unrouted)).toBe(false);
   });
 

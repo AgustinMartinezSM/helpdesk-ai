@@ -123,7 +123,7 @@ export function requireOrganizationOf(actor: Actor, ticket: Ticket): string {
  * answer, never a 403 — confirming the ticket exists is the leak.
  *
  * A branchless ticket is deliberately invisible to the branch read: until
- * routing (9.11) exists, unrouted intake belongs to the central view — a
+ * routing (9.12) exists, unrouted intake belongs to the central view — a
  * branch manager does not see unrouted tickets, read_all holders (and the
  * requester) do. And an absent branch set denies rather than grants (D2):
  * an old token loses visibility, never gains it.
