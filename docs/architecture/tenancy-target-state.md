@@ -168,13 +168,16 @@ is a row edit plus a test, not a redesign.
 | `audit.read`                       |   ●   |     ●     |            |          |          |       |           |    ●    |
 | `analytics.read`                   |   ●   |     ●     |     ○      |    ○     |    ○     |       |           |    ●    |
 
-**One cell's meaning lives outside this table.** `tickets.read_team` reads
-"team" and means "department": Sprint 9.12 decided that the department is the
-routing target this model has, and that `teams.manage` resolves to the
-department management `branches.update` already covers. The argument, and the
-limitation it accepts (routing is branch-local, because a department belongs
-to a branch), are in **ADR 0022**. `queues.manage` stays unimplemented on
-purpose — a queue would have to say what it is that a department is not.
+**`tickets.read_team` and `teams.manage` key on SUPPORT TEAMS, which are not
+departments.** Sprint 9.12 introduced them as a separate concept
+(**ADR 0022**): a department is the requester's organizational area and stays
+branch-scoped, while a support team is the operational group that resolves a
+ticket and is organization-owned, with an explicit team→branch scope
+relationship. A team with no scope rows serves the whole organization; a team
+with rows serves those branches. `tickets.read_team` derives from active
+support-team membership and from nothing else — belonging to a department
+grants no support visibility. `queues.manage` stays unimplemented on purpose:
+a queue would have to say what it is that a team is not.
 
 Four things in that table are deliberate and worth challenging:
 
