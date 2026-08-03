@@ -352,6 +352,11 @@ to be driven with real keystrokes; a first submit that raced a starting
 auth-service left the page's `submitting` flag stuck, which looks exactly like
 a dead button and is worth knowing before diagnosing one.
 
+**Remote CI: GitHub Actions run `30791213751` on `3aa7070` was green on its
+first attempt**, every step included — format, lint, typecheck, test, build,
+and the integration tests against the real PostgreSQL and RabbitMQ service
+containers. 3m43s, on the tip of `main`.
+
 **A browser smoke test over the Sprint 9.13 routing surface ran BEFORE this
 sprint opened** and passed all seven required steps, over six real processes as
 a `service_desk_manager`: a ticket opened, routed to a support team

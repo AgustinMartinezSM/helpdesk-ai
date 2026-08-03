@@ -584,7 +584,8 @@ tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
 attempt, and 9.11 is run `30783298165` on `5cc0036`, green on its first and the
 second of two for that sprint, 9.12 is run `30785560179` on `f6a2600`, green on
 its first attempt, 9.13 is run `30788005358` on `ec065aa`, green on its first
-attempt, and 9.14's run is recorded in `SPRINT-009.14.md`.
+attempt, and 9.14 is run `30791213751` on `3aa7070` — the tip of `main`, green
+on its first attempt.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
