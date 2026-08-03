@@ -267,6 +267,11 @@ green: format, lint, typecheck, test and build across all 15 projects, plus
 all nine integration suites against real PostgreSQL and RabbitMQ. Two
 migrations applied to both the dev and `_test` databases.
 
+**Remote CI: GitHub Actions run `30785560179` on `f6a2600` was green on its
+first attempt**, every step included — format, lint, typecheck, test, build,
+and the integration tests against the real PostgreSQL and RabbitMQ service
+containers. 2m54s.
+
 ### Still true after this sprint
 
 No automatic routing rules — named out by the project owner, and the right

@@ -463,8 +463,8 @@ RabbitMQ, and a green remote CI run recorded in its sprint document: the
 tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
 9.10 — the last of those is run `30780847286` on `5d1534b`, green on its first
 attempt, and 9.11 is run `30783298165` on `5cc0036`, green on its first and the
-second of two for that sprint. **9.12 has the full local gate and all nine
-integration suites green; recording its remote run is the first thing to do.**
+second of two for that sprint, and 9.12 is run `30785560179` on `f6a2600` —
+the tip of `main`, green on its first attempt.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
