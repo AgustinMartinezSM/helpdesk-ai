@@ -168,6 +168,14 @@ is a row edit plus a test, not a redesign.
 | `audit.read`                       |   ●   |     ●     |            |          |          |       |           |    ●    |
 | `analytics.read`                   |   ●   |     ●     |     ○      |    ○     |    ○     |       |           |    ●    |
 
+**One cell's meaning lives outside this table.** `tickets.read_team` reads
+"team" and means "department": Sprint 9.12 decided that the department is the
+routing target this model has, and that `teams.manage` resolves to the
+department management `branches.update` already covers. The argument, and the
+limitation it accepts (routing is branch-local, because a department belongs
+to a branch), are in **ADR 0022**. `queues.manage` stays unimplemented on
+purpose — a queue would have to say what it is that a department is not.
+
 Four things in that table are deliberate and worth challenging:
 
 - **`REQUESTER` has `tickets.change_status` as own-scope only.** This
