@@ -32,8 +32,8 @@
   width: 2.25rem;
   height: 2.25rem;
   border-radius: var(--radius-control);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--brand-soft);
+  color: var(--text);
 }
 
 .name {

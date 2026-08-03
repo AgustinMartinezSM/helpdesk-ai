@@ -219,7 +219,7 @@
 }
 
 .inlineLink {
-  color: var(--accent);
+  color: var(--action);
   font-weight: 500;
   text-decoration: underline;
   text-underline-offset: 0.15em;

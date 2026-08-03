@@ -59,7 +59,7 @@
     width: 2px;
     height: 0.5rem;
     border-radius: var(--radius-pill);
-    background: var(--accent);
+    background: var(--brand);
     animation: pulse-v 3.2s linear infinite;
   }
 }

@@ -41,7 +41,7 @@
 }
 
 .link {
-  color: var(--accent);
+  color: var(--action);
   text-decoration: underline;
   text-underline-offset: 2px;
 }

@@ -118,7 +118,7 @@
   padding: 0.1875rem 0.625rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
-  color: var(--text-primary);
+  color: var(--text);
   font-size: 0.75rem;
   font-weight: 500;
   white-space: nowrap;
@@ -206,8 +206,8 @@
   display: block;
   padding: 0.75rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius-input, 0.5rem);
-  background: var(--surface-1);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8125rem;
   /* The value must stay selectable by hand: a clipboard write can be
@@ -258,7 +258,7 @@
 }
 
 .hintText code {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.75rem;
   padding: 0.0625rem 0.25rem;
   border-radius: var(--radius-control);

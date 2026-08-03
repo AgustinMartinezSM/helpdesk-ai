@@ -31,8 +31,8 @@
   height: 3rem;
   flex-shrink: 0;
   border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--brand-soft);
+  color: var(--text);
   font-size: 1.25rem;
   font-weight: 600;
 }

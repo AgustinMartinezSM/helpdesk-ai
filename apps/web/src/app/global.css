@@ -136,6 +136,13 @@ svg {
   --focus-ring: #1a1a17;
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
+  /*
+   * The soft halo a form control draws INSIDE its own box, where an outline
+   * with an offset would be clipped by the field's border radius. It is the
+   * ring colour at low opacity rather than a colour of its own, so the two
+   * can never drift apart.
+   */
+  --focus-halo: color-mix(in srgb, #1a1a17 16%, transparent);
 
   /*
    * Selection is the brand's one informational-adjacent moment, and it is
@@ -302,24 +309,19 @@ svg {
   --surface-cta: #16161a;
   --surface-cta-text: #faf9f5;
 
-  /* ----- Compatibility aliases (REMOVE IN SPRINT 10.2) ----------------- */
   /*
-   * --accent* was the indigo action colour. 73 call sites across 28 files
-   * used it, and most of them were asking for "the interactive colour",
-   * which is exactly what --action now is. Redefining the old names in
-   * terms of the new ones migrated all of those in one step and left the
-   * ones whose MEANING changed — links that now need an underline, eyebrows
-   * that hand their colour to the yellow marker, the wordmark — to be moved
-   * deliberately, which is the part a blind find-and-replace would have got
-   * wrong.
+   * The --accent* aliases are GONE as of Sprint 10.2, and the two-step is
+   * worth recording because it is the shape a token rename should take.
    *
-   * They are aliases, not a second identity: every one resolves to the same
-   * ink. Sprint 10.2 deletes them once the remaining call sites are moved.
+   * Step one (10.1): redefine the old names in terms of the new ones. All 73
+   * call sites kept working, the product looked right immediately, and the
+   * migration stopped being urgent.
+   * Step two (10.2): move the call sites, one at a time, to the token that
+   * owns each JOB — and that is where the value was. The same --accent was
+   * doing four different things: an action, a focus ring, an identity chip,
+   * and a colour some elements had only because a colour was there. A
+   * find-and-replace would have made all four the same thing forever.
    */
-  --accent: var(--action);
-  --accent-hover: var(--action-hover);
-  --accent-contrast: var(--action-on);
-  --accent-soft: var(--action-soft);
 }
 
 /*
@@ -373,6 +375,7 @@ svg {
   --action-soft: color-mix(in srgb, #f5f3ed 10%, transparent);
 
   --focus-ring: #f5f3ed; /* 17.62:1 on --bg */
+  --focus-halo: color-mix(in srgb, #f5f3ed 22%, transparent);
   --selection: color-mix(in srgb, #ffee8c 35%, transparent); /* 6.1:1 */
 
   /* ----- Brand: the same value, which is the whole point --------------- */

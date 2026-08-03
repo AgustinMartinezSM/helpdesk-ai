@@ -64,8 +64,8 @@
   height: 2.125rem;
   margin-bottom: 0.25rem;
   border-radius: var(--radius-control);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--brand-soft);
+  color: var(--text);
 }
 
 .cardTitle {

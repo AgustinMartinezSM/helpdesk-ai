@@ -64,7 +64,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text);
 }
 
 .appKind {
@@ -207,8 +207,8 @@
   width: 2.125rem;
   height: 2.125rem;
   border-radius: var(--radius-control);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--brand-soft);
+  color: var(--text);
 }
 
 .decisionRef {
@@ -256,7 +256,7 @@
   width: 0.4375rem;
   height: 0.4375rem;
   border-radius: var(--radius-pill);
-  background: var(--accent);
+  background: var(--brand-strong);
 }
 
 .honestNote {

@@ -206,7 +206,7 @@
   gap: 0.375rem;
   font-size: 0.9375rem;
   font-weight: 500;
-  color: var(--accent);
+  color: var(--action);
   /* Ink acts, so an inline link is told apart by its underline rather
      than by a hue. One offset across the product (global.css). */
   text-decoration: underline;
@@ -215,7 +215,7 @@
 }
 
 .inlineLink:hover {
-  color: var(--accent-hover);
+  color: var(--action-hover);
 }
 
 /* The arrow nudge is decoration, not affordance — motion-gated. */

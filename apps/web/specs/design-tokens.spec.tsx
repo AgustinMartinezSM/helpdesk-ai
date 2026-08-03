@@ -296,9 +296,18 @@ describe('yellow marks, and never says anything', () => {
             body,
           );
         if (!paintsBrand) continue;
-        // A pseudo-element with empty content is a mark — a dash, a rule, a
-        // dot. It has no text, so it has nothing to make illegible.
-        if (/content:\s*(''|"")/.test(body)) continue;
+        /**
+         * A mark has no text, so it has nothing to make illegible. Two
+         * shapes of mark: a pseudo-element with empty content (a dash, a
+         * rule, a bullet), and an element given an explicit width AND
+         * height with no type set on it — a 2px pulse cannot hold a word.
+         */
+        const isMark =
+          /content:\s*(''|"")/.test(body) ||
+          (/(?:^|[\s;])width:/m.test(body) &&
+            /(?:^|[\s;])height:/m.test(body) &&
+            !/(?:^|[\s;])font-/m.test(body));
+        if (isMark) continue;
         if (!/(?:^|[\s;])color:\s*/m.test(body)) {
           offenders.push(`${sheet.relative}: ${body.trim().slice(0, 60)}`);
         }
@@ -490,19 +499,64 @@ describe('section bands are separable where they actually meet', () => {
 });
 
 describe('the migration leaves one identity, not two', () => {
-  it('keeps the old accent names as aliases of the action family', () => {
+  it('has no --accent token left, and no stylesheet reaching for one', () => {
     /**
-     * 73 call sites used --accent*. Redefining the names in terms of
-     * --action migrated all of them at once and left the ones whose MEANING
-     * changed to be moved deliberately. The aliases must resolve to the
-     * action family and never to a colour of their own — otherwise the
-     * product carries two primary identities, which is the one outcome the
-     * migration was meant to avoid.
+     * The two-step rename finished in Sprint 10.2. 10.1 aliased the old
+     * names to the action family so nothing broke; 10.2 moved every call
+     * site to the token that owns its JOB and deleted the aliases.
+     *
+     * This asserts both halves, because either alone is a trap: a surviving
+     * alias invites new code to use the old vocabulary, and a surviving call
+     * site would silently resolve to nothing and paint an element
+     * `currentColor` — which looks plausible often enough to ship.
      */
-    expect(LIGHT['--accent']).toBe('var(--action)');
-    expect(LIGHT['--accent-hover']).toBe('var(--action-hover)');
-    expect(LIGHT['--accent-contrast']).toBe('var(--action-on)');
-    expect(LIGHT['--accent-soft']).toBe('var(--action-soft)');
+    for (const name of Object.keys({ ...LIGHT, ...DARK })) {
+      expect({ token: name, isAccent: name.startsWith('--accent') }).toEqual({
+        token: name,
+        isAccent: false,
+      });
+    }
+
+    const stragglers = STYLESHEETS.filter((sheet) =>
+      /var\(\s*--accent/.test(sheet.text),
+    ).map((sheet) => sheet.relative);
+    expect(stragglers).toEqual([]);
+  });
+
+  it('resolves every custom property a stylesheet asks for', () => {
+    /**
+     * The general form of the trap above. `var(--typo)` is not an error in
+     * CSS — it falls back to the inherited value or to nothing, so a
+     * mistyped token is invisible until somebody looks at the pixel.
+     *
+     * Component-scoped properties are excluded by prefix: a module may
+     * define its own (`--lockup-mark`) and a region may re-declare a global
+     * one for its subtree, which the inverted-surface block does.
+     */
+    const declared = new Set([
+      ...Object.keys(LIGHT),
+      ...Object.keys(DARK),
+      // Declared inside [data-surface='inverted'] and in component modules.
+      ...[...CSS.matchAll(/^\s*(--[\w-]+):/gm)].map((m) => m[1]),
+      // Set from JavaScript rather than from CSS, so no stylesheet declares
+      // them: the font variable next/font injects, the per-element reveal
+      // delay, and the lockup's own scale.
+      '--font-sans',
+      '--reveal-delay',
+      '--lockup-mark',
+    ]);
+
+    const unknown = new Set<string>();
+    for (const sheet of STYLESHEETS) {
+      const localised = new Set(
+        [...sheet.text.matchAll(/^\s*(--[\w-]+):/gm)].map((m) => m[1]),
+      );
+      for (const [, name] of sheet.text.matchAll(/var\(\s*(--[\w-]+)/g)) {
+        if (declared.has(name) || localised.has(name)) continue;
+        unknown.add(`${sheet.relative}: ${name}`);
+      }
+    }
+    expect([...unknown]).toEqual([]);
   });
 
   it('no longer defines the indigo anywhere', () => {

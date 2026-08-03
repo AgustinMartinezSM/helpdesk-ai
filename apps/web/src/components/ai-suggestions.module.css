@@ -126,7 +126,7 @@
   padding: 0.125rem 0.5rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
-  background: var(--accent-soft);
+  background: var(--surface-2);
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text);
@@ -152,7 +152,7 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   padding: 0.625rem 0.75rem;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--border-strong);
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
   background: var(--surface-2);
   font-size: 0.9375rem;

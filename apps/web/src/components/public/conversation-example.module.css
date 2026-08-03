@@ -70,8 +70,8 @@
 }
 
 .fromSupport {
-  border-left-color: var(--accent);
-  background: var(--accent-soft);
+  border-left-color: var(--border-strong);
+  background: var(--surface-2);
 }
 
 /* --text-secondary, not --text-muted: the support bubble sits on

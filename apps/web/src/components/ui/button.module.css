@@ -45,11 +45,11 @@
 }
 
 .primary {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--action);
+  color: var(--action-on);
 }
 .primary:hover:not(:disabled):not([aria-disabled='true']) {
-  background: var(--accent-hover);
+  background: var(--action-hover);
 }
 
 .secondary {

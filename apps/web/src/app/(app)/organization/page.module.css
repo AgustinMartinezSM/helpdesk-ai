@@ -121,7 +121,7 @@
   padding: 0.1875rem 0.625rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
-  color: var(--text-primary);
+  color: var(--text);
   font-size: 0.75rem;
   font-weight: 500;
   white-space: nowrap;
@@ -183,6 +183,6 @@
 }
 
 .check input {
-  accent-color: var(--accent);
+  accent-color: var(--action);
   cursor: pointer;
 }
