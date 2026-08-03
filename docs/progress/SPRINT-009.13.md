@@ -1,7 +1,8 @@
 # Sprint 9.13 — Support teams and routing, in the interface
 
-Status: **Open (2026-08-03).** The Definition of Ready below was written and
-checked against the repository before any code.
+Status: **Implemented and verified locally (2026-08-03).** The Definition of
+Ready below was written and checked against the repository before any code; the
+outcome record at the end says what landed against it.
 
 ## Definition of Ready
 
@@ -218,3 +219,129 @@ supported filter, the desk manager who can administer teams but see neither
 branches nor people) are defects the API-only sprint could not have noticed.
 No migration, no event, no contract. Proceeding under the standing autonomous
 authorization.
+
+## Outcome record (2026-08-03)
+
+Four commits: the opening (`27dbd3e`), the server-side gaps (`eb0db03`), the
+BFF doors (`0e47d84`) and the interface itself (`d19e441`).
+
+**Support teams are usable through the product.** An administrator or a
+service desk manager can list, create, rename, archive and reopen teams,
+decide whether one serves the whole organization or named branches, put people
+in it by name, route a ticket to it and take the routing back, and filter their
+ticket list by the teams they belong to. Everything 9.12 built as `api-ready`
+now has a way in that is not a bearer token.
+
+**The sprint found two defects that an API-only sprint could not have found,
+and both were on the way to the screen rather than in it.**
+
+- **`GET /tickets?assignedTeamId=` answered 400.** `ListTicketsUseCase` had
+  honoured the filter since 9.12 and `ListTicketsQueryDto` never declared it,
+  so `forbidNonWhitelisted` refused a supported input. The use case looked
+  covered because its own tests called it directly.
+- **`InvalidTeamContextError` had no HTTP mapping, so routing to an archived
+  or foreign team answered 500 where 9.12 documented a generic 422.** The
+  refusal was correct and tested — at the use case, which never crosses the
+  exception filter. The filter's deliberate 500 fallback is what surfaced it;
+  a fallback of 404 would have dressed it as a plausible answer and nobody
+  would have looked. That fallback was itself added after an earlier sprint
+  made exactly that mistake, and this is the second time it has paid for
+  itself.
+
+### What the implementation decided that the DoR had left open
+
+- **The service desk manager needed two grants, and only one of them is a
+  matrix cell.** `branches.read` is theirs by the matrix and finally had a
+  call site. `people.read` is a **widening** of an ○ cell and the third marked
+  one in the map — a member picker cannot work from own scope by construction,
+  because it exists to add somebody who is _not_ in the team yet. Recorded in
+  the permission map and in the matrix document rather than left in a commit
+  message. Reading is as far as it goes: that template still cannot invite,
+  suspend, assign roles, or create or edit a branch, and a test pins each.
+- **`GET /organizations/teams/mine` re-reads through the organization-scoped
+  finder** rather than trusting the ids the claim query returned. Every other
+  method on that port says whose team it is asking for, and the new one keeps
+  the property instead of becoming the exception.
+- **The routing picker offers only ACTIVE teams**, while the administration
+  listing keeps archived ones so they can be reopened. Offering an archived
+  team would have earned a refusal the picker could have prevented.
+- **The ticket-list filter is fed by `/teams/mine`, not by the administration
+  listing**, even for somebody who could call both. Nobody's ticket list
+  should offer a team whose work they cannot see, and the server would
+  intersect it away regardless.
+- **The organizations-service team use cases had no unit tests.** Sprint 9.12's
+  sixteen new tests were all on the tickets side; the team surface shipped
+  covered by nothing but the projection integration spec. This sprint added
+  `support-team-use-cases.spec.ts`, because a screen resting on those use cases
+  should not be the first thing to exercise them.
+
+### Verified
+
+Full workspace gate green: format, lint, typecheck, test and build across all
+15 projects. organizations-service 246 tests across 10 suites (25 new),
+tickets-service 97 across 7, web-bff 41, apps/web 181 across 23 suites (21
+new). All nine integration suites green against real PostgreSQL and RabbitMQ.
+
+**A browser pass over six real processes** (browser → web → web-bff →
+api-gateway → auth / users / organizations), run as a
+**`service_desk_manager`** on purpose, because that is the template the two new
+grants exist for and the one that could not have used this screen before. The
+five-preview limit was worked around the way Sprint 9.10 did it: sign in with
+auth-service running, then trade it for users-service, since a soft navigation
+does not re-mount `AuthProvider`. What it showed, in order:
+
+- The account registered as `requester`, was promoted in SQL — the documented
+  bootstrap step — and reached `/organization`, which it could not have done
+  before the `branches.read` grant.
+- Branches rendered read-only: no create form, no archive control. Support
+  teams rendered with its own form. One key per section, visibly.
+- Creating a team announced "It serves the whole organization."
+- Selecting a branch flipped the coverage copy to "serves only the branch
+  selected below… and neither can a ticket filed under no branch at all", and
+  saving wrote one `support_team_branches` row.
+- "Serve the whole organization" then saved an **empty array** and the row
+  count went back to 0 — the round trip ADR 0022 cares about most, confirmed
+  in the database rather than inferred from the interface.
+- With users-service down, the member editor said "The directory could not be
+  loaded, so members cannot be changed here" instead of showing an empty list
+  as if nobody worked there. That fallback was exercised by accident and is
+  the reason it exists.
+- With users-service up, the picker listed the directory by name, and saving
+  wrote the `support_team_memberships` row.
+- The ticket list's team filter appeared **only after** the person joined a
+  team, and **disappeared again when the team was archived** — `/teams/mine`
+  excluding archived teams exactly as the `tm` claim does, visible in the
+  product. Selecting it sent
+  `GET /tickets?assignedTeamId=…`, the request that answered 400 before this
+  sprint.
+- No console errors throughout.
+
+The ticket listing itself and the routing control on a ticket answered 504 in
+that walk: tickets-service was the seventh process and there were five preview
+slots. Those two paths are covered by the tickets-service controller spec (over
+HTTP, through the real exception filter) and by the web specs, and **were not
+seen in a browser**. Said plainly rather than implied.
+
+### Still true after this sprint
+
+No automatic routing rules — still named out by the project owner, and this
+sprint built the thing they would act on. No queues. No
+`requesterDepartmentId` on the ticket. Agents keep `read_all` (9.12 D4).
+`team_manager`'s own-scope `teams.manage` stays unrepresented, and so does
+every other ○ cell — the scope-qualifier vocabulary is still the open question,
+and it now also bounds the `people.read` widening above. Departments are
+untouched: no code path added this sprint reads one.
+
+## Documentation
+
+Meaningfully changed this sprint: the permission matrix
+(`docs/architecture/tenancy-target-state.md`), which now records the two grants
+`service_desk_manager` gained and says which is a matrix cell and which is a
+widening; the permission map's own comments, which carry the same distinction
+where somebody editing the set will see it; the ticket exception filter's
+comment, which now explains why its 500 fallback is worth keeping; and this
+document.
+
+Nothing was renamed to hide a change of mind, no existing accurate comment was
+rewritten to manufacture activity, and no fictional experience, customer,
+incident, deployment or approval was introduced.

@@ -179,6 +179,18 @@ support-team membership and from nothing else — belonging to a department
 grants no support visibility. `queues.manage` stays unimplemented on purpose:
 a queue would have to say what it is that a team is not.
 
+**Sprint 9.13 gave `service_desk_manager` two more keys, and only one of them
+is a cell in this table.** `branches.read` is theirs by the matrix and finally
+had a call site: a team's reach is a set of branches, and the coverage editor
+cannot name a branch it may not read. `people.read` is a **widening** — the
+matrix grants it ○, own scope only — and it is the third one in the code map
+after the agent's `read_all`, `assign_agent` and flat `people.read`. The
+reason is structural rather than convenient: a member picker exists to add
+somebody who is NOT in the team yet, so own scope cannot serve it, and own
+scope still has no representation in a flat set of strings. It shrinks when the
+scope-qualifier vocabulary lands. Reading is as far as it goes — that template
+still cannot invite, suspend, assign roles, or create or edit a branch.
+
 Four things in that table are deliberate and worth challenging:
 
 - **`REQUESTER` has `tickets.change_status` as own-scope only.** This
