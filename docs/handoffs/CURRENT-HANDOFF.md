@@ -1,7 +1,7 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** 9.14 — role and scope vocabulary, implemented; 9.4-9.13 complete
+**Sprint:** 9.15 — bulk CSV onboarding, implemented; 9.4-9.14 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -445,6 +445,56 @@ evaluator — it is matrix notation, and every cell is now classified (a) a
 distinct key, (b) domain logic, or (c) deferred; never let a screen build its
 own list of grantable roles again.
 
+## Sprint 9.15 in one breath
+
+**A CSV import issues INVITATIONS. It creates no accounts and sends nothing.**
+ADR 0016 (no placeholder password hash) and ADR 0008 (no provider adopted)
+decide that between them, so a file of two hundred people hands back two
+hundred codes an administrator distributes by hand. The cost is real, the
+screen says it BEFORE they start, and email delivery is what fixes it.
+`people.create` is still unimplemented and an import is not it.
+
+**Nothing is ever created from a misspelling.** A branch, department or role
+that does not resolve exactly is a row failure quoting the value back — no
+fuzzy matching, no creation. A department named without a branch is refused
+outright (`Department.branchId` is a required FK and a name can repeat across
+branches), and "no such department here" and "that department belongs to
+another branch" are deliberately DIFFERENT messages.
+
+**Roles go through the 9.14 derivation and nothing else.** The import keeps no
+list of its own: `isGrantableRoleTemplate` plus `canGrantRoleTemplate` against
+the importer's STORED membership is the whole answer, so `owner` is refused by
+constant and a platform-scoped template by scope. **Never give the import a
+list of its own.**
+
+**An invitation can now carry a placement.** `branch_id` and `department_id`,
+nullable, real foreign keys because branches live in this database, applied at
+redemption INSIDE the transaction that already inserts the membership. ON
+DELETE SET NULL, not CASCADE: removing a branch must not burn a code nobody can
+reissue. The single-invitation form leaves both null forever.
+
+**Every row is its own unit; there is no batch transaction.** Partial
+application, no rollback, safe to re-run. Idempotency is the partial unique
+index plus the invitation table's own accepted rows — not a new mechanism and
+not a cross-service question. **The residual case, stated rather than hidden:**
+somebody who became a member WITHOUT an invitation (the first administrator,
+made in SQL) is not in that table, so an import would issue them a code.
+Redeeming it is harmless — the membership insert skips duplicates and leaves
+their role alone.
+
+**The audit record is counts and the actor, never a row and never an address.**
+The per-invitation events already attribute who was invited; addresses in a
+batch event would copy a few hundred people into a second retention boundary to
+say nothing new.
+
+**The preview and the apply are two endpoints, and both answer 200.** If they
+shared one, "check the file" would write. 201 Created on a dry run was the
+first version and it is a lie told in the protocol rather than in the copy.
+
+Three things NOT to do: never let the import create structure or a template;
+never put an address or a code in the batch event; never merge the preview and
+the apply.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -494,6 +544,12 @@ own list of grantable roles again.
   walk and were never seen in a browser. The `.claude/launch.json` entries that
   define them are **git-ignored**, so they are on that machine only and have to
   be written again elsewhere; only `web` was ever in a fresh checkout.
+- **A literal byte-order mark in source is a lint error.** The CSV parser has
+  to strip one — Excel writes it, and left in place the first header parses as
+  U+FEFF + "email" so the file is refused for a column nobody can see — but
+  `no-irregular-whitespace` refuses the character itself. Write the escape.
+  Same in the spec that tests for it: an invisible character in a test is how
+  that test gets silently deleted later.
 - **A stuck login form is usually a stuck `submitting` flag.** `handleSubmit`
   returns early while `submitting` is true, and a first attempt that raced a
   starting auth-service leaves it stuck with no error rendered — the button
@@ -571,8 +627,10 @@ nullable, no backfill, applied to dev and _test.
 Sprint 9.6: users add_profile_fields. Sprint 9.7: none. Sprint 9.8:
 organizations invitations (one table, a partial unique index in raw SQL —
 do NOT "simplify" the Prisma model to @@unique, it would generate a total
-index and make re-invitation impossible). Sprints 9.9, 9.10, 9.11 and 9.13:
-none.
+index and make re-invitation impossible). Sprint 9.15: organizations
+invitation_placement (`branch_id` + `department_id` on invitations, additive,
+nullable, real foreign keys with ON DELETE SET NULL — applied to dev and
+`_test`). Sprints 9.9, 9.10, 9.11, 9.13 and 9.14: none.
 
 ## Tests executed (through 2026-08-03, local)
 
@@ -584,8 +642,8 @@ tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
 attempt, and 9.11 is run `30783298165` on `5cc0036`, green on its first and the
 second of two for that sprint, 9.12 is run `30785560179` on `f6a2600`, green on
 its first attempt, 9.13 is run `30788005358` on `ec065aa`, green on its first
-attempt, and 9.14 is run `30791213751` on `3aa7070` — the tip of `main`, green
-on its first attempt.
+attempt, 9.14 is run `30791213751` on `3aa7070`, green on its first attempt,
+and 9.15's run is recorded in `SPRINT-009.15.md`.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
@@ -617,22 +675,20 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-The next sprint is a product choice, and 9.14 cleared the blocker that stood in
-front of the first item:
+The next sprint is a product choice. 9.15 took bulk import, which had been top
+of this list:
 
-1. **Bulk/CSV import.** Now unblocked as well as strongest. The people it loads
-   have a screen to appear on, an administrator who can fix what the import got
-   wrong, branches to be assigned to, support teams to be put in — and, since
-   9.14, one derivation that answers which role templates it may write.
-   `ORGANIZATION_GRANTABLE_TEMPLATES` plus the per-actor ceiling is the whole
-   answer; do not build a second one.
-2. **Seeded role-template rows.** Mechanism, not a decision, for the first time
-   since 9.4. Turns the code map into rows and is what custom roles would later
-   reuse.
-3. **Email delivery.** Unchanged and still the project owner's decision: ADR
-   0008 requires explicit approval and a superseding ADR naming which provider
-   and why. Until then an invitation reaches its recipient because an admin
-   copied a code and passed it on — which the interface says out loud.
+1. **Email delivery.** It moves to the top by consequence rather than by
+   preference: an import of two hundred people now produces two hundred codes
+   an administrator distributes by hand, which is the point at which the
+   out-of-band model stops being a small awkwardness. **Still the project
+   owner's decision** — ADR 0008 requires explicit approval and a superseding
+   ADR naming which provider and why. Nothing should be built here without it.
+2. **Seeded role-template rows.** Mechanism, not a decision, since 9.14. Turns
+   the code map into rows and is what custom roles would later reuse.
+3. **The hardening list below**, which 9.15's "Validación integral" pass wrote
+   down rather than fixed. The projection cold-start item is the one with a
+   real product consequence.
 4. **Transfer of ownership**, plus the organization's own name: the two small
    gaps that keep a fresh organization from being fully self-serve.
 5. **Automatic routing rules**, now that manual routing is real and visible.
@@ -670,9 +726,11 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > the product: the Support teams section, manual routing on a ticket, and the
 > team scope control on the ticket list) and 9.14 (the role-template and
 > permission-scope vocabulary, which closed the question that had blocked
-> ADR 0015's seeded rows since 9.4). Read docs/handoffs/CURRENT-HANDOFF.md,
-> docs/progress/SPRINT-009.14.md, SPRINT-009.13.md and ADR 0022 before touching
-> anything, and verify the repo state with git first.
+> ADR 0015's seeded rows since 9.4) and 9.15 (bulk CSV onboarding, and the
+> "Validación integral" hardening pass that closes it). Read
+> docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.15.md,
+> SPRINT-009.14.md and ADR 0022 before touching anything, and verify the repo
+> state with git first.
 >
 > **The one thing not to get wrong**: a support team and a department are
 > DIFFERENT CONCEPTS. A department is the requester's organizational area and
@@ -698,12 +756,19 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > one derivation, including the CSV import when it lands. And `○` in the matrix
 > is notation for readers, never something the evaluator represents.
 >
+> **What 9.15 makes true**: a CSV import issues invitations and never
+> accounts, creates no structure from a misspelling, and reads the 9.14
+> derivation for every role rather than a list of its own. An invitation can
+> now carry a branch and a department, applied at redemption inside the
+> transaction that inserts the membership.
+>
 > Pick the next sprint — the handoff's "Exact next action" lays out the
-> candidates. Bulk/CSV import is the strongest and is now unblocked as well:
-> the people it loads have a screen, an administrator, branches and teams to
-> land in, and one derivation that answers which roles it may write. Open
-> whichever you choose with its own Definition of Ready, the pattern the last
-> ten sprints set.
+> candidates. **Email delivery is top by consequence**: an import of two
+> hundred people now produces two hundred codes distributed by hand, which is
+> where the out-of-band model stops being a small awkwardness. It remains the
+> project owner's decision under ADR 0008 and must not be started without one.
+> Open whichever you choose with its own Definition of Ready, the pattern the
+> last eleven sprints set.
 >
 > Standing rules: never a permanent shared password or unattributable request
 > path (ADR 0016); profile fields never become credentials (ADR 0017); an

@@ -1,7 +1,8 @@
 # Sprint 9.15 — Bulk employee onboarding by CSV
 
-Status: **Open (2026-08-03).** The Definition of Ready below was written and
-checked against the repository before any code.
+Status: **Implemented and verified locally (2026-08-03).** The Definition of
+Ready below was written and checked against the repository before any code; the
+outcome record at the end says what landed against it.
 
 ## Definition of Ready
 
@@ -207,3 +208,102 @@ sprint, which is why it was done first. One additive migration. The riskiest
 property — that a spreadsheet cannot escalate privilege or invent structure —
 is expressed as refusals in existing, tested functions rather than as new
 rules. Proceeding under the standing autonomous authorization.
+
+## Outcome record (2026-08-03)
+
+Three commits: the opening (`60c80a5`), the server side (`37bae79`) and the
+screen (`a4f7547`), plus the documentation below.
+
+**An administrator can onboard a team from a spreadsheet, and the file cannot
+make the product do anything it could not already be asked to do.** Download a
+template pre-filled with the roles they may grant, fill it, check it, apply it,
+and fix the rows that failed from a report the browser builds out of the
+response.
+
+### The two properties this exists to have
+
+**Nothing is created from a misspelling.** A branch, department or role that
+does not resolve exactly is a row failure quoting the value back. There is no
+fuzzy matching anywhere in the path and no creation of any kind, and the two
+department mistakes get two different messages — a name nobody has versus a
+name belonging to another branch — because collapsing them would send somebody
+hunting for a typo that is not there.
+
+**Privilege cannot escalate through a file.** Roles go through
+`isGrantableRoleTemplate` and `canGrantRoleTemplate` against the importer's
+STORED membership: the same two functions the invite form and the role editor
+call, which is what Sprint 9.14 built them for. `owner` is refused by constant,
+a platform-scoped template by scope, and a branch manager cannot import an
+administrator. The import keeps no list of its own.
+
+### What the implementation decided that the DoR had left open
+
+- **Idempotency came from rows this service already owns, not a new
+  mechanism.** The invitation table records both pending and accepted, so a
+  re-run reports `already_invited` or `already_member` without asking
+  users-service anything. **The residual case is stated rather than hidden**: a
+  person who became a member WITHOUT an invitation — the first administrator,
+  made in SQL, or a legacy backfilled user — is not in that table, so an import
+  would issue them a code. Redeeming it is harmless, because the membership
+  insert skips duplicates and leaves their existing role alone. Closing it
+  properly would mean organizations-service asking users-service who is who,
+  which is a new cross-service read for a case that costs nothing.
+- **The partial unique index is the arbiter, not the pre-read.** Two
+  administrators importing overlapping files at the same moment both pass the
+  check; the loser fails the write and is reported as a skip, because from the
+  file's point of view that person now has an invitation either way.
+- **The template is generated per actor, not served as a static asset**, so it
+  can never offer a role the server would refuse. A spec round-trips it through
+  the parser it was written for — the strongest thing to assert about a
+  template is that the product can read what the product hands out.
+- **The preview and the apply answered `201 Created`, and now answer `200`.**
+  Found by writing the BFF test. A preview creates nothing, and an apply
+  answers with a batch summary rather than one resource at a location — a
+  Created status on a dry run is a lie told in the protocol instead of in the
+  copy. Both layers corrected.
+- **The byte-order mark had to be written as an escape.** Excel writes one when
+  it saves UTF-8, and left in place it makes the first header parse as
+  `U+FEFF` + `email` — so the file is refused for an unknown column nobody can
+  see. The character itself is invisible in an editor and the linter refuses
+  it, which is also how a test for it gets silently deleted.
+
+### Verified
+
+Full workspace gate green: format, lint, typecheck, test and build across all
+15 projects. organizations-service 311 tests (40 new: 15 parser, 25 use case),
+web-bff 47 (3 new), apps/web 203 (13 new). All nine integration suites green
+against real PostgreSQL and RabbitMQ, including five new ones in
+`people-import.int.spec.ts` that only real SQL can prove:
+
+- a re-run is refused by the partial unique index rather than by a prior read;
+- a placement travels from the invitation onto the membership **inside one
+  transaction**, with both `branch_memberships` and `department_memberships`
+  written beside the membership row;
+- an invitation carrying no placement produces no edge at all;
+- a branch of the SAME NAME in another organization is never resolved — the
+  fixture gives both tenants a "Store 12" precisely so this cannot pass by
+  accident;
+- a dry run leaves the invitation count unchanged.
+
+One migration applied to the dev and `_test` databases: `invitations.branch_id`
+and `invitations.department_id`, additive, nullable, with foreign keys and
+`ON DELETE SET NULL`.
+
+### Still true after this sprint
+
+No accounts are created and nothing is sent — the two constraints that shape
+the whole feature, and email delivery is still ADR 0008 and the project owner's
+call. No asynchronous or scheduled imports: 500 rows synchronously, and a file
+bigger than that wants a queue and a progress screen. No XLSX. Only people are
+imported; branches, departments and teams are created on their own screens.
+`people.create` remains unimplemented and an import is not it.
+
+## Documentation
+
+Meaningfully changed this sprint: the permission matrix
+(`tenancy-target-state.md`) — `people.import` now records its first call site
+and the classification table notes that the branch-on-an-invitation COLUMN
+arrived while the branch-manager key did not; and this document.
+
+No fictional experience, customer, incident, deployment or approval was
+introduced.

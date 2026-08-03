@@ -188,20 +188,20 @@ sprints.
 - **(c) Deferred, with the feature that would check it.** No call site exists,
   so no key exists. Named here rather than left as an open question.
 
-| Cell                                   | Class | Note                                                                             |
-| -------------------------------------- | :---: | -------------------------------------------------------------------------------- |
-| `people.read` — BRANCH/DESK/TEAM/AGENT |  (c)  | DESK_MGR resolved in 9.14 as `people.read_assignable`; the other three hold none |
-| `people.invite` — BRANCH_MGR           |  (c)  | Needs a branch set on the invitation itself                                      |
-| `people.update` — BRANCH_MGR           |  (c)  | Needs branch-scoped editing to mean something                                    |
-| `branches.read` — BRANCH_MGR           |  (c)  | The `br` claim already narrows what they see; no separate key yet                |
-| `branches.update` — BRANCH_MGR         |  (c)  | Editing only their own branches; no call site                                    |
-| `branches.manage_members` — BRANCH_MGR |  (c)  | Same shape as the row above                                                      |
-| `tickets.read_branch` — BRANCH_MGR     |  (a)  | The key IS the own scope; the `br` claim carries which branches                  |
-| `tickets.assign_agent` — BRANCH_MGR    |  (c)  | Would mean "within my branches"; nothing enforces that yet                       |
-| `tickets.reply_public` — REQUESTER     |  (b)  | Replying on your own ticket; decided in the ticket domain                        |
-| `tickets.change_status` — REQUESTER    |  (b)  | Closing your own resolved ticket; decided in the ticket domain                   |
-| `teams.manage` — TEAM_MGR              |  (c)  | Their own team only; the surface administers teams organization-wide             |
-| `analytics.read` — BRANCH/DESK/TEAM    |  (c)  | No analytics UI ships, so no scoped read has a caller                            |
+| Cell                                   | Class | Note                                                                               |
+| -------------------------------------- | :---: | ---------------------------------------------------------------------------------- |
+| `people.read` — BRANCH/DESK/TEAM/AGENT |  (c)  | DESK_MGR resolved in 9.14 as `people.read_assignable`; the other three hold none   |
+| `people.invite` — BRANCH_MGR           |  (c)  | Needs a branch set on the invitation — the COLUMN arrived in 9.15, the key has not |
+| `people.update` — BRANCH_MGR           |  (c)  | Needs branch-scoped editing to mean something                                      |
+| `branches.read` — BRANCH_MGR           |  (c)  | The `br` claim already narrows what they see; no separate key yet                  |
+| `branches.update` — BRANCH_MGR         |  (c)  | Editing only their own branches; no call site                                      |
+| `branches.manage_members` — BRANCH_MGR |  (c)  | Same shape as the row above                                                        |
+| `tickets.read_branch` — BRANCH_MGR     |  (a)  | The key IS the own scope; the `br` claim carries which branches                    |
+| `tickets.assign_agent` — BRANCH_MGR    |  (c)  | Would mean "within my branches"; nothing enforces that yet                         |
+| `tickets.reply_public` — REQUESTER     |  (b)  | Replying on your own ticket; decided in the ticket domain                          |
+| `tickets.change_status` — REQUESTER    |  (b)  | Closing your own resolved ticket; decided in the ticket domain                     |
+| `teams.manage` — TEAM_MGR              |  (c)  | Their own team only; the surface administers teams organization-wide               |
+| `analytics.read` — BRANCH/DESK/TEAM    |  (c)  | No analytics UI ships, so no scoped read has a caller                              |
 
 Twelve rows, seventeen cells. **Nothing in class (c) blocks seeded template
 rows any more**: a deferred cell is simply a permission the template does not
@@ -254,6 +254,20 @@ with rows serves those branches. `tickets.read_team` derives from active
 support-team membership and from nothing else — belonging to a department
 grants no support visibility. `queues.manage` stays unimplemented on purpose:
 a queue would have to say what it is that a team is not.
+
+**`people.import` got its first call site in Sprint 9.15**, granted exactly as
+this table has it — owner and organization_admin, nobody else. It is separate
+from `people.invite` because the acts differ in blast radius rather than in
+kind: one wrong choice in a spreadsheet repeats over every row of it. At row
+level it grants nothing extra, because an import issues invitations and each
+one is bounded by the same ceiling a single invitation is.
+
+**`people.create` stays unimplemented, and an import is not it.** The row above
+is the admin-creates-an-account key, which ADR 0016 decided against: there is
+no placeholder password hash, so the administrator creates ACCESS and the
+person creates the account. A CSV import of two hundred people produces two
+hundred invitations, not two hundred accounts, and the distinction is the
+reason the screen says the platform sends nothing.
 
 **Sprint 9.13 gave `service_desk_manager` two more keys; Sprint 9.14 narrowed
 one of them.** `branches.read` is theirs by this matrix and finally had a call
