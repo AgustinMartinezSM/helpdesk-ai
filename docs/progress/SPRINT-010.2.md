@@ -1,6 +1,9 @@
 # Sprint 10.2 — Finishing the migration, and the surfaces nobody had written
 
-Status: **CLOSED (2026-08-03).**
+Status: **CLOSED (2026-08-03).** Remote CI green on the final HEAD: run
+[`30846715801`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30846715801)
+on `bc593e6`, green on its first attempt, covering all six commits — they were
+pushed together.
 
 ## A note on how this one was opened
 

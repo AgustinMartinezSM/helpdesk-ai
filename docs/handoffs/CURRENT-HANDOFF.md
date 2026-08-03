@@ -732,6 +732,11 @@ its own Definition of Ready.
 
 ## Sprint 10.2 in one breath
 
+Remote CI green on the closing HEAD: run `30846715801` on `bc593e6`, first
+attempt. The full local gate ran green too — and for the first time it says
+**15 projects** rather than 14, because `@helpdesk-ai/web` finally has a
+typecheck target. 260 unit tests across 28 suites.
+
 **`--accent*` is gone.** The two-step is the part to reuse: 10.1 aliased the
 old names so nothing broke, 10.2 moved the 44 remaining call sites to the
 token that owns each JOB and deleted the aliases. **The same `--accent` was
