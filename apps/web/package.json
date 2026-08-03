@@ -2,6 +2,21 @@
   "name": "@helpdesk-ai/web",
   "version": "0.0.1",
   "private": true,
+  "nx": {
+    "targets": {
+      "typecheck": {
+        "command": "tsc -p apps/web/tsconfig.spec.json --noEmit",
+        "cache": true,
+        "inputs": [
+          "default",
+          "^default"
+        ],
+        "dependsOn": [
+          "^build"
+        ]
+      }
+    }
+  },
   "dependencies": {
     "@helpdesk-ai/security": "workspace:*",
     "next": "~16.2.12",
