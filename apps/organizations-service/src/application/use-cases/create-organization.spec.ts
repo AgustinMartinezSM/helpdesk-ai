@@ -50,13 +50,16 @@ function build() {
   organizations.add(BOOTSTRAP);
 
   const published: Membership[] = [];
+  // Typed rather than cast: a cast through `unknown` would have made the
+  // callback parameter implicitly `any`, and this file's whole job is to
+  // assert what lands in that argument.
   const events: MembershipEventPublisher = {
-    membershipCreated: async (created) => {
+    membershipCreated: async (created: Membership) => {
       published.push(created);
     },
     membershipStatusChanged: async () => undefined,
     membershipRoleChanged: async () => undefined,
-  } as unknown as MembershipEventPublisher;
+  };
 
   let n = 0;
   const useCase = new CreateOrganizationUseCase(

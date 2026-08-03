@@ -233,7 +233,9 @@ suites in parallel against one broker.
   forever rather than falling back to signed-out. Verified by reading.
 - **A member who never had an invitation is invisible to the import's
   idempotency check.** New in 9.15 and documented in its outcome record: the
-  check reads the invitation table, so the first administrator (made in SQL)
+  check reads the invitation table, so the first administrator (who since
+  Sprint 10.4 creates the organization rather than being made in SQL, and so
+  still holds no invitation)
   or a legacy backfilled user would be issued a code by an import. Redeeming
   it is harmless — the membership insert skips duplicates and leaves their
   role alone — which is why it is listed here rather than fixed.
@@ -243,9 +245,14 @@ suites in parallel against one broker.
 - **No transfer of ownership.** `owner` can be neither granted nor targeted, so
   an organization whose only privileged member is its owner cannot change that
   from inside.
-- **The first administrator of a fresh database has to be made in SQL.** The
-  intended consequence of deleting the unattributable operator endpoint in
-  9.10, and a real step in any deployment runbook.
+- ~~**The first administrator of a fresh database has to be made in SQL.**~~
+  **Closed in Sprint 10.4** (ADR 0023): an authenticated person who belongs to
+  no real organization can create one and becomes its owner, in one
+  transaction, over an attributable route. The 9.10 deletion that caused this
+  stands — nothing unattributable came back. What remains of the gap is
+  narrower and is recorded in the ADR: somebody who already belongs to a real
+  organization still cannot create a second one, because there is no
+  organization selector to reach it with.
 - **The AI provider notice has no failure path.** If `GET /ai/provider` fails,
   the panel shows an error and no provider notice at all, quietly dropping the
   "No language model is connected" disclosure instead of defaulting to the
