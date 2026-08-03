@@ -834,7 +834,9 @@ tenancy-phase-7-readiness.md.
 
 **Sprint 10.0 changed no code**, so its gate is documentation-shaped: Prettier
 over every touched file, and the full local gate plus remote CI on the closing
-HEAD to prove the repository is unchanged in every way that runs. Its real
+HEAD to prove the repository is unchanged in every way that runs — run
+`30834970537` on `a46f545` and run `30835400484` on `ba786c3`, both green on
+their first attempt, and the local gate as 26 of 26 Nx cache hits. Its real
 verification was different in kind — every contrast ratio and L\* value in the
 brand document was computed in the sprint rather than carried over, two
 first-pass candidates failed WCAG 1.4.11 and were replaced before being written

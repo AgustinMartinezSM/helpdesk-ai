@@ -1,7 +1,16 @@
 # Sprint 10.0 — Brand strategy
 
-Status: **CLOSED (2026-08-03).** The Definition of Ready below was written and
-checked against the repository before any strategy work.
+Status: **CLOSED (2026-08-03).** Remote CI green on the final HEAD: run
+[`30835400484`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30835400484)
+on `ba786c3`, and earlier run `30834970537` on `a46f545`, both green on their
+first attempt. The Definition of Ready below was written and checked against the
+repository before any strategy work.
+
+This sprint changed no code, so a green run proves something narrower than
+usual and it is worth saying which: that the repository still builds, typechecks
+and passes all nine integration suites exactly as it did at `b11b15b`. The full
+local gate ran as 26 of 26 Nx cache hits, which is the same statement made a
+second way.
 
 ## Definition of Ready
 
