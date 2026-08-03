@@ -1,6 +1,6 @@
 # Sprint 10.4 — An organization can be created from the product
 
-Status: **OPEN (2026-08-03).** The Definition of Ready below was written and
+Status: **CLOSED (2026-08-03).** The Definition of Ready below was written and
 checked against the repository before any code.
 
 ## Definition of Ready
@@ -120,3 +120,116 @@ promise (ADR 0022).
   focused Conventional Commits, merge to `main` is `--ff-only`, remote CI
   green on the final HEAD, working tree clean, and `CURRENT-HANDOFF.md` names
   the next exact action.
+
+## Outcome
+
+The hole is closed: a person can register, create an organization, and be its
+owner, without anybody touching a database.
+
+### What was built
+
+`POST /organizations` on organizations-service — tenantless and keyless, the
+shape `POST organizations/invitations/accept` already uses — through the BFF's
+`POST /organization`, behind a screen at `/organization/new` that follows
+`/join`'s shape including the session refresh it had to learn in 9.9.
+
+`CreateOrganizationUseCase` writes the organization and its owner membership
+through one repository method that owns a transaction, then publishes
+`membership.created.v1` so users-service projects the new owner into the
+directory. No `organization.created` contract was added: nothing consumes one
+(ADR 0022's "no consumer, no promise").
+
+The decision and everything it rests on is **ADR 0023**.
+
+### The three things most likely to have gone wrong, and what the repository
+
+### said about each
+
+**The membership check.** `EnsureMembershipUseCase` writes a bootstrap
+membership on every registration, unconditionally. So "may create if they
+belong nowhere" had to be implemented as **"holds no non-bootstrap
+membership"** — the other reading would have refused every caller that has
+ever registered, which is all of them. The reconnaissance flagged this as the
+single most likely place to get the sprint wrong, and it was right to.
+
+**The reserved slug.** The bootstrap migration inserts with
+`ON CONFLICT ("id") DO NOTHING` — the conflict target is the **id**, not the
+slug. So an organization that took slug `bootstrap` would not merely be
+confusing: it would make `prisma migrate deploy` fail on the unique index on
+every future environment. And because the slug column is case-sensitive with
+no `CHECK`, the reservation has to be applied to the **normalised** form or it
+guards nothing. Both are tested.
+
+**`owner` outside a migration.** `ORGANIZATION_GRANTABLE_TEMPLATES` excludes
+it by constant so that no grant path can produce one, which means this had to
+be a genuinely new write path with no shared validation to lean on. That is
+the right outcome rather than a gap — routing it through
+`canGrantRoleTemplate` would have meant weakening the check that makes ADR
+0015's invariant structural. The reasoning for why this is not a breach of
+ADR 0021 is in ADR 0023 rather than in a comment.
+
+### One claim I wrote and had to take back
+
+The first version of the screen said **"You can change the name later."** It
+cannot: renaming an organization is not built, the slug is derived from the
+name at creation, and `pilot-readiness.md` records the immutability as its own
+decision. I caught it while re-reading the copy against the claim rules this
+block spent three sprints establishing, and it is a good demonstration of why
+those rules are worth having — the sentence is exactly the comfortable thing a
+person writes without checking. It now says the opposite, and so does Helpi's
+hint for the route.
+
+### Verification
+
+Full gate green: format, lint, typecheck across 15 projects, **376 unit tests**
+(354 in organizations-service, up 22), and build.
+
+Three levels, deliberately:
+
+- **Unit**, with fakes that honour both unique indexes for real — a fake that
+  accepted a duplicate slug would let a use case with a missing check pass.
+- **HTTP**, eleven cases through the real guard, the real validation pipe and
+  the real error filter: the 409 for somebody already placed, 400 for a body
+  that names a creator or a slug, 401 unauthenticated, and the route reached
+  with no tenant claim at all. This level exists because of the lesson 9.13
+  paid for.
+- **Integration**, against real PostgreSQL: both rows committing together, and
+  — the one that matters — **nothing left behind when the second insert
+  fails**. Without the transaction that would be an organization nobody can
+  administer, permanently, because there is no outbox to repair it with.
+
+**The integration suite was not run locally and I want that stated plainly.**
+Docker is not running on this machine, so `docker compose up` fails and the
+suite cannot start. It runs on CI, which provisions a throwaway database per
+integration target, so its first real execution is the CI run recorded above
+rather than a local one. Every other level ran here.
+
+### What this leaves open
+
+**Somebody who already belongs to a real organization still cannot create a
+second one**, and the refusal says so. That is not a stub: it is the honest
+boundary of a platform with no organization selector, and ADR 0023 records
+that the boundary should be revisited in the same change that adds token
+exchange — with a selector, "you already belong somewhere" stops being a
+reason to refuse.
+
+**Renaming an organization is still impossible**, and now three surfaces say
+so rather than one.
+
+**`organizations` becomes a growing table** for the first time, and nothing
+indexes `status`. Irrelevant at two rows; worth remembering.
+
+### Documentation
+
+- **ADR 0023** — new: the decision, the four alternatives rejected, and the
+  consequences.
+- **`pilot-readiness.md`** — the "first administrator made in SQL" item is
+  struck through and says what closed it and what remains; its second mention
+  in the CSV-import residual is corrected too.
+- **`product-status.ts`** — "Creating your organization" is a new `available`
+  capability with a note stating the limit; the stale Planned item saying the
+  first administrator is created by hand is gone.
+- **`CURRENT-HANDOFF.md`** — Sprint 10.4's entry and the next exact action.
+
+No fictional experience, customer, testimonial, incident, external approval or
+commercial adoption was introduced.

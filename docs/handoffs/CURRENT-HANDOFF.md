@@ -1,9 +1,10 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** **10.3 complete — the public site says what the product is. BLOCK A
-IS CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy), 10.1 (design system),
-10.2 (migration) and 9.4-9.16 complete
+**Sprint:** **10.4 complete — an organization can be created from the product
+(ADR 0023). BLOCK A IS CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy),
+10.1 (design system), 10.2 (migration), 10.3 (public copy) and 9.4-9.16
+complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -849,6 +850,66 @@ onboarding, where the brand's promise meets the fact that the first
 administrator of a new database is still made by hand. Open it with its own
 Definition of Ready.
 
+## Sprint 10.4 in one breath — the first domain sprint of Block B
+
+**The first administrator of a fresh database no longer has to be made in
+SQL.** `POST /organizations` creates an organization and makes its creator
+the owner in one transaction, over an attributable route. The decision, the
+four alternatives rejected and the consequences are **ADR 0023** — read it
+before touching any of this.
+
+**Three things it rests on, each easy to get wrong:**
+
+**The membership check is "holds no NON-BOOTSTRAP membership", never "holds no
+membership".** Registration writes a bootstrap membership unconditionally, so
+the second reading would refuse every caller that has ever registered.
+
+**`bootstrap` is a reserved slug and that is PROVISIONING-CRITICAL.** The
+bootstrap migration conflicts on `id`, not on slug, so an organization
+holding that slug makes `prisma migrate deploy` fail on the unique index on
+every future environment. The slug column is case-sensitive with no CHECK, so
+the reservation is applied to the NORMALISED form or it guards nothing.
+
+**`owner` is created outside a migration for the first time, and deliberately
+NOT through `canGrantRoleTemplate`.** That derivation excludes `owner` by
+constant so no GRANT path can produce one, and it must keep doing so — this is
+not a grant path. ADR 0021 governs administering an EXISTING membership; here
+neither the organization nor the membership exists until the call. Everything
+0021 governs still holds afterwards.
+
+**A slug collision is never reported.** Answering "that name is taken" would
+be a cross-tenant existence oracle — the invitation preview is meant to be the
+only public place an organization's name is exposed. Derived, disambiguated
+silently, never caller-supplied.
+
+**The boundary is a platform limit, not a policy.** Somebody who already
+belongs to a real organization is refused, because resolution picks the OLDEST
+non-bootstrap membership and there is no selector — they would own something
+they could never reach. ADR 0023 says to revisit this in the same change that
+adds token exchange.
+
+**One claim I wrote and took back**: the screen first said "You can change the
+name later". It cannot. Renaming is not built and the slug derives from the
+name at creation. Three surfaces now say so.
+
+**The integration suite ran on CI, not locally** — Docker was not running on
+this machine. Every other level ran here: 376 unit tests, and eleven HTTP
+cases through the real guard, pipe and error filter.
+
+Three things NOT to do: never route `owner` through the grant derivation to
+"reuse" it — the exclusion is what makes ADR 0015's invariant structural;
+never reuse `createIfAbsent` for the owner membership (its skipDuplicates
+semantics silently do nothing, which is wrong for a row the organization
+cannot function without); never let the organization name imply it can be
+changed, in copy or in a hint.
+
+**The next action is Sprint 10.5.** The obvious neighbours of what just
+landed: transfer of ownership and renaming an organization are the two small
+gaps that keep a fresh organization from being fully self-serve, and both are
+now the only things between a person and running their own tenant end to end.
+The remaining design-system debt is in `design-system.md`. Open it with its
+own Definition of Ready.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -1007,7 +1068,7 @@ do NOT "simplify" the Prisma model to @@unique, it would generate a total
 index and make re-invitation impossible). Sprint 9.15: organizations
 invitation_placement (`branch_id` + `department_id` on invitations, additive,
 nullable, real foreign keys with ON DELETE SET NULL — applied to dev and
-`_test`). Sprints 9.9, 9.10, 9.11, 9.13, 9.14, **10.0, 10.1, 10.2 and 10.3**: none.
+`_test`). Sprints 9.9, 9.10, 9.11, 9.13, 9.14, **10.0, 10.1, 10.2, 10.3 and 10.4**: none — 10.4 added a write path, not a column.
 
 ## Tests executed (through 2026-08-03, local)
 
@@ -1071,7 +1132,7 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-**The next action is Sprint 10.4**, as described in the Sprint 10.3 entry
+**The next action is Sprint 10.5**, as described in the Sprint 10.4 entry
 above. The list below is **Block A's** candidate list, kept because it is still
 the right list for whenever Block A resumes. Nothing on it is the next thing to
 do, and email in particular still requires the project owner's approval under
