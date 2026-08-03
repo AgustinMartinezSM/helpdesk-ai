@@ -72,45 +72,107 @@ svg {
 
 /* ---------------------------------------------------------------- tokens */
 
+/*
+ * THE SYSTEM IN ONE LINE: ink acts, yellow marks, chroma states.
+ *
+ * Three colour families, three jobs, no overlap (docs/architecture/brand-strategy.md):
+ *
+ *   ACTION  is achromatic — near-black on light, near-white on dark. Buttons,
+ *           links, focus. It collides with nothing, which is the point: the
+ *           status palette already spends blue, amber, green and red, so a
+ *           chromatic action colour has to squeeze in beside a state. Indigo
+ *           did, next to the open-blue, until Sprint 10.1.
+ *   BRAND   is #ffee8c and only #ffee8c, identical in both themes — which is
+ *           what lets one mark, one launcher and one set of markers serve
+ *           both. It marks identity, emphasis, orientation and selection. It
+ *           never carries text and never carries information alone.
+ *   STATUS  is the only family allowed to MEAN something: informational,
+ *           success, warning, danger, and the ticket status/priority scales
+ *           that are their domain-specific application.
+ *
+ * Every ratio in the comments below was measured with the WCAG 2.x
+ * relative-luminance formula against the real adjacent surface, not against
+ * --bg. Sprint 10.0 got that wrong once and it is the mistake worth not
+ * repeating: a token that passes on the page background can still fail on
+ * the sunken band a control actually sits on.
+ */
+
 :root {
   color-scheme: light;
 
-  /* Surfaces & text (zinc scale) */
-  --bg: #fafafa;
-  --surface: #ffffff;
-  --surface-2: #f4f4f5;
-  --text: #18181b;
-  --text-secondary: #52525b;
-  /* Verified >= 4.5:1 on every public surface, not just --bg. */
-  --text-muted: #65656d;
-  --border: color-mix(in srgb, #18181b 12%, transparent);
-  --border-strong: color-mix(in srgb, #18181b 22%, transparent);
-  /* Form-control boundary — keeps >= 3:1 non-text contrast (WCAG 1.4.11). */
-  --border-control: color-mix(in srgb, #18181b 48%, transparent);
+  /* ----- Neutral content: warm paper ---------------------------------- */
+  --bg: #faf9f5; /* L* 97.9 */
+  --surface: #ffffff; /* L* 100 */
+  --surface-2: #f2f0e9; /* L* 94.8 — hover fills, wells */
+  --text: #1a1a17; /* 16.56:1 on --bg, 17.44:1 on --surface */
+  --text-secondary: #55534c; /* 7.31:1 on --bg */
+  /* Verified >= 4.5:1 on every surface it can land on, not just --bg:
+     5.30 page · 5.58 card · 4.90 surface-2 · 5.03 sunken · 4.60 tinted. */
+  --text-muted: #6a6860;
+  --border: color-mix(in srgb, #1a1a17 12%, transparent);
+  --border-strong: color-mix(in srgb, #1a1a17 22%, transparent);
+  /* Form-control boundary — >= 3:1 non-text contrast (WCAG 1.4.11) on every
+     surface a control sits on: 3.98 card · 3.78 page · 3.49 surface-2 ·
+     3.59 sunken · 3.28 tinted. The tinted band is the binding one, and it
+     is the surface I forgot to measure first time round: #8a867c looked
+     right everywhere else and landed at 2.994 there. */
+  --border-control: #847f75;
 
-  /* Accent (indigo) — actions and accent TEXT. AA in both themes. */
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-contrast: #ffffff;
-  --accent-soft: color-mix(in srgb, #4f46e5 9%, transparent);
+  /* ----- Action: ink -------------------------------------------------- */
+  --action: #1a1a17;
+  --action-hover: #3a3833;
+  /* Label ON an action fill — 16.56:1, and 11.12:1 against the hover fill. */
+  --action-on: #faf9f5;
+  /* Subtle interactive wash: hover rows, pressed cells. Achromatic. */
+  --action-soft: color-mix(in srgb, #1a1a17 7%, transparent);
 
   /*
-   * Brand accent (pastel yellow). DECORATIVE AND SURFACE ONLY.
-   * As text on --bg it measures 1.13:1, so it must never carry text or
-   * any information on its own. Valid uses: ambient glow, gradient
-   * fields, highlight surfaces (with --brand-on text), markers,
-   * connectors, dividers and icon fills on dark surfaces.
+   * Focus INVERTS with the surface it sits on, always with an offset so the
+   * ring lands on the background rather than on the control. Ink here,
+   * paper in dark, and paper again inside an inverted region — which turns
+   * what used to be a hand-written exception on the dark CTA panel into the
+   * rule. 16.56:1 on the page, 15.71:1 on the sunken band.
+   */
+  --focus-ring: #1a1a17;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /*
+   * Selection is the brand's one informational-adjacent moment, and it is
+   * safe because it is a highlighter: the text stays ink and stays readable
+   * ON the highlight (15.54:1). Nothing is communicated by the colour — the
+   * browser communicates selection by the fill existing.
+   */
+  --selection: color-mix(in srgb, #ffee8c 55%, transparent);
+
+  /* ----- Brand: the signature ----------------------------------------- */
+  /*
+   * DECORATIVE, SURFACE AND MARK ONLY. As text on --bg it measures 1.12:1,
+   * so it must never carry text or any information on its own. Valid uses:
+   * the mark, ambient glow, gradient fields, highlight surfaces (with
+   * --brand-on text), markers, the active-nav indicator, connectors,
+   * dividers, and icon fills on dark surfaces.
    */
   --brand: #ffee8c;
   --brand-strong: #f5d76e;
   --brand-soft: color-mix(in srgb, #ffee8c 22%, transparent);
   --brand-glow: color-mix(in srgb, #ffee8c 30%, transparent);
-  /* Text/icon color to place ON a --brand surface — 15.07:1. */
-  --brand-on: #18181b;
+  /* Text/icon colour to place ON a --brand surface — 14.83:1, both themes. */
+  --brand-on: #1a1a17;
 
-  /* Feedback */
-  --danger: #dc2626;
-  --danger-soft: color-mix(in srgb, #dc2626 9%, transparent);
+  /* ----- Status: the only family that means something ------------------ */
+  /*
+   * Semantic feedback. Each `-fg` is verified >= 4.5:1 on its own `-soft`
+   * background AND on --surface and --bg, so a banner can sit anywhere.
+   */
+  --info: #1d4ed8; /* 5.90 on soft · 6.70 on card · 6.36 on page */
+  --info-soft: #eaf1fd;
+  --success: #166534; /* 6.36 · 7.13 · 6.77 */
+  --success-soft: #e9f5ec;
+  --warning: #8a4b06; /* 6.06 · 6.80 · 6.45 */
+  --warning-soft: #fbf1de;
+  --danger: #b42318; /* 5.73 · 6.57 · 6.24 */
+  --danger-soft: #fbeceb;
 
   /* Ticket status (badge fg keeps AA contrast on its soft bg) */
   --status-open-fg: #1d4ed8;
@@ -147,6 +209,44 @@ svg {
   --dur-fast: 150ms;
   --dur: 200ms;
 
+  /*
+   * Spacing. A 4px base, named by step rather than by pixel so a component
+   * asking for "the gap between a label and its control" does not encode
+   * the number. Values above --space-8 belong to layout, which uses
+   * --section-gap and the container widths instead.
+   */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /*
+   * Icon sizing. Every glyph in ui/icons.tsx is a 24px viewBox drawn with a
+   * 2px stroke, round caps and joins, and takes its colour from
+   * currentColor. Scaling one below 14px thins the stroke past legibility,
+   * so --icon-sm is the floor rather than a suggestion.
+   */
+  --icon-sm: 14px;
+  --icon-md: 18px;
+  --icon-lg: 24px;
+  --icon-stroke: 2;
+
+  /*
+   * Breakpoints, as documentation rather than as tokens: a custom property
+   * cannot be used inside a media query, so these numbers are still typed
+   * into each @media by hand. They are written here so the set stays small
+   * and nobody invents a tenth one.
+   *   480px  panel goes full width
+   *   640px  the "small screen" boundary Helpi and the nav both use
+   *   768px  grids collapse to one column
+   *   1024px the public container stops growing
+   */
+
   /* Public surface (marketing/portfolio pages) */
   --container-public: 72rem;
   --section-gap: clamp(4rem, 9vw, 6.5rem);
@@ -155,48 +255,128 @@ svg {
   --display-md: clamp(1.375rem, 2.5vw, 1.75rem);
 
   /*
-   * Public section surfaces. Sprint 7.6 alternated --bg and --surface,
-   * which are 1.7 L* apart — imperceptible, so sections visually merged.
-   * These levels are tuned in L* (perceptual lightness), not in WCAG
-   * contrast ratio, which compresses badly near both extremes:
-   * base 98.3 · sunken 93.4 · raised 100 · tinted 96.8.
+   * Public section surfaces, tuned in L* (perceptual lightness) rather than
+   * in WCAG contrast ratio, which compresses uselessly near both extremes.
+   *
+   * MEASURE AGAINST THE NEIGHBOUR, NOT AGAINST --bg. Sprint 10.0's first
+   * re-tune checked every band against the page background, passed, and put
+   * sunken and tinted 0.79 L* apart — below the 1.7 that Sprint 7.6 already
+   * proved imperceptible. Those two ARE adjacent, because .technical renders
+   * on --surface-sunken and the landing orders its sections
+   * raised → sunken → raised → technical → tinted.
+   *
+   *   base 97.9 · raised 100 · sunken 95.8 · tinted 92.4
+   *   rendered adjacencies: raised↔sunken 4.2 · sunken↔tinted 3.4
+   *
+   * base↔raised is 2.1 and cannot be more while both sit near white, so the
+   * page order is part of the system: a new page that puts those two next
+   * to each other has to be re-measured, not assumed.
    */
   --surface-raised: #ffffff;
-  --surface-sunken: #ececed;
-  --surface-tinted: #faf6e6;
+  --surface-sunken: #f5f3ec;
+  --surface-tinted: #f2e9cd;
+  --section-border: color-mix(in srgb, #1a1a17 12%, transparent);
+  --grid-line: color-mix(in srgb, #1a1a17 5%, transparent);
+
+  /*
+   * An always-dark contained region — the final CTA panel. It is not a
+   * theme; it is a surface that happens to be dark in both themes, so it
+   * re-declares the tokens whose meaning depends on lightness. See the
+   * [data-surface='inverted'] block below, which is how any such region
+   * gets them now instead of rebinding by hand.
+   */
   --surface-cta: #16161a;
-  --surface-cta-text: #fafafa;
-  --section-border: color-mix(in srgb, #18181b 12%, transparent);
-  --grid-line: color-mix(in srgb, #18181b 5%, transparent);
+  --surface-cta-text: #faf9f5;
+
+  /* ----- Compatibility aliases (REMOVE IN SPRINT 10.2) ----------------- */
+  /*
+   * --accent* was the indigo action colour. 73 call sites across 28 files
+   * used it, and most of them were asking for "the interactive colour",
+   * which is exactly what --action now is. Redefining the old names in
+   * terms of the new ones migrated all of those in one step and left the
+   * ones whose MEANING changed — links that now need an underline, eyebrows
+   * that hand their colour to the yellow marker, the wordmark — to be moved
+   * deliberately, which is the part a blind find-and-replace would have got
+   * wrong.
+   *
+   * They are aliases, not a second identity: every one resolves to the same
+   * ink. Sprint 10.2 deletes them once the remaining call sites are moved.
+   */
+  --accent: var(--action);
+  --accent-hover: var(--action-hover);
+  --accent-contrast: var(--action-on);
+  --accent-soft: var(--action-soft);
+}
+
+/*
+ * Any region that is dark regardless of theme declares itself inverted and
+ * inherits a coherent set rather than rebinding four tokens by hand. Before
+ * Sprint 10.1 the CTA panel did exactly that, with a comment recording that
+ * the inherited focus ring measured 2.87:1 inside it — the kind of defect
+ * that only shows up when somebody tabs into a button nobody tabs into.
+ */
+[data-surface='inverted'] {
+  color-scheme: dark;
+  --text: var(--surface-cta-text);
+  --text-secondary: color-mix(
+    in srgb,
+    var(--surface-cta-text) 78%,
+    transparent
+  );
+  --text-muted: color-mix(in srgb, var(--surface-cta-text) 64%, transparent);
+  --border: color-mix(in srgb, var(--surface-cta-text) 16%, transparent);
+  --border-strong: color-mix(in srgb, var(--surface-cta-text) 28%, transparent);
+  --action: var(--surface-cta-text);
+  --action-hover: color-mix(in srgb, var(--surface-cta-text) 86%, transparent);
+  --action-on: #16161a;
+  --action-soft: color-mix(in srgb, var(--surface-cta-text) 10%, transparent);
+  /* 16.26:1 against the panel — the measurement the old rebind was chasing. */
+  --focus-ring: var(--surface-cta-text);
+  --selection: color-mix(in srgb, #ffee8c 35%, transparent);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --bg: #09090b;
-  --surface: #131316;
-  --surface-2: #1d1d22;
-  --text: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #8a8a94;
-  --border: color-mix(in srgb, #f4f4f5 14%, transparent);
-  --border-strong: color-mix(in srgb, #f4f4f5 24%, transparent);
-  --border-control: color-mix(in srgb, #f4f4f5 38%, transparent);
+  /* ----- Neutral content: warm ink ------------------------------------ */
+  --bg: #0d0c0a; /* L* 3.3 */
+  --surface: #171613; /* L* 7.3 */
+  --surface-2: #211f1b; /* L* 11.8 */
+  --text: #f5f3ed; /* 17.62:1 on --bg, 16.31:1 on --surface */
+  --text-secondary: #a8a49a; /* 7.86:1 on --bg */
+  /* 5.61 bg · 5.19 surface · 4.72 surface-2 · 5.85 sunken · 4.77 tinted. */
+  --text-muted: #8d8980;
+  --border: color-mix(in srgb, #f5f3ed 14%, transparent);
+  --border-strong: color-mix(in srgb, #f5f3ed 24%, transparent);
+  /* >= 3:1 everywhere: 3.85 bg · 3.56 surface · 3.24 surface-2. */
+  --border-control: #726e64;
 
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
-  --accent-contrast: #1e1b4b;
-  --accent-soft: color-mix(in srgb, #818cf8 14%, transparent);
+  /* ----- Action: paper (the inversion) -------------------------------- */
+  --action: #f5f3ed;
+  --action-hover: #e2dfd5;
+  /* Label ON an action fill — 15.72:1, and 13.08:1 against the hover fill. */
+  --action-on: #1a1a17;
+  --action-soft: color-mix(in srgb, #f5f3ed 10%, transparent);
 
-  /* Same rule as light: decorative and surface only, never text. */
+  --focus-ring: #f5f3ed; /* 17.62:1 on --bg */
+  --selection: color-mix(in srgb, #ffee8c 35%, transparent); /* 6.1:1 */
+
+  /* ----- Brand: the same value, which is the whole point --------------- */
   --brand: #ffee8c;
   --brand-strong: #ffe45c;
   --brand-soft: color-mix(in srgb, #ffee8c 16%, transparent);
   --brand-glow: color-mix(in srgb, #ffee8c 12%, transparent);
-  --brand-on: #18181b;
+  --brand-on: #1a1a17;
 
-  --danger: #f87171;
-  --danger-soft: color-mix(in srgb, #f87171 14%, transparent);
+  /* ----- Status ------------------------------------------------------- */
+  --info: #93c5fd; /* 9.60 on soft · 10.03 on surface */
+  --info-soft: #101b2b;
+  --success: #86efac; /* 12.52 · 12.89 */
+  --success-soft: #0e1c14;
+  --warning: #fcd34d; /* 11.93 · 12.55 */
+  --warning-soft: #221a0c;
+  --danger: #fca5a5; /* 9.40 · 9.53 */
+  --danger-soft: #241312;
 
   --status-open-fg: #93c5fd;
   --status-open-bg: color-mix(in srgb, #3b82f6 14%, transparent);
@@ -212,18 +392,25 @@ svg {
   --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.5), 0 10px 28px rgb(0 0 0 / 0.45);
 
   /*
-   * Same L*-based tuning as light: base 2.5 · sunken 1.4 · raised 8.5 ·
-   * tinted 8.8. The raised level had to climb well above --surface to be
-   * seen as a band at all — near black, large hex deltas are small
-   * perceptual ones.
+   * Dark is the EASY case for banding, not the hard one, and Sprint 10.0's
+   * strategy document had that backwards until the measurements corrected
+   * it. Near black the scale compresses, so --surface-raised and
+   * --surface-tinted are lifted well clear of it rather than kept inside:
+   *
+   *   base 3.3 · raised 8.3 · sunken 1.4 · tinted 11.4
+   *   rendered adjacencies: base↔raised 5.0 · raised↔sunken 7.0 ·
+   *   sunken↔tinted 10.0 — the largest separations in the whole system.
+   *
+   * The --section-border hairline reinforces those deltas; it does not
+   * carry them.
    */
-  --surface-raised: #18181e;
-  --surface-sunken: #050507;
-  --surface-tinted: #1b1913;
+  --surface-raised: #1a1814;
+  --surface-sunken: #050505;
+  --surface-tinted: #221e14;
   --surface-cta: #201e16;
-  --surface-cta-text: #fafafa;
-  --section-border: color-mix(in srgb, #f4f4f5 12%, transparent);
-  --grid-line: color-mix(in srgb, #f4f4f5 6%, transparent);
+  --surface-cta-text: #f5f3ed;
+  --section-border: color-mix(in srgb, #f5f3ed 12%, transparent);
+  --grid-line: color-mix(in srgb, #f5f3ed 6%, transparent);
 }
 
 /* ------------------------------------------------------------------ base */
@@ -241,13 +428,45 @@ h3 {
   letter-spacing: -0.02em;
 }
 
+/*
+ * The ring reads from --focus-ring, which inverts with the surface: ink on
+ * light, paper on dark, paper again inside [data-surface='inverted']. The
+ * offset is what makes the inversion sufficient — the ring lands on the
+ * background rather than on the control it outlines, so it never has to
+ * contrast with a fill it sits on top of.
+ */
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  background: var(--selection);
+  /* The highlighter keeps the text ink rather than inverting it: 15.54:1. */
+  color: var(--brand-on);
+}
+
+[data-theme='dark'] ::selection {
+  color: var(--text);
+}
+
+/*
+ * With an achromatic action colour an inline link cannot be told apart by
+ * colour, so it is told apart by an underline — always, and with one offset
+ * rather than the two that had drifted apart across pages. This is a gain
+ * rather than a cost: the system already refuses to convey ticket status by
+ * colour alone, and this extends the same rule to interaction.
+ *
+ * Navigation, buttons and cards are not inline links and are exempt: they
+ * are told apart by position, fill and shape.
+ */
+.prose-link,
+p > a:not([class]),
+li > a:not([class]) {
+  color: var(--action);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: from-font;
 }
 
 /* Visually hidden but available to assistive tech. */
