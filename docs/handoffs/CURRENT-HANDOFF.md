@@ -918,9 +918,12 @@ own Definition of Ready.
 
 ## Sprint 10.5 in one breath
 
-Remote CI green on the closing HEAD — the run is recorded in
-`SPRINT-010.5.md`. Full local gate green: format, lint, typecheck across 15
-projects, **1251 unit tests across all 15**, and build.
+Remote CI green on the closing HEAD: run `30863440095` on `dbd5837`, first
+attempt, preceded by run `30863018362` on `b121ee5` — **the run in which this
+sprint's integration tests executed for the first time**, taking the
+organizations integration suite from 28 to 38. Full local gate green: format,
+lint, typecheck across 15 projects, **1251 unit tests across all 15**, and
+build.
 
 **A tenant is now fully self-serve.** It can be created (10.4), named, renamed
 and handed to somebody else, without anybody touching a database. The decision

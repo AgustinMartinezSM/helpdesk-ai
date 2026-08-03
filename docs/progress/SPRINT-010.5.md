@@ -1,6 +1,14 @@
 # Sprint 10.5 — Transferring ownership, and naming the organization
 
-Status: **OPEN (2026-08-04).** The Definition of Ready below was written and
+Status: **CLOSED (2026-08-04).** Remote CI green on the final HEAD: run
+[`30863440095`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30863440095)
+on `dbd5837`, green on its first attempt — preceded by run
+[`30863018362`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30863018362)
+on `b121ee5`, which is **the run in which this sprint's integration tests
+executed for the first time**, since Docker was not available locally. That run
+took the organizations integration suite from 28 tests to 38, and
+`transfer-ownership.int.spec.ts` passed against a real PostgreSQL database on
+its first execution anywhere. The Definition of Ready below was written and
 checked against the repository before any code.
 
 ## Definition of Ready
