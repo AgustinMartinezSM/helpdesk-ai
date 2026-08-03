@@ -75,8 +75,12 @@
   border-radius: var(--radius-pill);
   font-size: 0.6875rem;
   font-weight: 500;
+  /* --text-secondary, not --text-muted: this pill sits on the panel's own
+     wash, which lifts the surface enough to put muted text at 4.00:1. The
+     scene is aria-hidden, but that hides it from assistive technology, not
+     from the people looking at it. */
+  color: var(--text-secondary);
   white-space: nowrap;
-  color: var(--text-muted);
 }
 
 .aiRows {
@@ -92,10 +96,14 @@
   font-size: 0.8125rem;
 }
 
+/* --text-secondary rather than --text-muted: this panel draws its own
+   wash over the card, which lifts the surface just enough to put muted text
+   at 4.00:1. The scene is aria-hidden, but that hides it from assistive
+   technology, not from the people looking at it. */
 .aiRow dt {
   flex-shrink: 0;
   width: 4.25rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .aiRow dd {
