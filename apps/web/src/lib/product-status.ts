@@ -184,6 +184,13 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         note: 'Archiving a branch keeps everything inside it, so reopening restores the branch exactly as it was.',
       },
       {
+        name: 'Support teams',
+        description:
+          'Define the groups that resolve tickets — one central team, a regional one, or a team per branch — and route work to them.',
+        status: 'api-ready',
+        note: 'A support team is the group that resolves a ticket, which is not the same as the department a requester belongs to. The API is complete and tested; the screen for it is planned.',
+      },
+      {
         name: 'Ticket ownership',
         description:
           'Requesters keep control of their tickets — including the final "confirm fix and close".',

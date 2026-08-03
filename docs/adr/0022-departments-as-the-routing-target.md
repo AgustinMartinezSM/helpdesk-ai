@@ -146,6 +146,15 @@ Negative / accepted:
   the sprint's job is the team foundation, and a second nullable context
   column with its own picker is a separable increment. Nothing in this ADR
   has to change when it lands.
+- **`routing.manage` reaches every ticket in the organization.** Implementing
+  the sprint made this unavoidable and it is recorded rather than left to be
+  discovered: triage is placing work nobody has placed yet, and a service desk
+  manager holds `read_team`, so requiring visibility before routing would let
+  them route only tickets already in their own team — exactly the work that
+  needs no routing. The consequence is that a `routing.manage` holder can
+  place any ticket into a team they belong to and thereby read it. That is
+  what the key means, and it is why the matrix grants it to owner,
+  organization_admin and service_desk_manager and to nobody else.
 - **Team scope is enforced at assignment, not at read.** A team narrowed to
   fewer branches after a ticket was assigned keeps seeing that ticket. That is
   deliberate — retroactively hiding assigned work would lose it — and it is

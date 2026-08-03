@@ -1,7 +1,8 @@
 # Sprint 9.12 — Support teams
 
-Status: **Definition of Ready, open (2026-08-03).** Written and checked before
-any code, the pattern the last seven sprints set.
+Status: **Implemented and verified locally (2026-08-03).** The Definition of
+Ready below was written and checked before any code; the outcome record at the
+end says what landed against it.
 
 **This DoR was rewritten after its first draft was wrong.** The first version
 decided that routing meant sending a ticket to a department, and that
@@ -202,3 +203,86 @@ before code. The eight required scenarios are the acceptance criteria rather
 than an afterthought. Two migrations, both additive, no backfill. The cut is
 taken here: no rules, no requester department, no queues, no screen.
 Proceeding under the standing autonomous authorization.
+
+## Outcome record (2026-08-03)
+
+Four commits: the opening (`fab3df3`), the model correction (`312357a`), the
+support-team domain (`b822373`), and routing with the required scenarios
+(`7f69c79`).
+
+**The first draft of this sprint was wrong and the correction is the most
+valuable thing in it.** It had decided that routing meant sending a ticket to
+a department and that `tickets.read_team` would key on department membership.
+The project owner stopped it before a table existed. The repository agreed
+with them — `Department.branchId` is a required foreign key, so a department
+cannot be one central IT team serving every store — and the model that landed
+keeps the two concepts apart. That is a semantic migration this project will
+now never have to pay for.
+
+**`tickets.read_team` has a call site, which closes the sharpest hole in the
+permission map.** `service_desk_manager` and `team_manager` held
+`tickets.assign_agent` with no read beyond their own tickets: they could
+assign work they could not list. They can now see the queues of the teams
+they belong to.
+
+**All four team shapes the product needs are expressible by one mechanism.**
+A team with no `support_team_branches` rows serves the organization; a team
+with rows serves exactly those. Central, organization-wide, regional and
+branch-local are the same kind of row with different scope, and the tests
+exercise the first and the last against each other.
+
+### What the implementation decided that the DoR had left open
+
+- **Routing does not require `canView` first, and the ADR now says so.** The
+  test for scenario 1 failed on the first run, which is what surfaced it:
+  triage is placing work nobody has placed, so requiring visibility would let
+  a desk manager route only what was already theirs. `routing.manage`
+  therefore reaches every ticket in the organization. Recorded in ADR 0022 as
+  a consequence rather than left as an accident that happened to work for
+  admins.
+- **Archived teams leave the `tm` claim; archived branches stay in `br`.**
+  The one asymmetry between the two scoped claims, and it is deliberate: a
+  branch is a place and its history stays visible to whoever covered it,
+  while a team is a working group and archiving one is how an organization
+  says it no longer works. The claim grants visibility, so it has to stop.
+- **A scope event carries the whole set, and an empty array is applied as
+  organization-wide.** A consumer that read empty as "no change" would leave a
+  widened team still narrowed — the one drift that hides work from the people
+  who should get it.
+- **The scope projection upserts a placeholder team row.** A scope event can
+  outrun the created event on a cold projection; dropping the edge would lose
+  the reach silently, so the placeholder carries the oldest possible timestamp
+  and the real row wins on its own LWW apply.
+- **The in-memory ticket repository enforces the team predicate.** The first
+  version did not, and the suite passed green against a fake more permissive
+  than the SQL — R2's lesson, re-learned in one run.
+- **No screen (D10 held).** The surface is API-complete at the `api-ready`
+  status ADR 0009 exists for.
+
+### Verified
+
+organizations-service 221 tests across 9 suites, tickets-service 94 across 7
+(16 new, the eight required scenarios among them), and the full workspace
+green: format, lint, typecheck, test and build across all 15 projects, plus
+all nine integration suites against real PostgreSQL and RabbitMQ. Two
+migrations applied to both the dev and `_test` databases.
+
+### Still true after this sprint
+
+No automatic routing rules — named out by the project owner, and the right
+call. No `requesterDepartmentId` on the ticket: the model has room for it and
+ADR 0022 does not change when it lands. No queues. Agents keep `read_all`
+(D4). `team_manager`'s own-scope `teams.manage` stays unrepresented. There is
+no screen for any of it yet, so teams are created through the API.
+
+## Documentation
+
+Meaningfully changed this sprint: ADR 0022 — rewritten from its first draft,
+keeping its filename, because renaming a decision record to hide that it
+changed its mind is the opposite of what one is for — the permission matrix
+(which now says `read_team` and `teams.manage` key on support teams rather
+than departments), the schema comment that claimed routing would key on
+departments, the desk-and-team-manager comment in the permission map that
+described the hole this sprint closed, and this document.
+
+No fictional experience, customers, incidents or approvals were introduced.

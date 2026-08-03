@@ -1,14 +1,16 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** 9.11 — organization setup, implemented; 9.4-9.10 complete
+**Sprint:** 9.12 — support teams, implemented; 9.4-9.11 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
 
-Read `docs/progress/SPRINT-009.11.md` first — it is short and it removes a
-property three sprints leaned on (`INTERNAL_SERVICE_TOKEN` no longer guards
-any mutation). Then `docs/progress/SPRINT-009.10.md` and **ADR 0021** —
+Read `docs/progress/SPRINT-009.12.md` and **ADR 0022** first — a support team
+and a department are DIFFERENT CONCEPTS, and the first draft of that ADR got
+it wrong before the project owner stopped it. Then `SPRINT-009.11.md`, which
+removes a property three sprints leaned on (`INTERNAL_SERVICE_TOKEN` no longer
+guards any mutation). Then `docs/progress/SPRINT-009.10.md` and **ADR 0021** —
 membership
 administration has four rules that are security rules rather than validation,
 and one of them (nobody administers their own membership) is load-bearing in a
@@ -304,6 +306,47 @@ never make archiving cascade; never let a station become something that
 authenticates (ADR 0016/0017 — it is the till, not the cashier, and the screen
 says so out loud because somebody will otherwise expect a shared login).
 
+## Sprint 9.12 in one breath
+
+**A support team is NOT a department, and the model says so.** A department
+(ADR 0016) is the requester's organizational area and belongs to exactly one
+branch. A SUPPORT TEAM is the group that resolves a ticket, it is
+ORGANIZATION-owned, and its branch reach is an explicit join —
+`support_team_branches`, where **no rows means organization-wide**. That one
+mechanism expresses central, organization-wide, regional and branch-local
+teams. Do not merge the two concepts, and do not "fix" this by making
+`Department.branchId` nullable: ADR 0022 rejects that explicitly, and the
+first draft of that ADR made the mistake so nobody has to make it again.
+
+**`tickets.read_team` finally has a call site**, which closed the sharpest
+hole in the permission map: `service_desk_manager` and `team_manager` held
+`tickets.assign_agent` with no read beyond their own tickets — they could
+assign work they could not list.
+
+**The `tm` claim is minted like `br`, with ONE asymmetry**: archived teams are
+EXCLUDED, while archived branches stay in `br`. A branch is a place and its
+history stays visible to whoever covered it; a team is a working group, and
+archiving one is how an organization says it no longer works.
+
+**`routing.manage` reaches every ticket in the organization.** Routing does
+not check `canView` first, deliberately: triage is placing work nobody has
+placed, and a desk manager holds `read_team`, so requiring visibility would
+let them route only what was already theirs. The consequence — a holder can
+place any ticket into their own team and thereby read it — is in ADR 0022.
+
+**Scope is enforced at ASSIGNMENT, not at read.** A branch-local team cannot
+see unauthorized branches because such a ticket was never assignable, not
+because a filter removes it later. A ticket with no branch cannot go to a
+scoped team at all.
+
+**No screen.** The whole surface is api-ready; teams are created through the
+API, and the Organization screen gains them in a later sprint.
+
+Three things NOT to do: never derive `read_team` from department membership;
+never treat an empty `branchIds` as "serves nothing" (it is the
+organization-wide case, in the domain, the projection AND the event); never
+add a team field to a ticket event payload — that is a v3 conversation.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -404,6 +447,9 @@ scope_analytics_to_organization, notification scope_reads_by_organization,
 users add_directory_memberships; enforce_tenant_not_null in tickets, ai,
 analytics, notification; users drop_user_profile_roles. Sprint 9.5:
 organizations branch_structure, tickets add_branch_context_and_structure_refs.
+Sprint 9.12: organizations support_teams (three tables), tickets
+support_team_routing (assigned_team_id + two ref tables) — both additive and
+nullable, no backfill, applied to dev and _test.
 Sprint 9.6: users add_profile_fields. Sprint 9.7: none. Sprint 9.8:
 organizations invitations (one table, a partial unique index in raw SQL —
 do NOT "simplify" the Prisma model to @@unique, it would generate a total
@@ -416,8 +462,9 @@ build) plus all nine integration suites against real PostgreSQL and
 RabbitMQ, and a green remote CI run recorded in its sprint document: the
 tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
 9.10 — the last of those is run `30780847286` on `5d1534b`, green on its first
-attempt, and 9.11 is run `30783298165` on `5cc0036` — the tip of `main`, green
-on its first attempt, and the second of two for that sprint.
+attempt, and 9.11 is run `30783298165` on `5cc0036`, green on its first and the
+second of two for that sprint. **9.12 has the full local gate and all nine
+integration suites green; recording its remote run is the first thing to do.**
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
@@ -446,14 +493,12 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-The next sprint is a product choice, and 9.11 changed the list again:
+The next sprint is a product choice, and 9.12 changed the list again:
 
-1. **Routing (9.12), the number this sprint borrowed from and gave back.**
-   Departments now have a screen and rows and still nothing keys on them;
-   routing is what makes them mean something, and it is what would finally let
-   a branch manager see unrouted intake instead of the central view swallowing
-   it. It also introduces the first department event, alongside its first
-   consumer.
+1. **A screen for support teams**, the one thing 9.12 deliberately did not
+   build: the surface is api-ready, so teams exist only for whoever calls the
+   API. It is the smallest gap between what the platform can do and what a
+   person can do, and the Organization screen already has the shape.
 2. **Bulk/CSV import.** The people it loads have a screen to appear on, an
    administrator who can fix what the import got wrong, and now branches to be
    assigned to — three arguments that did not all exist before.
