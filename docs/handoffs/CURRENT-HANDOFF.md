@@ -1,8 +1,9 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** **10.1 complete — design system, logo and Helpi. BLOCK A IS CLOSED;
-BLOCK B IS OPEN.** 10.0 (brand strategy) and 9.4-9.16 complete
+**Sprint:** **10.2 complete — the migration finished, and the surfaces nobody
+had written. BLOCK A IS CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy),
+10.1 (design system) and 9.4-9.16 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -729,6 +730,67 @@ image, no `not-found.tsx` or `error.tsx`, the Account screen printing raw role
 keys — and the public-site copy work the brand strategy scoped. Open it with
 its own Definition of Ready.
 
+## Sprint 10.2 in one breath
+
+**`--accent*` is gone.** The two-step is the part to reuse: 10.1 aliased the
+old names so nothing broke, 10.2 moved the 44 remaining call sites to the
+token that owns each JOB and deleted the aliases. **The same `--accent` was
+doing four different things** — an action, a focus ring, an identity chip,
+and a colour twelve elements had only because a colour was there. A
+find-and-replace would have made all four the same thing permanently. One
+token was added: `--focus-halo`, for the soft inner glow a form control draws
+where its own border radius would clip an offset ring.
+
+**`var(--typo)` is not an error in CSS**, and that is the finding worth
+carrying. It falls back to the inherited or initial value and the page
+renders, so a mistyped token is invisible until somebody looks at the pixel.
+A test now resolves every custom property every stylesheet asks for, and it
+found **five undefined tokens in shipped code** — the worst a `--surface-1`
+with no fallback that had been leaving the invitation-code block with **no
+background at all**. None was introduced by the migration; all were older
+than it.
+
+**`not-found.tsx` and `error.tsx` exist, at the ROOT.** A URL matching no
+route matches no route group either, so one under `(public)` would never
+render for the addresses that need it most. They carry the mark rather than a
+shell, because `AppShell` needs a session and a mistyped URL must not depend
+on the BFF being up. The error screen **never puts `error.message` on the
+screen** — Next redacts it in production and leaves it real in development,
+and a screen that shows a stack trace in one environment and not the other
+teaches people to distrust it. It shows the `digest` instead and logs the
+real error to the console.
+
+**There is a social preview image**, generated rather than drawn: a binary
+would be a second source of truth for the identity and would go stale
+silently. Same geometry as the mark, so a reviewer can diff it.
+
+**`apps/web/specs` is type-checked, and the reason it never was is worth
+knowing.** Three compounding faults: `tsconfig.spec.json` listed
+`src/**/*.spec.tsx`, which matches nothing because the tests live in
+`apps/web/specs`; it referenced `tsconfig.json`, which sets `noEmit`, so
+`tsc -p` failed with **TS6310 before reading a file** — anyone who tried
+would have concluded the setup was broken, and it was; and
+`@helpdesk-ai/web` had **no typecheck target at all**, which is why the gate
+printed "14 projects" for months in a 15-project workspace. It now says 15.
+The specs were type-clean; I verified the check is not vacuous by breaking it
+on purpose and watching it fail.
+
+Three things NOT to do: never delete `apps/web/.next` while the dev server is
+running (it corrupts the server's state and produces an Internal Server Error
+that looks like a defect in whatever you just wrote — it cost this sprint a
+wrong diagnosis); never add a token reference without checking it resolves,
+because CSS will not tell you; never let an error screen guess at a cause —
+every domain refusal renders inside the page that raised it (ADR 0020), so
+reaching that screen means the product does not know.
+
+**The next action is Sprint 10.3.** The remaining visual debt is small and
+listed in `design-system.md`: no checkbox/radio/Dialog/Banner/Tooltip
+primitives (and none should be invented ahead of a use case), and the
+authenticated surface still unopened in a browser. The larger Block B work is
+the public-site copy the brand strategy scoped — the multi-tenant story is
+the product's actual shape and is nearly absent from public prose. Open it
+with its own Definition of Ready.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -887,7 +949,7 @@ do NOT "simplify" the Prisma model to @@unique, it would generate a total
 index and make re-invitation impossible). Sprint 9.15: organizations
 invitation_placement (`branch_id` + `department_id` on invitations, additive,
 nullable, real foreign keys with ON DELETE SET NULL — applied to dev and
-`_test`). Sprints 9.9, 9.10, 9.11, 9.13, 9.14, **10.0 and 10.1**: none.
+`_test`). Sprints 9.9, 9.10, 9.11, 9.13, 9.14, **10.0, 10.1 and 10.2**: none.
 
 ## Tests executed (through 2026-08-03, local)
 
@@ -951,7 +1013,7 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-**The next action is Sprint 10.2**, as described in the Sprint 10.1 entry
+**The next action is Sprint 10.3**, as described in the Sprint 10.2 entry
 above. The list below is **Block A's** candidate list, kept because it is still
 the right list for whenever Block A resumes. Nothing on it is the next thing to
 do, and email in particular still requires the project owner's approval under

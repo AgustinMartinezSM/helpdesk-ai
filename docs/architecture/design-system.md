@@ -220,33 +220,32 @@ that does not exist.
 
 ## Migration notes
 
-**`--accent*` are compatibility aliases and Sprint 10.2 deletes them.** They
-resolve to the action family (`--accent: var(--action)` and so on). 73 call
-sites used them; redefining the names migrated all of those in one step and
-left the ones whose MEANING changed to be moved deliberately — the links
-that needed an underline, the eyebrows that handed their colour to the
-yellow marker, the wordmark, and the selected-filter chip that would
-otherwise have become indistinguishable from a primary button. A blind
-find-and-replace would have got exactly those wrong. A test asserts the
-aliases resolve to the action family and that no indigo literal survives
-anywhere.
+**`--accent*` is gone, and the two-step is the part worth reusing.**
 
-**What is left for 10.2**: move the remaining `--accent*` call sites to the
-semantic names and delete the aliases; the `.mobileLinkActive` and
-`.priorityActive` treatments are already migrated and can serve as the
-pattern.
+Step one (Sprint 10.1) redefined the old names in terms of the new ones. All
+73 call sites kept working, the product looked right immediately, and the
+migration stopped being urgent. Step two (10.2) moved the remaining 44 sites
+to the token that owns each JOB and deleted the aliases — and that is where
+the value was, because **the same `--accent` was doing four different
+things**: an action, a focus ring, an identity chip, and a colour twelve
+elements had only because a colour was there. A find-and-replace would have
+made all four the same thing permanently.
+
+Two tests replace the aliases. One asserts no `--accent` token is declared
+and no stylesheet reaches for one. The other is the general form of the same
+trap, and it earned its place immediately: **`var(--typo)` is not an error in
+CSS** — it falls back to the inherited or initial value and the page renders
+— so a mistyped token is invisible until somebody looks at the pixel. Checked
+against the declared set, five undefined tokens turned up in shipped code,
+the worst of them a `--surface-1` with no fallback that had been leaving the
+invitation-code block with no background at all.
 
 ## Known visual debt
 
-- **No social preview image.** Every shared link renders without one, and it
-  would be the first place the mark appears off-site.
-- **No `not-found.tsx` and no `error.tsx`.** 404s and crashes fall back to
-  unbranded framework defaults, in English.
-- **The Account screen prints raw role keys** (`agent` where every other
-  screen says Technician) — the one place the vocabulary layer breaks.
-- **`apps/web/specs` is type-checked by nothing**, so a type error in the two
-  suites this sprint added surfaces as a runtime failure. Carried from
-  earlier sprints and now one file larger again.
+Four items on this list were closed in Sprint 10.2: the social preview, the
+404 and error surfaces, the Account screen's raw role keys, and specs
+type-checking. What is left:
+
 - **Checkboxes and radios have no primitive.** The organization screen styles
   native inputs directly. There is no Dialog, Banner or Tooltip component
   either; nothing in the product needs one yet, and inventing them ahead of a
