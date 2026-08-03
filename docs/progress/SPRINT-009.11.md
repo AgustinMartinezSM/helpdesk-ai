@@ -1,7 +1,8 @@
 # Sprint 9.11 — Organization setup
 
-Status: **Definition of Ready, open (2026-08-03).** Written and checked before
-any code, the pattern the last six sprints set.
+Status: **Implemented and verified locally (2026-08-03).** The Definition of
+Ready below was written and checked before any code, the pattern the last six
+sprints set; the outcome record at the end says what landed against it.
 
 **This sprint takes the number 9.11, which four code comments had reserved for
 routing.** Those comments now say 9.12, changed in the opening commit rather
@@ -225,3 +226,90 @@ decided above with its argument rather than left for the implementation. There
 is no migration. The scope is smaller than 9.10: three entities that already
 exist, two keys, one screen, and a controller deleted. Proceeding under the
 standing autonomous authorization.
+
+## Outcome record (2026-08-03)
+
+Three commits: the opening (`7a64ab6` — this DoR and the routing renumbering),
+the service (`5c33ead`), and the BFF and screen (`f872559`).
+
+**`INTERNAL_SERVICE_TOKEN` now guards no mutation anywhere in the platform.**
+That is the sentence this sprint exists for. The six structure routes left
+`/internal/*` in the same commit that added their replacements, and a spec
+asserts what is left: with the credential present and correct they answer 404
+— the guard passed and there is no route. What the credential still opens is
+two read-only membership lookups, so an unattributed call can no longer change
+anything. SECURITY.md's paragraph moved with it.
+
+**A new organization can be set up from inside the product.** An administrator
+registers branches, gives each one departments and service points, archives
+what closed and reopens it. The People screen's branch editor picks the new
+branches up with no other step, which is the sprint's own proof that the two
+surfaces agree.
+
+**The tenant stopped being something a caller says.** Removing
+`:organizationId` from six routes is a smaller diff than it is a change: an
+operator holding the database could be trusted to name an organization, and a
+browser cannot. There is now no request in the product where the caller
+chooses which tenant they are writing to.
+
+### What the implementation decided that the DoR had left open
+
+- **`GET /organizations/branches` moved rather than being duplicated.** 9.10
+  put it in the memberships controller because the branch editor was its only
+  reader; with writes for the same noun arriving, one door per resource beat a
+  prefix named after whichever screen asked first. The BFF's `/people/branches`
+  moved to `/organization/branches` with it.
+- **Two controllers, not one.** Departments and stations are edited by their
+  own id, so their PATCH routes cannot hang off `branches/:branchId` without
+  asking the caller to repeat a parent the row already knows.
+- **The station listing translates the membership id in one query.**
+  `MembershipRepository` gained `listByOrganizationAndIds` so the structure
+  read is two queries rather than one per station, and a membership that has
+  since disappeared resolves to null rather than failing the read — the
+  schema's SET NULL says losing a manager must not take the place down, and a
+  read that refused would contradict it.
+- **The archived marker became part of the label string.** Rendering it as a
+  sibling text node splits the name across nodes, which a screen reader and a
+  test both then have to reassemble.
+- **The nav became an array**, which 9.9's outcome record had already claimed
+  it was. Two hardcoded links were fine; the third is where it stops being.
+
+### Verified
+
+organizations-service 221 tests across 9 suites (up from 213), including a new
+controller spec for the eight routes, the cross-tenant 404s, the immutable
+code refused as an unknown property, and the no-cascade archive. web-bff 38
+across 7 suites, asserting both hops, the route shapes and that a refusal
+passes through unchanged. apps/web 160 across 21 suites, twelve new: the
+setup walk, the reader who gets the same page with no controls, the
+belongs-nowhere state, the stale-permission 403, and the nav entry appearing
+and disappearing with `branches.read` rather than with a role name.
+
+The full gate — format, lint, typecheck, test, build — ran green across all 15
+projects, and all nine integration suites passed against real PostgreSQL and
+RabbitMQ.
+
+### Still true after this sprint
+
+The organization's own name and slug cannot be changed from inside the
+product. There is no transfer of ownership, and no branch-scoped
+administration for branch managers — `branches.update`'s ○ cell stays
+unrepresented until own-scope has a representation. Departments store rows and
+nothing keys on them; routing (9.12) is what will. Nothing is deleted, only
+archived. The first administrator of a fresh database is still a SQL step:
+this sprint made an organization's places manageable, not its first person.
+Nothing is deployed, and the platform still sends no email.
+
+## Documentation
+
+Meaningfully changed this sprint: `SECURITY.md`'s service-credential
+paragraph, which listed structure among what the credential opens and now
+records that it opens no mutation at all; `product-status.ts` (Organization
+setup added as available with the no-cascade caveat, and Branch assignment's
+now-false caveat about creation being an operator step removed); the four
+code comments that reserved 9.11 for routing, which say 9.12; the internal
+controller comments that described a stand-in for a surface that now exists;
+and this document. The 9.5 sprint document keeps its original wording — it is
+the record of what was planned when.
+
+No fictional experience, customers, incidents or approvals were introduced.

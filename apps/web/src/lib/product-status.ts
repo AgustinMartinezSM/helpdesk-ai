@@ -175,7 +175,13 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         description:
           'Give a branch manager the branches they are responsible for, and see who covers what.',
         status: 'available',
-        note: 'Creating and archiving branches themselves is still an operator step, not a product screen.',
+      },
+      {
+        name: 'Organization setup',
+        description:
+          'Register the branches you work from, their departments and their service points, and archive what closed.',
+        status: 'available',
+        note: 'Archiving a branch keeps everything inside it, so reopening restores the branch exactly as it was.',
       },
       {
         name: 'Ticket ownership',

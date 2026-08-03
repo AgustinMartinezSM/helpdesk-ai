@@ -1,12 +1,15 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** 9.10 — member administration, implemented; 9.4-9.9 complete
+**Sprint:** 9.11 — organization setup, implemented; 9.4-9.10 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
 
-Read `docs/progress/SPRINT-009.10.md` and **ADR 0021** first — membership
+Read `docs/progress/SPRINT-009.11.md` first — it is short and it removes a
+property three sprints leaned on (`INTERNAL_SERVICE_TOKEN` no longer guards
+any mutation). Then `docs/progress/SPRINT-009.10.md` and **ADR 0021** —
+membership
 administration has four rules that are security rules rather than validation,
 and one of them (nobody administers their own membership) is load-bearing in a
 way that is not obvious from the code. Then 9.9 with **ADR 0020** (the browser
@@ -263,14 +266,51 @@ make the directory's default anything but active; never re-add an
 unattributable membership write path, however convenient a break-glass would
 feel.
 
+## Sprint 9.11 in one breath
+
+**`INTERNAL_SERVICE_TOKEN` guards no mutation anywhere in the platform.**
+That is the property to know, and it reverses what SECURITY.md said through
+three sprints. The six structure routes left `/internal/*` — deleted, like
+9.10's — and what the credential still opens is two read-only membership
+lookups: the mint-time resolution auth-service calls and the verification
+tickets-service calls. A spec pins that the deleted routes answer 404 with the
+credential present.
+
+**Branches, departments and stations are a product surface**
+(`organizations/branches`, plus `organizations/departments|stations/:id` for
+the children, which are edited by their own id). Two keys: `branches.create`
+for a branch, `branches.update` for everything else about one AND everything
+inside it — departments and stations get no key, because they are contents of
+a scope rather than scopes, and the matrix has no row for them.
+
+**The tenant is no longer a path parameter anywhere.** Six routes lost
+`:organizationId`; it comes from `requireOrganization(actor)`. An operator
+holding the database could be trusted to name a tenant; a browser cannot.
+
+**A station's responsible person is named by `userId`.** The column still
+holds a membership id — nothing a browser can reach ever returns one — and
+`ListBranchStructureUseCase` translates it back in one query. A membership
+that has since vanished resolves to null rather than failing the read: SET
+NULL says losing a manager must not take the place down.
+
+**Archiving a branch does not cascade.** Its departments and stations are
+untouched, so reopening restores it exactly. A cascade could not be undone —
+un-archiving would have to guess which children were already archived. It is
+also unnecessary: tickets-service refuses an archived branch at the branch
+lookup, so nothing under it is reachable through it.
+
+Three things NOT to do: never re-add `:organizationId` to a public route;
+never make archiving cascade; never let a station become something that
+authenticates (ADR 0016/0017 — it is the till, not the cashier, and the screen
+says so out loud because somebody will otherwise expect a shared login).
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
   belongs-nowhere → token without tenant claims, refused at writes with 403.
 - **`INTERNAL_SERVICE_TOKEN` lives in three `.env` files** (auth, tickets,
-  organizations). Since 9.10 the mutations it guards are the STRUCTURE ones
-  (branch/department/station creation and editing) — the membership lifecycle
-  moved to a person's token. Since 9.8 it is ROTATABLE
+  organizations) and, since 9.11, guards NO MUTATION — only the two read-only
+  membership lookups. Since 9.8 it is ROTATABLE
   (`INTERNAL_SERVICE_TOKEN_PREVIOUS`, accepted alongside the current value;
   runbook in SECURITY.md) and the gateway strips its header inbound. What is
   still missing is ATTRIBUTION: nothing records which process called, and
@@ -336,12 +376,15 @@ feel.
   overwrites), but `user_snapshots` is still keyed on `userId` alone; counting
   them in both needs the table rekeyed.
 - **Attribution for internal service calls** (per-caller credentials) — the
-  half of ADR 0011's story 9.8 did not close. Narrower since 9.10: what is
-  left behind that credential is structure creation, not membership.
-- **Branches, departments and stations are still created and archived through
-  the operator endpoints.** 9.10 attributed branch ASSIGNMENT, not branch
-  creation — `branches.create` and `branches.update` have no key and no
-  screen. This is the setup story, not the onboarding one.
+  half of ADR 0011's story 9.8 did not close. Much narrower since 9.11:
+  everything behind that credential is a read, so an unattributed call can no
+  longer change anything.
+- **The organization's own name and slug cannot be changed from inside the
+  product.** The slug is what the bootstrap lookup keys on, so immutability
+  there is its own decision; the name is a small endpoint nobody has needed.
+- **Departments store rows and nothing keys on them.** Routing (9.12) is what
+  will, and it is also what introduces their first event — there is no
+  department contract on purpose (no consumer, no promise).
 - **No transfer of ownership.** `owner` can be neither granted nor targeted,
   so an organization whose only privileged member is its owner cannot change
   that from inside. Refusing is the reversible half of a decision nobody has
@@ -364,7 +407,7 @@ organizations branch_structure, tickets add_branch_context_and_structure_refs.
 Sprint 9.6: users add_profile_fields. Sprint 9.7: none. Sprint 9.8:
 organizations invitations (one table, a partial unique index in raw SQL —
 do NOT "simplify" the Prisma model to @@unique, it would generate a total
-index and make re-invitation impossible). Sprints 9.9 and 9.10: none.
+index and make re-invitation impossible). Sprints 9.9, 9.10 and 9.11: none.
 
 ## Tests executed (through 2026-08-03, local)
 
@@ -373,7 +416,9 @@ build) plus all nine integration suites against real PostgreSQL and
 RabbitMQ, and a green remote CI run recorded in its sprint document: the
 tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
 9.10 — the last of those is run `30780847286` on `5d1534b`, green on its first
-attempt. The backfill sequence ran once, verified clean, and is recorded in
+attempt. **9.11 has the full local gate and all nine integration suites green
+but NO remote CI run recorded yet**; that is the first thing to do with it.
+The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
 9.10 also ran a manual end-to-end walk across six real processes (browser
@@ -401,27 +446,29 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-The next sprint is a product choice, and 9.10 changed which candidates matter:
+**First: push 9.11 and record its remote CI run** in
+`docs/progress/SPRINT-009.11.md`, the way every sprint since 9.8 closes.
 
-1. **Organization setup: branches, departments and stations as a screen.**
-   Now the sharpest remaining operator-only step, and the one 9.10 deliberately
-   did not take. Assigning a branch manager to their branches is attributed;
-   creating the branch they manage is still a curl by nobody in particular.
-   Two keys already in the matrix (`branches.create`, `branches.update`), one
-   service that already owns the rows, and the People screen's branch editor
-   as the consumer proving the shape works. It is also what makes a fresh
-   organization usable without a database client.
-2. **Bulk/CSV import**, which 9.9 displaced and 9.10 did not touch. The people
-   it loads now have a screen to appear on AND an administrator who can fix
-   what the import got wrong — which is the argument that was missing before.
+Then the next sprint is a product choice, and 9.11 changed the list again:
+
+1. **Routing (9.12), the number this sprint borrowed from and gave back.**
+   Departments now have a screen and rows and still nothing keys on them;
+   routing is what makes them mean something, and it is what would finally let
+   a branch manager see unrouted intake instead of the central view swallowing
+   it. It also introduces the first department event, alongside its first
+   consumer.
+2. **Bulk/CSV import.** The people it loads have a screen to appear on, an
+   administrator who can fix what the import got wrong, and now branches to be
+   assigned to — three arguments that did not all exist before.
 3. **Email delivery.** Unchanged and still the project owner's decision: ADR
    0008 requires explicit approval and a superseding ADR naming which provider
    and why. Until then an invitation reaches its recipient because an admin
    copied a code and passed it on — which the interface says out loud.
-4. **The template vocabulary**, still blocking seeded role-template rows.
-5. **Transfer of ownership**, new to this list: 9.10 refused `owner` in both
-   directions rather than deciding what moving it should mean. Small, and it
-   closes the one lockout the model still allows.
+4. **The template vocabulary**, still blocking seeded role-template rows, and
+   now also blocking the own-scope (○) cells that two sprints have left
+   unrepresented.
+5. **Transfer of ownership**, plus the organization's own name: the two small
+   gaps that keep a fresh organization from being fully self-serve.
 
 Short debt unchanged otherwise: R9 beyond organizations-service, per-caller
 service credentials (the attribution half of ADR 0011), `mv` compared by
@@ -447,18 +494,21 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > (shared-terminal sessions), 9.8 (invitations, and organizations-service
 > gaining its public face — ADR 0019), 9.9 (the people-management surface, and
 > a browser that decides what to render from permissions rather than role names
-> — ADR 0020) and 9.10 (member administration, and the deletion of the last
-> unattributable membership write path — ADR 0021). Read
-> docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.10.md and ADR 0021
+> — ADR 0020), 9.10 (member administration — ADR 0021) and 9.11 (organization
+> setup, after which INTERNAL_SERVICE_TOKEN guards no mutation anywhere). Read
+> docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.11.md and ADR 0021
 > before touching anything, and verify the repo state with git first.
 >
-> Pick the next sprint — the handoff's "Exact next action" lays out five
-> candidates and what each unblocks. Organization setup is the sharpest one
-> left: 9.10 made assigning a branch manager to their branches an attributed
-> act, but creating the branch they manage is still a curl nobody can be
-> blamed for, and a fresh organization cannot be made usable without a database
-> client. Open whichever you choose with its own Definition of Ready, the
-> pattern the last six sprints set.
+> 9.11 is green locally across the full gate and all nine integration suites
+> but has NO remote CI run recorded — push it and record the result in its
+> sprint document first, the way every sprint since 9.8 closes.
+>
+> Then pick the next sprint — the handoff's "Exact next action" lays out five
+> candidates and what each unblocks. Routing is the natural one: departments
+> now have a screen, rows and no behaviour, unrouted intake still falls to the
+> central view, and 9.11 handed the number 9.12 back to it. Open whichever you
+> choose with its own Definition of Ready, the pattern the last seven sprints
+> set.
 >
 > Standing rules: never a permanent shared password or unattributable request
 > path (ADR 0016); profile fields never become credentials (ADR 0017); an
@@ -470,8 +520,10 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > module import-free; nobody administers their own membership and `owner` is
 > refused in both directions (ADR 0021); the permission-implication table
 > bounds grants and never decides access; the directory's default listing stays
-> active-only; do not seed role-template rows (vocabulary still open); do not
-> remove the retiredBindingKeys literals; do not remove the gateway's
+> active-only; no public route ever takes an organization id — the tenant comes
+> from the token; archiving never cascades; a station authenticates nothing
+> (ADR 0016/0017); do not seed role-template rows (vocabulary still open); do
+> not remove the retiredBindingKeys literals; do not remove the gateway's
 > x-internal-service-token strip; rotation must keep deriving the born window.
 
 ## Repository isolation
