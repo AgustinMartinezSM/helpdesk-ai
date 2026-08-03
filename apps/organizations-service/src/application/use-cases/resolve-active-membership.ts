@@ -6,6 +6,7 @@ import {
 } from '../../domain/organization';
 import type { MembershipRepository } from '../ports/membership.repository';
 import type { BranchMembershipRepository } from '../ports/structure.repository';
+import type { SupportTeamRepository } from '../ports/support-team.repository';
 import type { OrganizationRepository } from '../ports/organization.repository';
 
 export interface ResolvedMembership {
@@ -33,6 +34,18 @@ export interface ResolvedMembership {
    * people who covered it.
    */
   branchIds: string[];
+  /**
+   * Support team ids this membership ACTIVELY belongs to, minted as the `tm`
+   * claim (Sprint 9.12, ADR 0022). Always present, possibly empty — same
+   * frozen shape as `branchIds` for the same reason.
+   *
+   * Archived teams are EXCLUDED, which is the one place this differs from
+   * `branchIds`: a branch is a place and its history stays visible to whoever
+   * covered it, while a team is a working group and archiving one is how an
+   * organization says it no longer works. The claim grants visibility, so it
+   * has to stop.
+   */
+  teamIds: string[];
 }
 
 /**
@@ -69,6 +82,7 @@ export class ResolveActiveMembershipUseCase {
     private readonly memberships: MembershipRepository,
     private readonly organizations: OrganizationRepository,
     private readonly branchMemberships: BranchMembershipRepository,
+    private readonly teams: SupportTeamRepository,
   ) {}
 
   async execute(userId: string): Promise<ResolvedMembership | null> {
@@ -92,6 +106,7 @@ export class ResolveActiveMembershipUseCase {
         permissions: [...permissionsForTemplate(membership.roleTemplate)],
         membershipVersion: membership.version,
         branchIds: await this.branchMemberships.listBranchIds(membership.id),
+        teamIds: await this.teams.listActiveTeamIdsForMembership(membership.id),
       };
 
       if (organization.slug !== BOOTSTRAP_ORGANIZATION_SLUG) {

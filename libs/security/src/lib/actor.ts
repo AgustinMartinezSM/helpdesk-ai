@@ -35,6 +35,16 @@ export interface Actor {
    * enforced more widely is the moment to revisit.
    */
   readonly branchIds?: ReadonlySet<string>;
+  /**
+   * The SUPPORT TEAMS the active membership belongs to (the `tm` claim),
+   * optional for the same reasons `branchIds` is: absence denies, which is
+   * the safe direction, and it has one consumer (`tickets.read_team`).
+   *
+   * These are teams that RESOLVE tickets, never the requester departments
+   * the person may also belong to (ADR 0022). Nothing here derives from
+   * department membership.
+   */
+  readonly teamIds?: ReadonlySet<string>;
 }
 
 /**

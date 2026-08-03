@@ -11,6 +11,10 @@ import {
   type InvitationRepository,
 } from '../application/ports/invitation.repository';
 import { MEMBERSHIP_REPOSITORY } from '../application/ports/membership.repository';
+import {
+  SUPPORT_TEAM_REPOSITORY,
+  type SupportTeamRepository,
+} from '../application/ports/support-team.repository';
 import type { MembershipRepository } from '../application/ports/membership.repository';
 import {
   CLOCK,
@@ -41,6 +45,14 @@ import { EnsureMembershipUseCase } from '../application/use-cases/ensure-members
 import { GetMembershipUseCase } from '../application/use-cases/get-membership';
 import { IssueInvitationUseCase } from '../application/use-cases/issue-invitation';
 import { ListBranchStructureUseCase } from '../application/use-cases/list-branch-structure';
+import {
+  CreateSupportTeamUseCase,
+  GetSupportTeamUseCase,
+  ListSupportTeamsUseCase,
+  SetSupportTeamMembersUseCase,
+  SetSupportTeamScopeUseCase,
+  UpdateSupportTeamUseCase,
+} from '../application/use-cases/support-teams';
 import { ListInvitationsUseCase } from '../application/use-cases/list-invitations';
 import {
   GetMembershipBranchesUseCase,
@@ -66,11 +78,13 @@ import { PrismaInvitationRepository } from '../infrastructure/prisma/prisma-invi
 import { PrismaMembershipRepository } from '../infrastructure/prisma/prisma-membership.repository';
 import { PrismaOperationalStationRepository } from '../infrastructure/prisma/prisma-operational-station.repository';
 import { PrismaOrganizationRepository } from '../infrastructure/prisma/prisma-organization.repository';
+import { PrismaSupportTeamRepository } from '../infrastructure/prisma/prisma-support-team.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { UuidGenerator } from '../infrastructure/uuid-generator';
 import { HealthController } from './health/health.controller';
 import { InvitationsController } from './invitations/invitations.controller';
 import { MembershipsController } from './memberships/memberships.controller';
+import { SupportTeamsController } from './teams/teams.controller';
 import {
   OrganizationStructureController,
   OrganizationStructureItemsController,
@@ -111,6 +125,7 @@ export class AppModule {
         HealthController,
         InvitationsController,
         MembershipsController,
+        SupportTeamsController,
         OrganizationStructureController,
         OrganizationStructureItemsController,
         InternalMembershipsController,
@@ -251,16 +266,19 @@ export class AppModule {
             memberships: MembershipRepository,
             organizations: OrganizationRepository,
             branchMemberships: BranchMembershipRepository,
+            teams: SupportTeamRepository,
           ) =>
             new ResolveActiveMembershipUseCase(
               memberships,
               organizations,
               branchMemberships,
+              teams,
             ),
           inject: [
             MEMBERSHIP_REPOSITORY,
             ORGANIZATION_REPOSITORY,
             BRANCH_MEMBERSHIP_REPOSITORY,
+            SUPPORT_TEAM_REPOSITORY,
           ],
         },
         {
@@ -355,6 +373,74 @@ export class AppModule {
           inject: [
             STATION_REPOSITORY,
             MEMBERSHIP_REPOSITORY,
+            CLOCK,
+            EVENT_PUBLISHER,
+          ],
+        },
+        {
+          provide: SUPPORT_TEAM_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaSupportTeamRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: ListSupportTeamsUseCase,
+          useFactory: (teams: SupportTeamRepository) =>
+            new ListSupportTeamsUseCase(teams),
+          inject: [SUPPORT_TEAM_REPOSITORY],
+        },
+        {
+          provide: GetSupportTeamUseCase,
+          useFactory: (
+            teams: SupportTeamRepository,
+            memberships: MembershipRepository,
+          ) => new GetSupportTeamUseCase(teams, memberships),
+          inject: [SUPPORT_TEAM_REPOSITORY, MEMBERSHIP_REPOSITORY],
+        },
+        {
+          provide: CreateSupportTeamUseCase,
+          useFactory: (
+            teams: SupportTeamRepository,
+            clock: Clock,
+            ids: IdGenerator,
+            events: OrganizationEventPublisher,
+          ) => new CreateSupportTeamUseCase(teams, clock, ids, events),
+          inject: [
+            SUPPORT_TEAM_REPOSITORY,
+            CLOCK,
+            ID_GENERATOR,
+            EVENT_PUBLISHER,
+          ],
+        },
+        {
+          provide: UpdateSupportTeamUseCase,
+          useFactory: (
+            teams: SupportTeamRepository,
+            clock: Clock,
+            events: OrganizationEventPublisher,
+          ) => new UpdateSupportTeamUseCase(teams, clock, events),
+          inject: [SUPPORT_TEAM_REPOSITORY, CLOCK, EVENT_PUBLISHER],
+        },
+        {
+          provide: SetSupportTeamMembersUseCase,
+          useFactory: (
+            teams: SupportTeamRepository,
+            memberships: MembershipRepository,
+            clock: Clock,
+          ) => new SetSupportTeamMembersUseCase(teams, memberships, clock),
+          inject: [SUPPORT_TEAM_REPOSITORY, MEMBERSHIP_REPOSITORY, CLOCK],
+        },
+        {
+          provide: SetSupportTeamScopeUseCase,
+          useFactory: (
+            teams: SupportTeamRepository,
+            branches: BranchRepository,
+            clock: Clock,
+            events: OrganizationEventPublisher,
+          ) => new SetSupportTeamScopeUseCase(teams, branches, clock, events),
+          inject: [
+            SUPPORT_TEAM_REPOSITORY,
+            BRANCH_REPOSITORY,
             CLOCK,
             EVENT_PUBLISHER,
           ],

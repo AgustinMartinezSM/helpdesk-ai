@@ -20,6 +20,11 @@ interface ActiveMembershipResponse {
    * an empty array rather than a null.
    */
   branchIds: string[];
+  /**
+   * Support team ids for the `tm` claim (Sprint 9.12). Same frozen
+   * always-present-possibly-empty shape as branchIds, for the same reason.
+   */
+  teamIds: string[];
 }
 
 /**
@@ -55,6 +60,7 @@ export class InternalMembershipsController {
         permissions: [],
         membershipVersion: null,
         branchIds: [],
+        teamIds: [],
       };
     }
 
@@ -63,6 +69,7 @@ export class InternalMembershipsController {
       permissions: resolved.permissions,
       membershipVersion: resolved.membershipVersion,
       branchIds: resolved.branchIds,
+      teamIds: resolved.teamIds,
     };
   }
 }

@@ -57,6 +57,9 @@ describe('HttpMembershipResolver', () => {
       permissions: [],
       membershipVersion: 2,
       branchIds: [],
+      // Defaulted by the schema so an organizations-service from before
+      // Sprint 9.12 does not fail a mint outright.
+      teamIds: [],
     });
   });
 

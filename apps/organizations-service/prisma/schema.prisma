@@ -25,9 +25,10 @@ model Organization {
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
 
-  memberships Membership[]
-  branches    Branch[]
-  invitations Invitation[]
+  memberships  Membership[]
+  branches     Branch[]
+  invitations  Invitation[]
+  supportTeams SupportTeam[]
 
   @@map("organizations")
 }
@@ -107,9 +108,10 @@ model Membership {
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
 
-  branchMemberships     BranchMembership[]
-  departmentMemberships DepartmentMembership[]
-  responsibleFor        OperationalStation[]
+  branchMemberships      BranchMembership[]
+  departmentMemberships  DepartmentMembership[]
+  supportTeamMemberships SupportTeamMembership[]
+  responsibleFor         OperationalStation[]
 
   @@unique([organizationId, userId])
   @@index([userId])
@@ -140,16 +142,20 @@ model Branch {
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
 
-  departments       Department[]
-  stations          OperationalStation[]
-  branchMemberships BranchMembership[]
+  departments        Department[]
+  stations           OperationalStation[]
+  branchMemberships  BranchMembership[]
+  supportTeamScopes  SupportTeamBranch[]
 
   @@unique([organizationId, code])
   @@map("branches")
 }
 
-// Departments exist per ADR 0016's shape but nothing keys on them yet —
-// routing will (Sprint 9.12). Rows and memberships only, no behavior.
+// A department is the REQUESTER'S organizational area (ADR 0016), which is
+// why it belongs to exactly one branch. It is not the group that resolves a
+// ticket — that is SupportTeam above, and Sprint 9.12 kept the two apart
+// rather than overloading this one (ADR 0022). Rows and memberships only; the
+// first thing to key on departments will be requester context, not routing.
 model Department {
   id String @id @db.Uuid
 
@@ -193,6 +199,70 @@ model OperationalStation {
 
   @@unique([branchId, code])
   @@map("operational_stations")
+}
+
+// A SUPPORT TEAM is the operational group that resolves a ticket (ADR 0022).
+// It is NOT a department: a department is the requester's organizational area
+// and belongs to exactly one branch, which is why it cannot represent one
+// central IT team serving every store.
+//
+// Organization-owned on purpose. Branch reach is expressed by the join below
+// rather than by ownership, so one mechanism covers all four shapes the
+// product needs: organization-wide, central, regional and branch-local.
+model SupportTeam {
+  id String @id @db.Uuid
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Stable operator-facing key, unique per organization; never globally —
+  // every organization may have an "it".
+  code   String
+  name   String
+  status String
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  members      SupportTeamMembership[]
+  branchScopes SupportTeamBranch[]
+
+  @@unique([organizationId, code])
+  @@map("support_teams")
+}
+
+// Membership × team, and deliberately a DIFFERENT join from
+// department_memberships: the person who fixes the till is not in Checkout.
+// Visibility (tickets.read_team) derives from this one and never from that
+// one.
+model SupportTeamMembership {
+  teamId String      @map("team_id") @db.Uuid
+  team   SupportTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  membershipId String     @map("membership_id") @db.Uuid
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@id([teamId, membershipId])
+  @@map("support_team_memberships")
+}
+
+// Team × branch. NO ROWS MEANS ORGANIZATION-WIDE — the absence is the
+// meaning, not a missing configuration. Rows limit the team to exactly those
+// branches, which is how a regional team over three of five stores is
+// expressed without a second team per store.
+model SupportTeamBranch {
+  teamId String      @map("team_id") @db.Uuid
+  team   SupportTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  branchId String @map("branch_id") @db.Uuid
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@id([teamId, branchId])
+  @@map("support_team_branches")
 }
 
 // Membership × branch, the join ADR 0016 chose over a branch_id column: a

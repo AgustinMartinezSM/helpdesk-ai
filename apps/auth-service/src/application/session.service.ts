@@ -105,6 +105,12 @@ export class SessionService {
           membership.branchIds.length > 0 && {
             br: membership.branchIds,
           }),
+        // `tm` on the same terms as `br`: only when non-empty, because
+        // team-scoped visibility denies on absence either way.
+        ...(membership &&
+          membership.teamIds.length > 0 && {
+            tm: membership.teamIds,
+          }),
       });
 
     const now = this.clock.now();

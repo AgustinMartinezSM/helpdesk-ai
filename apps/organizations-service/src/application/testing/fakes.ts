@@ -10,6 +10,11 @@ import type {
   RoleTemplate,
 } from '../../domain/membership';
 import type { Invitation, InvitationStatus } from '../../domain/invitation';
+import type { SupportTeam } from '../../domain/support-team';
+import type {
+  SupportTeamRepository,
+  UpdateSupportTeamChanges,
+} from '../ports/support-team.repository';
 import type { Organization } from '../../domain/organization';
 import { DuplicatePendingInvitationError } from '../../domain/errors';
 import type { OrganizationEventPublisher } from '../ports/event-publisher';
@@ -538,6 +543,13 @@ export class FakeOrganizationEventPublisher implements OrganizationEventPublishe
     station: OperationalStation;
     correlationId?: string;
   }[] = [];
+  readonly teamsCreated: { team: SupportTeam; correlationId?: string }[] = [];
+  readonly teamsUpdated: { team: SupportTeam; correlationId?: string }[] = [];
+  readonly teamScopesChanged: {
+    team: SupportTeam;
+    branchIds: readonly string[];
+    correlationId?: string;
+  }[] = [];
   readonly invitationsIssued: {
     invitation: Invitation;
     correlationId?: string;
@@ -553,6 +565,28 @@ export class FakeOrganizationEventPublisher implements OrganizationEventPublishe
     revokedByUserId: string;
     correlationId?: string;
   }[] = [];
+
+  async supportTeamCreated(
+    team: SupportTeam,
+    correlationId?: string,
+  ): Promise<void> {
+    this.teamsCreated.push({ team, correlationId });
+  }
+
+  async supportTeamUpdated(
+    team: SupportTeam,
+    correlationId?: string,
+  ): Promise<void> {
+    this.teamsUpdated.push({ team, correlationId });
+  }
+
+  async supportTeamScopeChanged(
+    team: SupportTeam,
+    branchIds: readonly string[],
+    correlationId?: string,
+  ): Promise<void> {
+    this.teamScopesChanged.push({ team, branchIds, correlationId });
+  }
 
   async membershipCreated(
     membership: Membership,
@@ -654,5 +688,95 @@ export class SequentialIdGenerator implements IdGenerator {
   next(): string {
     this.counter += 1;
     return `${this.prefix}${String(this.counter).padStart(12, '0')}`;
+  }
+}
+
+/**
+ * Enforces the organization scope for real, like every other structure fake:
+ * a spec that hands it a foreign team id gets the same null the database
+ * would, so a use case that forgot to scope a lookup fails here rather than
+ * passing against a doll more permissive than production.
+ */
+export class InMemorySupportTeamRepository implements SupportTeamRepository {
+  readonly teams: SupportTeam[] = [];
+  readonly members = new Map<string, string[]>();
+  readonly scopes = new Map<string, string[]>();
+
+  async create(team: SupportTeam): Promise<SupportTeam | null> {
+    const taken = this.teams.some(
+      (existing) =>
+        existing.organizationId === team.organizationId &&
+        existing.code === team.code,
+    );
+    if (taken) {
+      return null;
+    }
+    this.teams.push(team);
+    return team;
+  }
+
+  async findByOrganizationAndId(
+    organizationId: string,
+    teamId: string,
+  ): Promise<SupportTeam | null> {
+    return (
+      this.teams.find(
+        (team) => team.id === teamId && team.organizationId === organizationId,
+      ) ?? null
+    );
+  }
+
+  async list(organizationId: string): Promise<SupportTeam[]> {
+    return this.teams
+      .filter((team) => team.organizationId === organizationId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async update(
+    teamId: string,
+    changes: UpdateSupportTeamChanges,
+    at: Date,
+  ): Promise<SupportTeam> {
+    const index = this.teams.findIndex((team) => team.id === teamId);
+    if (index < 0) {
+      throw new Error(`no support team "${teamId}" to update`);
+    }
+    const updated: SupportTeam = {
+      ...this.teams[index],
+      ...changes,
+      updatedAt: at,
+    };
+    this.teams[index] = updated;
+    return updated;
+  }
+
+  async setMembers(teamId: string, membershipIds: string[]): Promise<void> {
+    this.members.set(teamId, [...membershipIds]);
+  }
+
+  async listMemberIds(teamId: string): Promise<string[]> {
+    return this.members.get(teamId) ?? [];
+  }
+
+  async listActiveTeamIdsForMembership(
+    membershipId: string,
+  ): Promise<string[]> {
+    // Archived teams are excluded here exactly as the SQL excludes them: this
+    // read mints the claim that grants visibility.
+    return this.teams
+      .filter(
+        (team) =>
+          team.status === 'active' &&
+          (this.members.get(team.id) ?? []).includes(membershipId),
+      )
+      .map((team) => team.id);
+  }
+
+  async setBranchScope(teamId: string, branchIds: string[]): Promise<void> {
+    this.scopes.set(teamId, [...branchIds]);
+  }
+
+  async listBranchIds(teamId: string): Promise<string[]> {
+    return this.scopes.get(teamId) ?? [];
   }
 }

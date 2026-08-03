@@ -36,6 +36,7 @@ import { PrismaBranchRepository } from '../../infrastructure/prisma/prisma-branc
 import { PrismaMembershipRepository } from '../../infrastructure/prisma/prisma-membership.repository';
 import { PrismaOrganizationRepository } from '../../infrastructure/prisma/prisma-organization.repository';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { PrismaSupportTeamRepository } from '../../infrastructure/prisma/prisma-support-team.repository';
 import { UuidGenerator } from '../../infrastructure/uuid-generator';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -146,6 +147,7 @@ describe('structure events (real broker, real database)', () => {
       memberships,
       organizations,
       branchMemberships,
+      new PrismaSupportTeamRepository(prisma),
     );
 
     const bootstrap = await organizations.findBySlug(

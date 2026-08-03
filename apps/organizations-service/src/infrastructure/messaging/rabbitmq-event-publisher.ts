@@ -9,12 +9,16 @@ import {
   membershipStatusChangedV1,
   stationCreatedV1,
   stationUpdatedV1,
+  supportTeamCreatedV1,
+  supportTeamScopeChangedV1,
+  supportTeamUpdatedV1,
   type EventContract,
   type MessagingClient,
   type MessagingLogger,
 } from '@helpdesk-ai/messaging';
 import type { OrganizationEventPublisher } from '../../application/ports/event-publisher';
 import type { Branch, OperationalStation } from '../../domain/branch';
+import type { SupportTeam } from '../../domain/support-team';
 import type { Invitation } from '../../domain/invitation';
 import type {
   Membership,
@@ -183,6 +187,65 @@ export class RabbitMqEventPublisher implements OrganizationEventPublisher {
         updatedAt: station.updatedAt.toISOString(),
       },
       station.organizationId,
+      correlationId,
+    );
+  }
+
+  async supportTeamCreated(
+    team: SupportTeam,
+    correlationId?: string,
+  ): Promise<void> {
+    await this.safePublish(
+      supportTeamCreatedV1,
+      {
+        teamId: team.id,
+        organizationId: team.organizationId,
+        key: team.code,
+        name: team.name,
+        status: team.status,
+        createdAt: team.createdAt.toISOString(),
+      },
+      team.organizationId,
+      correlationId,
+    );
+  }
+
+  async supportTeamUpdated(
+    team: SupportTeam,
+    correlationId?: string,
+  ): Promise<void> {
+    await this.safePublish(
+      supportTeamUpdatedV1,
+      {
+        teamId: team.id,
+        organizationId: team.organizationId,
+        key: team.code,
+        name: team.name,
+        status: team.status,
+        updatedAt: team.updatedAt.toISOString(),
+      },
+      team.organizationId,
+      correlationId,
+    );
+  }
+
+  async supportTeamScopeChanged(
+    team: SupportTeam,
+    branchIds: readonly string[],
+    correlationId?: string,
+  ): Promise<void> {
+    await this.safePublish(
+      supportTeamScopeChangedV1,
+      {
+        teamId: team.id,
+        organizationId: team.organizationId,
+        // An empty array is the organization-wide case and must travel as
+        // one: a consumer that treated absence as "no change" would keep a
+        // stale scope after a team was widened.
+        branchIds: [...branchIds],
+        changedAt: team.updatedAt.toISOString(),
+      },
+      team.organizationId,
       correlationId,
     );
   }

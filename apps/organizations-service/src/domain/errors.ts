@@ -104,6 +104,41 @@ export class MembershipNotAdministrableError extends OrganizationDomainError {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Support team errors (Sprint 9.12, ADR 0022). A team is the group that
+// RESOLVES a ticket, not the requester's department, so these are their own
+// errors rather than structure ones — a message about managing branches would
+// name the wrong concept to whoever was refused.
+// ---------------------------------------------------------------------------
+
+/** Raised when the actor's token carries no `teams.manage`. */
+export class ForbiddenTeamActionError extends OrganizationDomainError {
+  constructor() {
+    super('you are not allowed to manage support teams here');
+  }
+}
+
+/**
+ * Raised when a team id names nothing in the caller's organization. Foreign
+ * and nonexistent answer alike — confirming that another organization has a
+ * team with this id is the leak.
+ */
+export class SupportTeamNotFoundError extends OrganizationDomainError {
+  constructor(organizationId: string, teamId: string) {
+    super(
+      `support team "${teamId}" not found in organization "${organizationId}"`,
+    );
+  }
+}
+
+export class DuplicateSupportTeamCodeError extends OrganizationDomainError {
+  constructor(organizationId: string, code: string) {
+    super(
+      `organization "${organizationId}" already has a support team with code "${code}"`,
+    );
+  }
+}
+
 /**
  * Raised when the actor's token carries neither `branches.create` nor
  * `branches.update` nor `branches.read`, whichever the operation needed.

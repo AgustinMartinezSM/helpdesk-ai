@@ -10,6 +10,12 @@ export interface ResolvedMembership {
    * question either way; whether the claim is minted is the session's call.
    */
   branchIds: string[];
+  /**
+   * Support team ids the membership ACTIVELY belongs to (Sprint 9.12).
+   * Same always-present shape as branchIds; archived teams are already
+   * excluded upstream, because the claim grants visibility.
+   */
+  teamIds: string[];
 }
 
 /**

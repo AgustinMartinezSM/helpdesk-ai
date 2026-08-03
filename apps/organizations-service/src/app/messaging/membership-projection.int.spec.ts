@@ -30,6 +30,7 @@ import { PrismaBranchMembershipRepository } from '../../infrastructure/prisma/pr
 import { PrismaMembershipRepository } from '../../infrastructure/prisma/prisma-membership.repository';
 import { PrismaOrganizationRepository } from '../../infrastructure/prisma/prisma-organization.repository';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { PrismaSupportTeamRepository } from '../../infrastructure/prisma/prisma-support-team.repository';
 import { UuidGenerator } from '../../infrastructure/uuid-generator';
 import { RegistrationConsumer } from './registration.consumer';
 
@@ -98,6 +99,7 @@ describe('membership provisioning (real broker, real database)', () => {
       memberships,
       organizations,
       new PrismaBranchMembershipRepository(prisma),
+      new PrismaSupportTeamRepository(prisma),
     );
     // Only memberships are wiped. The bootstrap organization comes from a
     // migration, and `migrate deploy` will not re-insert it on the next run —

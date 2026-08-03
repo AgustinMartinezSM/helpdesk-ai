@@ -12,6 +12,7 @@ import {
   DEPARTMENT_REPOSITORY,
   STATION_REPOSITORY,
 } from '../../application/ports/structure.repository';
+import { SUPPORT_TEAM_REPOSITORY } from '../../application/ports/support-team.repository';
 import {
   FakeOrganizationEventPublisher,
   InMemoryBranchMembershipRepository,
@@ -20,6 +21,7 @@ import {
   InMemoryMembershipRepository,
   InMemoryOperationalStationRepository,
   InMemoryOrganizationRepository,
+  InMemorySupportTeamRepository,
 } from '../../application/testing/fakes';
 import { permissionsForTemplate } from '../../domain/permissions';
 import type { Membership } from '../../domain/membership';
@@ -68,6 +70,7 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
   const departments = new InMemoryDepartmentRepository();
   const stations = new InMemoryOperationalStationRepository();
   const branchMemberships = new InMemoryBranchMembershipRepository();
+  const supportTeams = new InMemorySupportTeamRepository();
   const events = new FakeOrganizationEventPublisher();
 
   beforeAll(async () => {
@@ -88,6 +91,8 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
       .useValue(stations)
       .overrideProvider(BRANCH_MEMBERSHIP_REPOSITORY)
       .useValue(branchMemberships)
+      .overrideProvider(SUPPORT_TEAM_REPOSITORY)
+      .useValue(supportTeams)
       .overrideProvider(EVENT_PUBLISHER)
       .useValue(events)
       // Replacing the client keeps the suite broker-free: the real one owns
@@ -238,8 +243,9 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
       permissions: [],
       membershipVersion: null,
       // Frozen shape: even the no-membership answer carries the empty
-      // array, because auth-service parses exactly `branchIds: string[]`.
+      // arrays, because auth-service parses exactly these names.
       branchIds: [],
+      teamIds: [],
     });
   });
 
@@ -254,6 +260,7 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
     expect(response.body.organizationId).toBe(ORGANIZATION_ID);
     expect(response.body.membershipVersion).toBe(1);
     expect(response.body.branchIds).toEqual([]);
+    expect(response.body.teamIds).toEqual([]);
     expect(new Set(response.body.permissions)).toEqual(
       permissionsForTemplate('agent'),
     );

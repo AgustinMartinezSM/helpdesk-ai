@@ -80,6 +80,16 @@ export const PERMISSIONS = {
    * still operator-only.
    */
   BRANCHES_MANAGE_MEMBERS: 'branches.manage_members',
+  /**
+   * Support teams: creating them, editing them, and deciding who is in them
+   * and which branches they reach (ADR 0022).
+   */
+  TEAMS_MANAGE: 'teams.manage',
+  /**
+   * Deciding which team owns a ticket. The matrix's routing key, read as the
+   * manual half; automatic rules are the other half and do not exist.
+   */
+  ROUTING_MANAGE: 'routing.manage',
   TICKETS_CREATE: 'tickets.create',
   /** Own requests only; the requester's default visibility. */
   TICKETS_READ_OWN: 'tickets.read_own',
@@ -95,6 +105,15 @@ export const PERMISSIONS = {
    * empty set sees only their own requests — absence denies.
    */
   TICKETS_READ_BRANCH: 'tickets.read_branch',
+  /**
+   * Tickets assigned to the SUPPORT TEAMS the actor actively belongs to, plus
+   * their own. The team set rides the `tm` claim, and an empty set denies
+   * exactly as the branch one does.
+   *
+   * A support team is the group that RESOLVES a ticket, never the requester's
+   * department (ADR 0022): belonging to Electronics grants nothing here.
+   */
+  TICKETS_READ_TEAM: 'tickets.read_team',
   TICKETS_ASSIGN_SELF: 'tickets.assign_self',
   /** Assigning someone else, or unassigning. */
   TICKETS_ASSIGN_AGENT: 'tickets.assign_agent',

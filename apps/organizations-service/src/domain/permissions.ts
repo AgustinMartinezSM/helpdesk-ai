@@ -36,21 +36,41 @@ const BRANCH_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Desk and team managers are no longer a spread of the branch-manager set:
- * that shorthand ended the moment branch_manager gained a branch-scoped key.
- * Their reach is team- and queue-shaped in the matrix, and those keys have
- * no feature to check them yet — inheriting `tickets.read_branch` here would
- * silently promise branch semantics the matrix never gave them.
+ * Desk and team managers are not a spread of the branch-manager set: their
+ * reach is team-shaped, and inheriting `tickets.read_branch` would promise
+ * branch semantics the matrix never gave them.
+ *
+ * Until Sprint 9.12 that left them with no read at all beyond their own
+ * tickets, which was the sharpest hole in the map — `tickets.assign_agent`
+ * without the ability to list what they were assigning. Support teams gave
+ * `read_team` something to check (ADR 0022).
  */
 const DESK_AND_TEAM_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
   PERMISSIONS.ORGANIZATION_READ,
   PERMISSIONS.TICKETS_CREATE,
   PERMISSIONS.TICKETS_READ_OWN,
+  // Sprint 9.12 closed the hole this comment used to describe: both
+  // templates held `tickets.assign_agent` with no read beyond their own
+  // tickets, so they could assign work they could not list. `read_team` is
+  // the matrix's ● cell for them and it finally has a call site.
+  PERMISSIONS.TICKETS_READ_TEAM,
   PERMISSIONS.TICKETS_ASSIGN_SELF,
   PERMISSIONS.TICKETS_REPLY_PUBLIC,
   PERMISSIONS.TICKETS_NOTE_INTERNAL,
   PERMISSIONS.TICKETS_CHANGE_STATUS,
   PERMISSIONS.TICKETS_ASSIGN_AGENT,
+]);
+
+/**
+ * The service desk manager runs the teams and decides which one owns a
+ * ticket; the team manager does neither, per the matrix (`teams.manage` is ○
+ * for them — their own team only — and own-scope has no representation in a
+ * flat set, the same call the last two sprints made).
+ */
+const SERVICE_DESK_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
+  ...DESK_AND_TEAM_MANAGER_PERMISSIONS,
+  PERMISSIONS.TEAMS_MANAGE,
+  PERMISSIONS.ROUTING_MANAGE,
 ]);
 
 /**
@@ -67,6 +87,10 @@ const AGENT_PERMISSIONS: ReadonlySet<string> = new Set([
   PERMISSIONS.TICKETS_CREATE,
   PERMISSIONS.TICKETS_READ_OWN,
   PERMISSIONS.TICKETS_READ_ALL,
+  // Matrix ● cell. Inert while they hold read_all, which Sprint 9.12 did
+  // NOT take away: shrinking agents needs a rule for organizations with no
+  // teams, and that is a product decision (9.12, D4).
+  PERMISSIONS.TICKETS_READ_TEAM,
   PERMISSIONS.TICKETS_ASSIGN_SELF,
   PERMISSIONS.TICKETS_ASSIGN_AGENT,
   PERMISSIONS.TICKETS_REPLY_PUBLIC,
@@ -109,6 +133,11 @@ const ORGANIZATION_ADMIN_PERMISSIONS: ReadonlySet<string> = new Set([
   // quietly answer the scope-qualifier question ADR 0016 closed.
   PERMISSIONS.BRANCHES_CREATE,
   PERMISSIONS.BRANCHES_UPDATE,
+  // Sprint 9.12, matrix ● cells. read_team is inert beside read_all and is
+  // granted anyway so the map stays faithful rather than clever.
+  PERMISSIONS.TEAMS_MANAGE,
+  PERMISSIONS.ROUTING_MANAGE,
+  PERMISSIONS.TICKETS_READ_TEAM,
   PERMISSIONS.TICKETS_CREATE,
   PERMISSIONS.TICKETS_READ_OWN,
   PERMISSIONS.TICKETS_READ_ALL,
@@ -127,6 +156,7 @@ const AUDITOR_PERMISSIONS: ReadonlySet<string> = new Set([
   PERMISSIONS.PEOPLE_READ,
   PERMISSIONS.TICKETS_READ_OWN,
   PERMISSIONS.TICKETS_READ_ALL,
+  PERMISSIONS.TICKETS_READ_TEAM,
   PERMISSIONS.AUDIT_READ,
   PERMISSIONS.ANALYTICS_READ,
 ]);
@@ -139,7 +169,7 @@ const TEMPLATE_PERMISSIONS: Readonly<
   owner: ORGANIZATION_ADMIN_PERMISSIONS,
   organization_admin: ORGANIZATION_ADMIN_PERMISSIONS,
   branch_manager: BRANCH_MANAGER_PERMISSIONS,
-  service_desk_manager: DESK_AND_TEAM_MANAGER_PERMISSIONS,
+  service_desk_manager: SERVICE_DESK_MANAGER_PERMISSIONS,
   team_manager: DESK_AND_TEAM_MANAGER_PERMISSIONS,
   agent: AGENT_PERMISSIONS,
   requester: REQUESTER_PERMISSIONS,

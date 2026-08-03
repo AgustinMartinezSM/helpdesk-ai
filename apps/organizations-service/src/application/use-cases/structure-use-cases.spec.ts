@@ -27,6 +27,7 @@ import {
   InMemoryMembershipRepository,
   InMemoryOperationalStationRepository,
   InMemoryOrganizationRepository,
+  InMemorySupportTeamRepository,
   SequentialIdGenerator,
 } from '../testing/fakes';
 import { ChangeMembershipRoleUseCase } from './change-membership-role';
@@ -87,6 +88,7 @@ function buildContext() {
   const departments = new InMemoryDepartmentRepository();
   const stations = new InMemoryOperationalStationRepository();
   const branchMemberships = new InMemoryBranchMembershipRepository();
+  const supportTeams = new InMemorySupportTeamRepository();
   const clock = new FixedClock(new Date('2026-07-31T12:00:00.000Z'));
   const ids = new SequentialIdGenerator();
   const events = new FakeOrganizationEventPublisher();
@@ -103,6 +105,7 @@ function buildContext() {
     departments,
     stations,
     branchMemberships,
+    supportTeams,
     clock,
     events,
     ensureMembership: new EnsureMembershipUseCase(
@@ -161,6 +164,7 @@ function buildContext() {
       memberships,
       organizations,
       branchMemberships,
+      supportTeams,
     ),
   };
 }

@@ -39,6 +39,9 @@ const responseSchema = z.object({
   // optional-with-default here would let a half-deployed upstream silently
   // mint branchless tokens for every branch-scoped member.
   branchIds: z.array(z.uuid()),
+  // Tolerated as absent so an organizations-service from before Sprint 9.12
+  // does not fail a mint outright: no teams simply means no claim.
+  teamIds: z.array(z.uuid()).default([]),
 });
 
 export class MembershipResolutionFailedError extends Error {
@@ -103,12 +106,23 @@ export class HttpMembershipResolver implements MembershipResolver {
       );
     }
 
-    const { organizationId, permissions, membershipVersion, branchIds } =
-      parsed.data;
+    const {
+      organizationId,
+      permissions,
+      membershipVersion,
+      branchIds,
+      teamIds,
+    } = parsed.data;
     if (organizationId === null || membershipVersion === null) {
       return null;
     }
 
-    return { organizationId, permissions, membershipVersion, branchIds };
+    return {
+      organizationId,
+      permissions,
+      membershipVersion,
+      branchIds,
+      teamIds,
+    };
   }
 }

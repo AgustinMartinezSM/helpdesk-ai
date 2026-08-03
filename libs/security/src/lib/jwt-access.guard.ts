@@ -33,6 +33,8 @@ export interface AccessTokenPayload {
    * visibility (`tickets.read_branch`).
    */
   br?: string[];
+  /** Support team ids (Sprint 9.12). Absent when the person is in none. */
+  tm?: string[];
 }
 
 interface AuthenticatedRequest {

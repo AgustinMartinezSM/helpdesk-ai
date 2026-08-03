@@ -47,6 +47,7 @@ describe('SessionService tenant claims', () => {
         permissions: [],
         membershipVersion: 3,
         branchIds: [],
+        teamIds: [],
       }),
     );
 
@@ -70,6 +71,7 @@ describe('SessionService tenant claims', () => {
         permissions: ['tickets.read_branch'],
         membershipVersion: 3,
         branchIds: [BRANCH_A, BRANCH_B],
+        teamIds: [],
       }),
     );
 
@@ -85,6 +87,7 @@ describe('SessionService tenant claims', () => {
         permissions: ['tickets.read_branch'],
         membershipVersion: 3,
         branchIds: [],
+        teamIds: [],
       }),
     );
 
@@ -104,6 +107,7 @@ describe('SessionService tenant claims', () => {
         permissions: ['tickets.read_own'],
         membershipVersion: 1,
         branchIds: [],
+        teamIds: [],
       }),
     );
 
@@ -193,6 +197,7 @@ describe('SessionService tenant claims', () => {
       permissions: [],
       membershipVersion: 1,
       branchIds: [],
+      teamIds: [],
     });
     const { sessions } = buildSessions(memberships);
 

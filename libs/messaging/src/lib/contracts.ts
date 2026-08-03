@@ -350,6 +350,59 @@ export const stationUpdatedV1 = defineEvent(
   }),
 );
 
+/**
+ * Support team events (Sprint 9.12, ADR 0022).
+ *
+ * A support team is the operational group that resolves a ticket, and it is
+ * ORGANIZATION-owned — not branch-owned, which is what lets one central team
+ * serve every store. It is deliberately not a department: a department is the
+ * requester's area and belongs to exactly one branch.
+ *
+ * No `deleted` contract, like the branch and station pairs: archival is a
+ * status and the update carries it.
+ */
+export const supportTeamCreatedV1 = defineEvent(
+  'support-team.created.v1',
+  z.object({
+    teamId: z.uuid(),
+    organizationId: z.uuid(),
+    key: z.string().min(1),
+    name: z.string().min(1),
+    status: z.string().min(1),
+    createdAt: z.iso.datetime(),
+  }),
+);
+
+export const supportTeamUpdatedV1 = defineEvent(
+  'support-team.updated.v1',
+  z.object({
+    teamId: z.uuid(),
+    organizationId: z.uuid(),
+    key: z.string().min(1),
+    name: z.string().min(1),
+    status: z.string().min(1),
+    updatedAt: z.iso.datetime(),
+  }),
+);
+
+/**
+ * The team's branch scope, as the WHOLE desired set rather than a delta.
+ *
+ * An EMPTY array is meaningful and is the organization-wide case — it does
+ * not mean "no change". A consumer replaces what it holds, which is the same
+ * converging shape the membership branch editor uses (Sprint 9.10, D8) and
+ * the only one that survives a lost event without drifting.
+ */
+export const supportTeamScopeChangedV1 = defineEvent(
+  'support-team.scope-changed.v1',
+  z.object({
+    teamId: z.uuid(),
+    organizationId: z.uuid(),
+    branchIds: z.array(z.uuid()),
+    changedAt: z.iso.datetime(),
+  }),
+);
+
 // ---------------------------------------------------------------------------
 // Profile events. NOT tenant-carrying by name, deliberately: a person-level
 // profile edit can legitimately happen with no organization — the

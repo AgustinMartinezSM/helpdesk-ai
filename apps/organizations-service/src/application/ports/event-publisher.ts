@@ -1,4 +1,5 @@
 import type { Branch, OperationalStation } from '../../domain/branch';
+import type { SupportTeam } from '../../domain/support-team';
 import type { Invitation } from '../../domain/invitation';
 import type {
   Membership,
@@ -50,7 +51,9 @@ export interface MembershipEventPublisher {
  * the commit, born tenant-carrying, the row itself supplies the tenant.
  *
  * Departments publish nothing, on purpose: no consumer exists, and a
- * contract nobody reads is a promise nobody keeps.
+ * contract nobody reads is a promise nobody keeps. Routing did not change
+ * that — it keys on support teams, which are a different concept
+ * (ADR 0022).
  */
 export interface StructureEventPublisher {
   branchCreated(branch: Branch, correlationId?: string): Promise<void>;
@@ -62,6 +65,27 @@ export interface StructureEventPublisher {
   ): Promise<void>;
   stationUpdated(
     station: OperationalStation,
+    correlationId?: string,
+  ): Promise<void>;
+}
+
+/**
+ * Support team events (Sprint 9.12, ADR 0022). Best-effort after the commit,
+ * born tenant-carrying.
+ *
+ * Team MEMBERSHIP publishes nothing: it reaches tickets-service through the
+ * `tm` claim at mint time, the mechanism `br` established, so a contract for
+ * it would be a promise nobody reads. The branch SCOPE does publish, because
+ * tickets-service validates assignment against it and therefore has to know.
+ */
+export interface SupportTeamEventPublisher {
+  supportTeamCreated(team: SupportTeam, correlationId?: string): Promise<void>;
+  /** The team as it stands after the update — archive included. */
+  supportTeamUpdated(team: SupportTeam, correlationId?: string): Promise<void>;
+  /** The WHOLE desired branch set; empty means organization-wide. */
+  supportTeamScopeChanged(
+    team: SupportTeam,
+    branchIds: readonly string[],
     correlationId?: string,
   ): Promise<void>;
 }
@@ -107,4 +131,5 @@ export interface InvitationEventPublisher {
 /** What the one wired publisher adapter provides under EVENT_PUBLISHER. */
 export type OrganizationEventPublisher = MembershipEventPublisher &
   StructureEventPublisher &
+  SupportTeamEventPublisher &
   InvitationEventPublisher;
