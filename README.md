@@ -211,11 +211,12 @@ Prettier on staged files).
   database ownership, persistence tooling, messaging, deferred outbox,
   public/authenticated split, contact delivery, product status
   representation, AI provider abstraction, AI ticket context access, and the
-  eight decisions from the tenancy work and what followed it: tenant
+  nine decisions from the tenancy work and what followed it: tenant
   isolation model, organization and membership ownership, active
   organization context, permission model, branch and operational station
   model, authentication identifiers versus profile attributes, profile data
-  ownership, the public surface of organizations-service)
+  ownership, the public surface of organizations-service, client-side
+  authorization signals)
 - `docs/progress/` — sprint logs
 - `CONTRIBUTING.md` — workflow, branching, commit conventions
 - `SECURITY.md` — security posture and reporting
