@@ -1,6 +1,9 @@
 # Sprint 10.3 — The public site says what the product is
 
-Status: **CLOSED (2026-08-03).** The Definition of Ready below was written and
+Status: **CLOSED (2026-08-03).** Remote CI green on the final HEAD: run
+[`30855665981`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30855665981)
+on `19760f2`, green on its first attempt, covering all four commits — they were
+pushed together. The Definition of Ready below was written and
 checked against the repository before any copy changed.
 
 ## Definition of Ready

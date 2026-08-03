@@ -798,6 +798,10 @@ with its own Definition of Ready.
 
 ## Sprint 10.3 in one breath
 
+Remote CI green on the closing HEAD: run `30855665981` on `19760f2`, first
+attempt. Full local gate green too: 266 unit tests across 28 suites, and
+typecheck across 15 projects.
+
 **A visitor can now learn from the site that the product is multi-tenant.**
 Before this sprint "department" and "service point" appeared in NO public
 prose and "branch" only in a technical listing — so the thing the brand calls
