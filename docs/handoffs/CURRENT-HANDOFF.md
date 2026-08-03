@@ -1,14 +1,15 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** 9.12 — support teams, implemented; 9.4-9.11 complete
+**Sprint:** 9.13 — support teams in the interface, implemented; 9.4-9.12 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
 
-Read `docs/progress/SPRINT-009.12.md` and **ADR 0022** first — a support team
-and a department are DIFFERENT CONCEPTS, and the first draft of that ADR got
-it wrong before the project owner stopped it. Then `SPRINT-009.11.md`, which
+Read `docs/progress/SPRINT-009.13.md` and `SPRINT-009.12.md` and **ADR 0022**
+first — a support team and a department are DIFFERENT CONCEPTS, and the first
+draft of that ADR got it wrong before the project owner stopped it. Then
+`SPRINT-009.11.md`, which
 removes a property three sprints leaned on (`INTERNAL_SERVICE_TOKEN` no longer
 guards any mutation). Then `docs/progress/SPRINT-009.10.md` and **ADR 0021** —
 membership
@@ -339,13 +340,59 @@ see unauthorized branches because such a ticket was never assignable, not
 because a filter removes it later. A ticket with no branch cannot go to a
 scoped team at all.
 
-**No screen.** The whole surface is api-ready; teams are created through the
-API, and the Organization screen gains them in a later sprint.
+**No screen.** The whole surface was api-ready; 9.13 built the screen.
 
 Three things NOT to do: never derive `read_team` from department membership;
 never treat an empty `branchIds` as "serves nothing" (it is the
 organization-wide case, in the domain, the projection AND the event); never
 add a team field to a ticket event payload — that is a v3 conversation.
+
+## Sprint 9.13 in one breath
+
+**Support teams have a product surface now**, so nothing about them is
+api-ready any more: the Organization screen gained a Support teams section
+beside Branches (not a fourth nav entry — teams are organization-owned setup,
+which is what that screen is), the ticket detail gained a routing control, and
+the ticket list gained a filter over the caller's own teams.
+
+**`service_desk_manager` gained two keys, and only one is a matrix cell.**
+`branches.read` is theirs by the matrix and finally had a call site — a team's
+reach is a set of branches and the coverage editor cannot name what it may not
+read. **`people.read` is a WIDENING** of an own-scope ○ cell, the third marked
+one in the map after the agent's: a member picker exists to add somebody who is
+NOT in the team yet, so own scope cannot serve it by construction. Reading is
+as far as it goes and tests pin that — no invite, no suspend, no role
+assignment, no branch writes. Both shrink when the scope-qualifier vocabulary
+lands.
+
+**`GET /organizations/teams/mine` has NO permission key**, deliberately. The
+people who need to turn `assignedTeamId` into a name — team_manager, agent,
+auditor — hold no team key at all, and it returns nothing their own token does
+not already carry in `tm`. It reads through the SAME
+`listActiveTeamIdsForMembership` the claim is minted from, so the two can never
+disagree about archived teams; do not "simplify" it into a second query.
+
+**Two defects that only building the surface could find.** `GET /tickets?assignedTeamId=`
+answered **400** — the use case honoured the filter since 9.12, the DTO never
+declared it, and the service runs `forbidNonWhitelisted`. And
+`InvalidTeamContextError` had **no HTTP mapping**, so routing to an archived or
+foreign team answered **500** where 9.12 documented a generic 422. Both were
+correct and tested below the HTTP boundary. The lesson to carry: a use-case
+test never crosses the exception filter, and the filter's 500 fallback is what
+made the second one visible instead of a plausible 404 — **do not soften that
+fallback**.
+
+**The routing picker offers only ACTIVE teams** while the administration
+listing keeps archived ones so they can be reopened. And the ticket-list filter
+is fed by `/teams/mine` even for somebody who could call the administration
+listing: nobody's ticket list should offer a team whose work they cannot see.
+
+Three things NOT to do: never let the teams section grow a department control
+(the two concepts share a screen and that is exactly where they would blur);
+never gate `/teams/mine` on `teams.manage` — the people it exists for do not
+hold it; never let the coverage editor treat an empty selection as "no change"
+— the empty array is the instruction that makes a team organization-wide, and a
+browser pass confirmed it round-trips to zero rows.
 
 ## Things that will bite you if you do not know them
 
@@ -390,10 +437,21 @@ add a team field to a ticket event payload — that is a v3 conversation.
   web, web-bff, api-gateway, auth, users and organizations are all required
   for an authenticated screen, so 9.10 signed in first and then traded
   auth-service for users-service — which works because a soft navigation does
-  not re-mount AuthProvider and so does not refresh the session. The
-  `.claude/launch.json` entries that define them are **git-ignored**, so they
-  are on that machine only and have to be written again elsewhere; only `web`
-  was ever in a fresh checkout.
+  not re-mount AuthProvider and so does not refresh the session. 9.13 used the
+  same trick and hit the ceiling again: tickets-service would have been the
+  SEVENTH, so the ticket listing and the routing control answered 504 in that
+  walk and were never seen in a browser. The `.claude/launch.json` entries that
+  define them are **git-ignored**, so they are on that machine only and have to
+  be written again elsewhere; only `web` was ever in a fresh checkout.
+- **`next dev` 404s on every route if `.next` holds a production build.**
+  Running the full gate (which ends in `next build`) and then starting the dev
+  server gives a Turbopack server that answers 404 for `/`, `/register`,
+  everything. `rm -rf apps/web/.next` and restart. Cost 9.13 ten minutes.
+- **`apps/web/next-env.d.ts` flip-flops between `dev` and `build`.** Next
+  rewrites the import path in it depending on which one ran last, and the file
+  says not to edit it. The committed version is the BUILD variant, which is
+  what CI produces; if a dev run dirties it, `git checkout --` the file rather
+  than committing the churn.
 - **The first administrator of a fresh database has to be made in SQL.**
   Registration lands everyone on `requester`, and 9.10 deleted the operator
   endpoint that used to promote them. That is the intended consequence of
@@ -403,7 +461,10 @@ add a team field to a ticket event payload — that is a v3 conversation.
 ## Work incomplete / deliberately deferred
 
 - **Seeded role-template rows + the template-vocabulary/scope-qualifier
-  decision** — the code map is the deliberate interim.
+  decision** — the code map is the deliberate interim. It now bounds three
+  things: the seeded rows, every own-scope (○) cell three sprints have left
+  unrepresented, and the flat `people.read` 9.13 gave `service_desk_manager`
+  because a member picker cannot work from own scope.
 - **R9 beyond organizations-service**: 9.8 built a scoped two-organization
   fixture for that service only (its invitations table cascades, so teardown
   order became load-bearing). The other eight suites still teardown with
@@ -453,7 +514,8 @@ nullable, no backfill, applied to dev and _test.
 Sprint 9.6: users add_profile_fields. Sprint 9.7: none. Sprint 9.8:
 organizations invitations (one table, a partial unique index in raw SQL —
 do NOT "simplify" the Prisma model to @@unique, it would generate a total
-index and make re-invitation impossible). Sprints 9.9, 9.10 and 9.11: none.
+index and make re-invitation impossible). Sprints 9.9, 9.10, 9.11 and 9.13:
+none.
 
 ## Tests executed (through 2026-08-03, local)
 
@@ -463,16 +525,19 @@ RabbitMQ, and a green remote CI run recorded in its sprint document: the
 tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8, 9.9 and
 9.10 — the last of those is run `30780847286` on `5d1534b`, green on its first
 attempt, and 9.11 is run `30783298165` on `5cc0036`, green on its first and the
-second of two for that sprint, and 9.12 is run `30785560179` on `f6a2600` —
-the tip of `main`, green on its first attempt.
+second of two for that sprint, 9.12 is run `30785560179` on `f6a2600`, green on
+its first attempt, and 9.13's run is recorded in `SPRINT-009.13.md`.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
 9.10 also ran a manual end-to-end walk across six real processes (browser
 client → web-bff → api-gateway → auth / users / organizations) covering the
 whole administration surface and every refusal, plus a browser pass over the
-People screen. Neither is automated; both are recorded in the sprint document
-with what they showed.
+People screen. 9.13 ran the same six-process walk over the Support teams
+section AS A `service_desk_manager` — the template its two new grants exist for
+— and confirmed the empty-scope round trip in the database rather than trusting
+the interface. Neither walk is automated; both are recorded in their sprint
+documents with what they showed AND what they could not reach.
 
 **One hole worth knowing before trusting the suites**: CI's workflow env
 block sets only `DATABASE_URL`, so `INTERNAL_SERVICE_TOKEN` is never
@@ -493,24 +558,27 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-The next sprint is a product choice, and 9.12 changed the list again:
+The next sprint is a product choice, and 9.13 closed the one that was top of
+this list:
 
-1. **A screen for support teams**, the one thing 9.12 deliberately did not
-   build: the surface is api-ready, so teams exist only for whoever calls the
-   API. It is the smallest gap between what the platform can do and what a
-   person can do, and the Organization screen already has the shape.
-2. **Bulk/CSV import.** The people it loads have a screen to appear on, an
-   administrator who can fix what the import got wrong, and now branches to be
-   assigned to — three arguments that did not all exist before.
+1. **Bulk/CSV import.** Now the strongest candidate. The people it loads have a
+   screen to appear on, an administrator who can fix what the import got wrong,
+   branches to be assigned to, and — since 9.13 — support teams to be put in.
+2. **The template vocabulary.** Still blocking seeded role-template rows, and
+   now bounding three things rather than two: the own-scope (○) cells that
+   three sprints have left unrepresented, and the `people.read` widening 9.13
+   had to make for the desk manager's member picker. It is the debt that keeps
+   growing rather than the one that keeps waiting.
 3. **Email delivery.** Unchanged and still the project owner's decision: ADR
    0008 requires explicit approval and a superseding ADR naming which provider
    and why. Until then an invitation reaches its recipient because an admin
    copied a code and passed it on — which the interface says out loud.
-4. **The template vocabulary**, still blocking seeded role-template rows, and
-   now also blocking the own-scope (○) cells that two sprints have left
-   unrepresented.
-5. **Transfer of ownership**, plus the organization's own name: the two small
+4. **Transfer of ownership**, plus the organization's own name: the two small
    gaps that keep a fresh organization from being fully self-serve.
+5. **Automatic routing rules**, now that manual routing is real and visible.
+   Named out of 9.12 and 9.13 on the grounds that rules whose effects nobody
+   can see are unfalsifiable — that objection is now answered, because a person
+   can see where a ticket sits and move it.
 
 Short debt unchanged otherwise: R9 beyond organizations-service, per-caller
 service credentials (the attribution half of ADR 0011), `mv` compared by
@@ -537,10 +605,12 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > gaining its public face — ADR 0019), 9.9 (the people-management surface, and
 > a browser that decides what to render from permissions rather than role names
 > — ADR 0020), 9.10 (member administration — ADR 0021), 9.11 (organization
-> setup, after which INTERNAL_SERVICE_TOKEN guards no mutation anywhere) and
-> 9.12 (support teams and ticket routing — ADR 0022). Read
-> docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.12.md and ADR 0022
-> before touching anything, and verify the repo state with git first.
+> setup, after which INTERNAL_SERVICE_TOKEN guards no mutation anywhere),
+> 9.12 (support teams and ticket routing — ADR 0022) and 9.13 (that surface in
+> the product: the Support teams section, manual routing on a ticket, and the
+> team filter on the ticket list). Read docs/handoffs/CURRENT-HANDOFF.md,
+> docs/progress/SPRINT-009.13.md, SPRINT-009.12.md and ADR 0022 before touching
+> anything, and verify the repo state with git first.
 >
 > **The one thing not to get wrong**: a support team and a department are
 > DIFFERENT CONCEPTS. A department is the requester's organizational area and
@@ -551,12 +621,19 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > of ADR 0022 merged them, the project owner stopped it, and the ADR keeps its
 > misleading filename on purpose so the correction stays visible.
 >
+> **The lesson 9.13 paid for, worth carrying**: a use-case test never crosses
+> the HTTP boundary. Two refusals that were correct and covered below it were
+> wrong above it — a supported query parameter answering 400 because the DTO
+> never declared it, and a domain error answering 500 because the exception
+> filter had no arm for it. Both had shipped in the sprint before. When a
+> sprint adds a domain rule, add the controller-level test in the same commit.
+>
 > Pick the next sprint — the handoff's "Exact next action" lays out the
-> candidates and what each unblocks. A screen for support teams is the natural
-> one: 9.12 shipped the whole surface as api-ready, so teams exist today only
-> for whoever calls the API, and the Organization screen already has the
-> shape. Open whichever you choose with its own Definition of Ready, the
-> pattern the last eight sprints set.
+> candidates and what each unblocks. Bulk/CSV import is the strongest now that
+> the people it loads have a screen, an administrator, branches and teams to
+> land in; the template vocabulary is the debt that keeps growing rather than
+> waiting. Open whichever you choose with its own Definition of Ready, the
+> pattern the last nine sprints set.
 >
 > Standing rules: never a permanent shared password or unattributable request
 > path (ADR 0016); profile fields never become credentials (ADR 0017); an
@@ -574,8 +651,11 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > derives from department membership (ADR 0022); an empty branch set on a team
 > is the ORGANIZATION-WIDE case in the domain, the projection and the event,
 > never "serves nothing"; no team field goes on a ticket event payload (that is
-> a v3); do not seed role-template rows (vocabulary still open); do not remove
-> the retiredBindingKeys literals; do not remove the gateway's
+> a v3); `GET /organizations/teams/mine` stays keyless and keeps reading the
+> same method the `tm` claim is minted from; the ticket exception filter's
+> fallback stays 500 (it is what finds an unmapped error); do not seed
+> role-template rows (vocabulary still open); do not remove the
+> retiredBindingKeys literals; do not remove the gateway's
 > x-internal-service-token strip; rotation must keep deriving the born window.
 
 ## Repository isolation
