@@ -362,6 +362,19 @@ export const LANDING_CAPABILITIES: Capability[] = [
   pick('security-governance', 'Auditability'),
 ];
 
+/**
+ * Look a capability up by area and name. Exported so a page that needs one
+ * capability's status — a workflow step, an illustration label — renders it
+ * from here rather than typing the word in. Seven pages did type it in, and
+ * four of the seven had gone stale by the time Sprint 10.0 found them.
+ *
+ * It throws on an unknown name deliberately: a renamed capability should
+ * break the build, not silently stop being rendered.
+ */
+export function capability(areaKey: string, name: string): Capability {
+  return pick(areaKey, name);
+}
+
 function pick(areaKey: string, name: string): Capability {
   const area = CAPABILITY_AREAS.find((entry) => entry.key === areaKey);
   const capability = area?.capabilities.find((entry) => entry.name === name);

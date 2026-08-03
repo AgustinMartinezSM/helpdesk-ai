@@ -5,6 +5,7 @@ import { ConversationExample } from '../../../components/public/conversation-exa
 import { Reveal } from '../../../components/public/reveal';
 import { Section } from '../../../components/public/section';
 import { StatusPill } from '../../../components/public/status-pill';
+import { capability } from '../../../lib/product-status';
 import { ButtonLink } from '../../../components/ui/button';
 import {
   ArrowRightIcon,
@@ -240,7 +241,9 @@ export default function HowItWorksPage() {
                 <SparklesIcon size={14} />
                 What AI would suggest
               </p>
-              <StatusPill status="api-ready" />
+              <StatusPill
+                status={capability('ai-assistance', 'Summarization').status}
+              />
             </div>
             <dl className={styles.aiRows}>
               {AI_SUGGESTIONS.map((row) => (
@@ -259,13 +262,20 @@ export default function HowItWorksPage() {
         </p>
         <p className={styles.aiStatusNote}>
           Summaries, classification, priority suggestions and reply drafts are{' '}
-          <StatusPill status="api-ready" />: the service that produces them runs
-          behind the gateway, and staff see them as a panel on the ticket. The
-          Google Gemini integration is implemented and verified locally, but
-          each deployment configures its own provider credentials before
-          enabling it — without them a deterministic local provider answers
-          instead, and the panel names whichever one produced what you are
-          reading. Duplicate detection is still <StatusPill status="planned" />.
+          <StatusPill
+            status={capability('ai-assistance', 'Summarization').status}
+          />
+          : the service that produces them runs behind the gateway, and staff
+          see them as a panel on the ticket. The Google Gemini integration is
+          implemented and verified locally, but each deployment configures its
+          own provider credentials before enabling it — without them a
+          deterministic local provider answers instead, and the panel names
+          whichever one produced what you are reading. Duplicate detection is
+          still{' '}
+          <StatusPill
+            status={capability('ai-assistance', 'Duplicate detection').status}
+          />
+          .
         </p>
       </Section>
 

@@ -1,5 +1,6 @@
 import { PriorityDot, StatusBadge } from '../ui/status';
 import { CheckIcon, SparklesIcon, UserIcon } from '../ui/icons';
+import { CAPABILITY_STATUS_LABELS, capability } from '../../lib/product-status';
 import styles from './hero-visual.module.css';
 
 /**
@@ -12,7 +13,16 @@ import styles from './hero-visual.module.css';
  * carries its own status label (see ADR 0009): the capability is built and
  * reachable, but a deployment has to bring its own provider credentials
  * before it produces anything.
+ *
+ * That label is READ from the status module rather than typed here. It was a
+ * hard-coded string until Sprint 10.1, which is the shape of defect ADR 0009
+ * exists to prevent: it would have gone on claiming the old status after a
+ * promotion, in a scene no assistive technology can read and no reviewer
+ * looks at twice.
  */
+const AI_STATUS_LABEL =
+  CAPABILITY_STATUS_LABELS[capability('ai-assistance', 'Summarization').status];
+
 export function HeroVisual() {
   return (
     <div className={styles.scene} aria-hidden="true">
@@ -34,7 +44,7 @@ export function HeroVisual() {
           <p className={styles.aiPanelTitle}>
             <SparklesIcon size={14} />
             AI analysis
-            <span className={styles.aiStatus}>API ready</span>
+            <span className={styles.aiStatus}>{AI_STATUS_LABEL}</span>
           </p>
           <dl className={styles.aiRows}>
             <div className={styles.aiRow}>

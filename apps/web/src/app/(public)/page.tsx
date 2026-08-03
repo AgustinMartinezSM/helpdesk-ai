@@ -36,21 +36,21 @@ export const metadata: Metadata = {
 const ROLE_VALUE = [
   {
     icon: <UserIcon size={18} />,
-    role: 'End users',
+    role: 'Employees',
     value:
-      'Open a request in seconds, follow its progress, and confirm the fix yourself — your ticket stays yours.',
+      'Open a request in seconds, follow its progress, and confirm the fix yourself — your request stays yours.',
   },
   {
     icon: <UsersIcon size={18} />,
     role: 'Technicians',
     value:
-      'Work a clear queue with priorities, internal notes and full history — with AI triage suggestions on the roadmap.',
+      'Work a clear queue with priorities, internal notes and full history, and read AI triage suggestions before deciding anything.',
   },
   {
     icon: <BarChartIcon size={18} />,
     role: 'Team managers',
     value:
-      'Volumes and resolution flow are projected live from the event stream — today through the staff-only API, with dashboards on the roadmap.',
+      'Route work to the team that resolves it, and see volumes and resolution flow projected live from the event stream.',
   },
   {
     icon: <ShieldCheckIcon size={18} />,
@@ -88,7 +88,7 @@ const WORKFLOW_PREVIEW = [
   },
   {
     step: '03',
-    title: 'AI analyzes — planned',
+    title: 'AI reads the repetitive part',
     text: 'Category, priority and summary arrive as suggestions.',
   },
   {
