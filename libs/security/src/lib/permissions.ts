@@ -5,6 +5,12 @@
  * organizations-service's to own and evaluate (ADR 0013); it imports this
  * vocabulary so producer and checker cannot drift on spelling.
  *
+ * It has NO imports, deliberately, and is published as its own entry point
+ * (`@helpdesk-ai/security/permissions`) so the browser can share the
+ * vocabulary without pulling `JwtAccessGuard` — and NestJS with it — into a
+ * client bundle. apps/web decides what to RENDER from these keys (ADR 0020);
+ * it must never gain access to anything that decides.
+ *
  * Only keys with a real server-side call site belong here. The approved
  * matrix in docs/architecture/tenancy-target-state.md names many more
  * (branches.*, teams.*, routing.*); they arrive with the features that

@@ -24,6 +24,7 @@ import {
 import { AcceptInvitationUseCase } from './accept-invitation';
 import { IssueInvitationUseCase } from './issue-invitation';
 import { ListInvitationsUseCase } from './list-invitations';
+import { PreviewInvitationUseCase } from './preview-invitation';
 import { RevokeInvitationUseCase } from './revoke-invitation';
 
 const ORG_A = '11111111-1111-4111-8111-111111111111';
@@ -556,5 +557,113 @@ describe('listing and revoking', () => {
       }),
     ).rejects.toBeInstanceOf(InvitationNotRedeemableError);
     expect(h.events.invitationsRevoked[0].revokedByUserId).toBe(ADMIN_A);
+  });
+});
+
+describe('previewing an invitation', () => {
+  function previewer(h: Harness) {
+    return new PreviewInvitationUseCase(
+      h.invitations,
+      h.organizations,
+      h.clock,
+    );
+  }
+
+  async function issued(h: Harness, email = 'nueva@empresa.com') {
+    return h.issue.execute(actor(ADMIN_A, ORG_A, 'organization_admin'), {
+      inviteeEmail: email,
+      roleTemplate: 'agent',
+    });
+  }
+
+  it('names the organization and the role without spending the code', async () => {
+    const h = harness();
+    const invitation = await issued(h);
+
+    const preview = await previewer(h).execute(
+      actor(NEWCOMER, undefined, 'none'),
+      { code: invitation.code, actorEmail: 'nueva@empresa.com' },
+    );
+
+    expect(preview.organizationName).toBe('chain-a');
+    expect(preview.roleTemplate).toBe('agent');
+    // Still redeemable afterwards — that is the whole point.
+    expect(h.invitations.invitations[0].status).toBe('pending');
+    await expect(
+      h.accept.execute(actor(NEWCOMER, undefined, 'none'), {
+        code: invitation.code,
+        actorEmail: 'nueva@empresa.com',
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('is not an oracle: it refuses everything accept refuses, alike', async () => {
+    const h = harness();
+    const invitation = await issued(h);
+    const [id, secret] = invitation.code.split('.');
+    const preview = previewer(h);
+    const redeemer = actor(NEWCOMER, undefined, 'none');
+
+    await expect(
+      preview.execute(redeemer, {
+        code: `${id}.${'z'.repeat(secret.length)}`,
+        actorEmail: 'nueva@empresa.com',
+      }),
+    ).rejects.toBeInstanceOf(InvitationNotFoundError);
+    await expect(
+      preview.execute(redeemer, {
+        code: `99999999-9999-4999-8999-999999999999.${secret}`,
+        actorEmail: 'nueva@empresa.com',
+      }),
+    ).rejects.toBeInstanceOf(InvitationNotFoundError);
+    await expect(
+      preview.execute(redeemer, {
+        code: invitation.code,
+        actorEmail: 'alguien.otro@empresa.com',
+      }),
+    ).rejects.toBeInstanceOf(InvitationAddresseeMismatchError);
+  });
+
+  it('refuses a spent or expired invitation', async () => {
+    const h = harness();
+    const invitation = await issued(h);
+    await h.accept.execute(actor(NEWCOMER, undefined, 'none'), {
+      code: invitation.code,
+      actorEmail: 'nueva@empresa.com',
+    });
+
+    await expect(
+      previewer(h).execute(actor(NEWCOMER, undefined, 'none'), {
+        code: invitation.code,
+        actorEmail: 'nueva@empresa.com',
+      }),
+    ).rejects.toBeInstanceOf(InvitationNotRedeemableError);
+  });
+
+  it('does not promise that accept will succeed', async () => {
+    const h = harness();
+    const invitation = await issued(h);
+    // The issuer loses standing between preview and accept. Preview
+    // deliberately does not re-check it — duplicating a redemption-time rule
+    // is how two copies of a security check drift apart.
+    const preview = await previewer(h).execute(
+      actor(NEWCOMER, undefined, 'none'),
+      { code: invitation.code, actorEmail: 'nueva@empresa.com' },
+    );
+    expect(preview.organizationName).toBe('chain-a');
+
+    h.memberships.memberships[0] = membership(
+      'm-a',
+      ORG_A,
+      ADMIN_A,
+      'organization_admin',
+      'deactivated',
+    );
+    await expect(
+      h.accept.execute(actor(NEWCOMER, undefined, 'none'), {
+        code: invitation.code,
+        actorEmail: 'nueva@empresa.com',
+      }),
+    ).rejects.toBeInstanceOf(InvitationNotRedeemableError);
   });
 });

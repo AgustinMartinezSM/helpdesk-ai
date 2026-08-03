@@ -11,12 +11,15 @@ jest.mock('next/navigation', () => ({
 const REQUESTER_SESSION = {
   accessToken: 'jwt',
   expiresInSeconds: 900,
+  permissions: [] as string[],
+  organizationId: 'org-1',
   user: { id: 'u1', email: 'a@b.com', roles: ['user'] },
 };
 
 const AGENT_SESSION = {
   ...REQUESTER_SESSION,
   accessToken: 'agent-jwt',
+  permissions: ['tickets.change_status', 'tickets.note_internal'],
   user: { id: 'staff1', email: 's@b.com', roles: ['agent'] },
 };
 

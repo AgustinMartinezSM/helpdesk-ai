@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { AiSuggestions } from '../../../../components/ai-suggestions';
 import { useAuth } from '../../../../components/auth-context';
+import { can, PERMISSIONS } from '../../../../lib/permissions';
 import { Button, ButtonLink } from '../../../../components/ui/button';
 import { Card } from '../../../../components/ui/card';
 import { EmptyState } from '../../../../components/ui/empty-state';
@@ -78,11 +79,13 @@ export default function TicketDetailPage() {
   const [statusNote, setStatusNote] = useState('');
   const titleRef = useRef<HTMLHeadingElement>(null);
 
-  const isStaff = Boolean(
-    session &&
-    (session.user.roles.includes('agent') ||
-      session.user.roles.includes('admin')),
-  );
+  // One key per control, matching the permission each use case checks
+  // server-side (ADR 0020). The staff boolean these replace keyed on the
+  // legacy roles array and was already wrong: a branch_manager holds
+  // tickets.change_status but has no 'agent' role name, so the transition
+  // buttons were hidden from someone the API would have allowed.
+  const canChangeStatus = can(session, PERMISSIONS.TICKETS_CHANGE_STATUS);
+  const canSeeInternalWork = can(session, PERMISSIONS.TICKETS_NOTE_INTERNAL);
 
   const load = useCallback(async () => {
     if (!session) {
@@ -154,7 +157,7 @@ export default function TicketDetailPage() {
   const ticket = details?.ticket;
   // Requesters get exactly one lifecycle action: closing their resolved ticket.
   const requesterCanClose =
-    !isStaff &&
+    !canChangeStatus &&
     ticket !== undefined &&
     session !== null &&
     ticket.requesterId === session.user.id &&
@@ -194,7 +197,7 @@ export default function TicketDetailPage() {
 
           <Card className={styles.description}>{ticket.description}</Card>
 
-          {isStaff && NEXT_STATUSES[ticket.status].length > 0 ? (
+          {canChangeStatus && NEXT_STATUSES[ticket.status].length > 0 ? (
             <div
               className={styles.actions}
               role="group"
@@ -221,9 +224,11 @@ export default function TicketDetailPage() {
             </div>
           ) : null}
 
-          {/* Staff only: the API refuses everyone else, and a requester has
-              no use for drafts written for the technician. */}
-          {isStaff && session ? (
+          {/* tickets.note_internal is the key the AI endpoints check: the
+              suggestions are derived from the full conversation a requester
+              cannot see, so the two travel together. The API refuses everyone
+              else regardless of what is rendered here. */}
+          {canSeeInternalWork && session ? (
             <AiSuggestions
               ticketId={params.id}
               accessToken={session.accessToken}

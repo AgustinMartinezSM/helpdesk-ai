@@ -12,11 +12,16 @@ jest.mock('next/navigation', () => ({
 const USER_SESSION = {
   accessToken: 'jwt',
   expiresInSeconds: 900,
+  permissions: [] as string[],
+  organizationId: 'org-1',
   user: { id: 'u1', email: 'a@b.com', roles: ['user'] },
 };
 
+// The gate is the permission, not the role name (ADR 0020). These two keys
+// are exactly what the ticket detail page checks, and what the API checks.
 const AGENT_SESSION = {
   ...USER_SESSION,
+  permissions: ['tickets.change_status', 'tickets.note_internal'],
   user: { id: 'staff1', email: 's@b.com', roles: ['agent'] },
 };
 

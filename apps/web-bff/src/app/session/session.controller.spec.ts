@@ -74,6 +74,8 @@ const SESSION_BODY = {
   expiresInSeconds: 900,
   refreshToken: 'rt-id.rt-secret',
   refreshTokenId: 'rt-id',
+  permissions: ['tickets.create', 'tickets.read_own'],
+  organizationId: 'org-1',
   user: { id: 'u1', email: 'a@b.com', roles: ['user'] },
 };
 
@@ -128,6 +130,10 @@ describe('Session endpoints (stub gateway)', () => {
     expect(response.body).toEqual({
       accessToken: 'jwt-access',
       expiresInSeconds: 900,
+      // Permissions travel to the browser (ADR 0020); refreshTokenId does
+      // not, because toBrowserSession is an allowlist rather than a delete.
+      permissions: ['tickets.create', 'tickets.read_own'],
+      organizationId: 'org-1',
       user: { id: 'u1', email: 'a@b.com', roles: ['user'] },
     });
     expect(JSON.stringify(response.body)).not.toContain('rt-secret');

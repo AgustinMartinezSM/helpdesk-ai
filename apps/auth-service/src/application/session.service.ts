@@ -22,6 +22,25 @@ export interface Session {
   refreshToken: string;
   /** Storage id of the refresh token, used to link rotations. */
   refreshTokenId: string;
+  /**
+   * The same permission keys stamped into the token's `perms` claim, echoed
+   * so a client can decide what to RENDER without decoding the token (ADR
+   * 0020). It is a snapshot: stale as soon as the membership changes, for at
+   * most the access token's lifetime. Hiding a control is never the
+   * authorization — every refusal already lives in a use case.
+   *
+   * Empty for an account that belongs to no organization yet, which is a real
+   * minted state (ADR 0014) and denies everything, exactly as an empty
+   * `Actor.permissions` does.
+   */
+  permissions: string[];
+  /** Active organization, or null for the belongs-nowhere state. */
+  organizationId: string | null;
+  /**
+   * Display data from the user row, not an authorization signal. Nothing
+   * branches on it since ADR 0020 deleted the client-side staff boolean; the
+   * account page renders it.
+   */
   user: { id: string; email: string; roles: string[] };
 }
 
@@ -115,6 +134,12 @@ export class SessionService {
       expiresInSeconds,
       refreshToken: composeRefreshToken(id, secret),
       refreshTokenId: id,
+      // Echoed from the SAME resolution that stamped the claims above, not
+      // resolved again (ADR 0020): one membership read decides both what the
+      // token asserts and what the client may render, so the two cannot
+      // disagree about the moment they describe.
+      permissions: membership ? [...membership.permissions] : [],
+      organizationId: membership?.organizationId ?? null,
       // `roles` here is response data, not a claim: since phase 8 the token
       // carries none, but the web still renders the product's role names, so
       // they come from the user row — the only place they live now.

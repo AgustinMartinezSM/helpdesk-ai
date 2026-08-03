@@ -42,6 +42,7 @@ import { EnsureMembershipUseCase } from '../application/use-cases/ensure-members
 import { GetMembershipUseCase } from '../application/use-cases/get-membership';
 import { IssueInvitationUseCase } from '../application/use-cases/issue-invitation';
 import { ListInvitationsUseCase } from '../application/use-cases/list-invitations';
+import { PreviewInvitationUseCase } from '../application/use-cases/preview-invitation';
 import { RemoveBranchMembershipUseCase } from '../application/use-cases/remove-branch-membership';
 import { ResolveActiveMembershipUseCase } from '../application/use-cases/resolve-active-membership';
 import { RevokeInvitationUseCase } from '../application/use-cases/revoke-invitation';
@@ -416,6 +417,15 @@ export class AppModule {
           useFactory: (invitations: InvitationRepository, clock: Clock) =>
             new ListInvitationsUseCase(invitations, clock),
           inject: [INVITATION_REPOSITORY, CLOCK],
+        },
+        {
+          provide: PreviewInvitationUseCase,
+          useFactory: (
+            invitations: InvitationRepository,
+            organizations: OrganizationRepository,
+            clock: Clock,
+          ) => new PreviewInvitationUseCase(invitations, organizations, clock),
+          inject: [INVITATION_REPOSITORY, ORGANIZATION_REPOSITORY, CLOCK],
         },
         {
           provide: RevokeInvitationUseCase,

@@ -5,6 +5,7 @@ import { APP_ENV, SERVICE_NAME, type WebBffEnv } from '../config/env';
 import { AiController } from './ai/ai.controller';
 import { HealthController } from './health/health.controller';
 import { GATEWAY_CLIENT, GatewayClient } from './gateway.client';
+import { PeopleController } from './people/people.controller';
 import { SessionController } from './session/session.controller';
 import { TicketsController } from './tickets/tickets.controller';
 
@@ -34,6 +35,7 @@ export class AppModule {
         HealthController,
         SessionController,
         TicketsController,
+        PeopleController,
         AiController,
       ],
       providers: [

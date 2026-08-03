@@ -28,6 +28,8 @@ function mockFetchRoutes(
 const SESSION = {
   accessToken: 'jwt',
   expiresInSeconds: 900,
+  permissions: [] as string[],
+  organizationId: 'org-1',
   user: { id: 'u1', email: 'a@b.com', roles: ['user'] },
 };
 

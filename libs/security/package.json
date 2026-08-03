@@ -13,6 +13,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./permissions": {
+      "@helpdesk-ai/source": "./src/lib/permissions.ts",
+      "types": "./dist/lib/permissions.d.ts",
+      "import": "./dist/lib/permissions.js",
+      "default": "./dist/lib/permissions.js"
     }
   },
   "dependencies": {

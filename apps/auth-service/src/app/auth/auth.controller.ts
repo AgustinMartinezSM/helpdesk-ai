@@ -134,7 +134,15 @@ export class AuthController {
     // role names — unchanged in shape, apps/web renders them — are loaded
     // rather than echoed. A token whose account is gone gets a 401, not an
     // identity reconstructed from stale claims.
-    const identity = await this.getIdentity.execute(request.user.sub);
+    //
+    // Permissions go the other way and ARE echoed (ADR 0020): this endpoint
+    // answers about the token presented, so re-resolving could describe a
+    // membership that token does not carry, and it would put a second
+    // organizations-service call on the cheapest endpoint in the service.
+    const identity = await this.getIdentity.execute(request.user.sub, {
+      permissions: request.user.perms ?? [],
+      organizationId: request.user.org ?? null,
+    });
     if (!identity) {
       throw new UnauthorizedException();
     }

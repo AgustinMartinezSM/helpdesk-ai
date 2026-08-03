@@ -4,6 +4,21 @@ export interface IdentityOutput {
   id: string;
   email: string;
   roles: string[];
+  /**
+   * Echoed from the presented token's claims, not resolved again (ADR 0020).
+   * /auth/me answers about the token you brought, so re-resolving would let
+   * it describe a membership the token does not carry — and it would put a
+   * second organizations-service round trip on an endpoint whose whole job is
+   * to be cheap.
+   */
+  permissions: string[];
+  organizationId: string | null;
+}
+
+/** The claims the caller's verified token carries, supplied by the controller. */
+export interface PresentedClaims {
+  permissions: string[];
+  organizationId: string | null;
 }
 
 /**
@@ -21,11 +36,20 @@ export interface IdentityOutput {
 export class GetIdentityUseCase {
   constructor(private readonly users: UserRepository) {}
 
-  async execute(userId: string): Promise<IdentityOutput | null> {
+  async execute(
+    userId: string,
+    claims: PresentedClaims,
+  ): Promise<IdentityOutput | null> {
     const user = await this.users.findById(userId);
     if (!user) {
       return null;
     }
-    return { id: user.id, email: user.email, roles: [...user.roles] };
+    return {
+      id: user.id,
+      email: user.email,
+      roles: [...user.roles],
+      permissions: [...claims.permissions],
+      organizationId: claims.organizationId,
+    };
   }
 }

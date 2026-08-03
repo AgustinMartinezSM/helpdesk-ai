@@ -21,6 +21,10 @@ import {
 import { AcceptInvitationUseCase } from '../../application/use-cases/accept-invitation';
 import { IssueInvitationUseCase } from '../../application/use-cases/issue-invitation';
 import {
+  PreviewInvitationUseCase,
+  type InvitationPreview,
+} from '../../application/use-cases/preview-invitation';
+import {
   ListInvitationsUseCase,
   toView,
   type InvitationView,
@@ -88,6 +92,7 @@ export class InvitationsController {
     private readonly listInvitations: ListInvitationsUseCase,
     private readonly revokeInvitation: RevokeInvitationUseCase,
     private readonly acceptInvitation: AcceptInvitationUseCase,
+    private readonly previewInvitation: PreviewInvitationUseCase,
   ) {}
 
   @Post()
@@ -127,6 +132,26 @@ export class InvitationsController {
    * GET /tickets/branches had to learn — a later sibling route with one
    * segment would silently swallow 'accept'.
    */
+  /**
+   * What this code would get you, without spending it. Declared beside
+   * 'accept' and before the ':invitationId' route for the same ordering
+   * reason.
+   */
+  @Post('preview')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Inspect an invitation without redeeming it.',
+  })
+  async preview(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: AcceptInvitationDto,
+  ): Promise<InvitationPreview> {
+    return this.previewInvitation.execute(actorOf(req), {
+      code: dto.code,
+      actorEmail: req.user.email,
+    });
+  }
+
   @Post('accept')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

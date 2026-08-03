@@ -20,6 +20,7 @@ import {
   type UpstreamResponse,
 } from '../gateway.client';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 export const REFRESH_COOKIE = 'helpdesk_refresh';
 
@@ -40,6 +41,9 @@ interface UpstreamSession {
   accessToken: string;
   expiresInSeconds: number;
   refreshToken: string;
+  /** Permission keys the token carries, echoed for rendering (ADR 0020). */
+  permissions: string[];
+  organizationId: string | null;
   user: { id: string; email: string; roles: string[] };
 }
 
@@ -57,6 +61,37 @@ export class SessionController {
     @Inject(GATEWAY_CLIENT) private readonly gateway: GatewayClient,
     @Inject(APP_ENV) private readonly env: WebBffEnv,
   ) {}
+
+  /**
+   * Creates an account. Deliberately does NOT sign anyone in.
+   *
+   * The product wants register-then-redeem to feel like one step, but chaining
+   * the login here would put a credential decision in the BFF, which has never
+   * made one. The page issues the two calls instead: that keeps the sequence a
+   * UX choice, keeps auth-service's throttle counting both attempts
+   * separately, and means a login failure after a successful registration is
+   * a recoverable state the person can see rather than a half-finished
+   * transaction hidden inside one response.
+   *
+   * No cookie is set: there is no session yet.
+   */
+  @Post('register')
+  async register(
+    @Body() dto: RegisterDto,
+    @Req() req: BrowserRequest,
+  ): Promise<unknown> {
+    const upstream = await this.gateway.request('POST', '/api/auth/register', {
+      correlation: correlationOf(req),
+      body: dto,
+    });
+    if (upstream.status < 200 || upstream.status >= 300) {
+      throw new HttpException(
+        upstream.body ?? { statusCode: upstream.status },
+        upstream.status,
+      );
+    }
+    return upstream.body;
+  }
 
   @Post('login')
   @HttpCode(200)
@@ -182,11 +217,21 @@ function correlationOf(req: BrowserRequest): CorrelationHeaders {
   return headers;
 }
 
-/** Strips the refresh token: it must never reach browser JavaScript. */
+/**
+ * Strips the refresh token: it must never reach browser JavaScript.
+ *
+ * Everything else passes through, including the permission keys (ADR 0020) —
+ * they say nothing the access token in the same response does not already
+ * assert, and the browser holds that token. This is an allowlist rather than
+ * a delete so a field added upstream is dropped until someone decides it
+ * belongs in a browser.
+ */
 function toBrowserSession(session: UpstreamSession): unknown {
   return {
     accessToken: session.accessToken,
     expiresInSeconds: session.expiresInSeconds,
+    permissions: session.permissions ?? [],
+    organizationId: session.organizationId ?? null,
     user: session.user,
   };
 }
