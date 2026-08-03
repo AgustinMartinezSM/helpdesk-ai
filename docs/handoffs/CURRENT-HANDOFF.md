@@ -303,12 +303,14 @@ feel.
   mount-time refresh never settles, so every authenticated route sits on its
   loading state forever instead of falling back to signed-out. Long-standing,
   visible on every page, and not 9.9’s or 9.10’s to fix.
-- **`.claude/launch.json` now defines six dev servers**, but the preview tool
-  caps a worktree at five running at once. The whole product needs all six
-  (web, web-bff, api-gateway, auth, users, organizations), so a browser pass
-  means starting five, then swapping one out — 9.10 signed in first and then
-  traded auth-service for users-service, which works because a soft navigation
-  does not re-mount AuthProvider and so does not refresh.
+- **A browser pass needs six dev servers and the preview tool allows five.**
+  web, web-bff, api-gateway, auth, users and organizations are all required
+  for an authenticated screen, so 9.10 signed in first and then traded
+  auth-service for users-service — which works because a soft navigation does
+  not re-mount AuthProvider and so does not refresh the session. The
+  `.claude/launch.json` entries that define them are **git-ignored**, so they
+  are on that machine only and have to be written again elsewhere; only `web`
+  was ever in a fresh checkout.
 - **The first administrator of a fresh database has to be made in SQL.**
   Registration lands everyone on `requester`, and 9.10 deleted the operator
   endpoint that used to promote them. That is the intended consequence of

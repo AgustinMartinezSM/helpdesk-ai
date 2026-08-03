@@ -402,8 +402,9 @@ said role changes happen outside the product — true when 9.9 wrote it, false
 now), `SECURITY.md`'s service-credential paragraph (it listed the membership
 lifecycle among what the credential opens; that half is deleted), the
 transition-table and directory-listing comments that had deferred decisions to
-"the people-management sprint" by name, the handoff, and this document. The
-`.claude/launch.json` entries for the five backend dev servers were added
-while verifying, and kept.
+"the people-management sprint" by name, the handoff, and this document. Five
+`.claude/launch.json` entries for the backend dev servers were added while
+verifying and left in place, but `.claude/` is git-ignored, so they are local
+to this machine and a later session has to write them again.
 
 No fictional experience, customers, incidents or approvals were introduced.
