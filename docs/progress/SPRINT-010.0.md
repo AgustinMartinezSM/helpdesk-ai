@@ -252,11 +252,11 @@ consistency against this sprint's own rules and the repository writing standard,
 and the defect list — each instructed to assume every assertion was wrong until
 the repository confirmed it.
 
-**It found nine real defects in my own document, and the shape of them is the
+**It found fifteen real defects in my own document, and the shape of them is the
 point: a strategy whose central pillar is that this project's claims are true was
-itself carrying six overstatements.** Each was verified against the code myself
-before being fixed, and all nine are fixed in `f4694eb` and the commits around
-it.
+itself carrying eight overstatements, one arithmetic error and two internal
+contradictions.** Each was verified against the code myself before being fixed —
+none was taken on the verifier's word — and all fifteen are fixed.
 
 The two that would have done damage:
 
@@ -288,8 +288,20 @@ had copied verbatim from `pilot-readiness.md`, so I corrected it there too rathe
 than leave the two documents disagreeing. **Three hard-coded AI statuses were
 six** — `how-it-works` renders three `StatusPill` literals that will silently
 disagree with `product-status.ts` the moment 10.1 refreshes it, and those are the
-ones a fix working from my list would have missed. And the doc claimed **one
-i18n seam where there are two**.
+ones a fix working from my list would have missed. The doc claimed **one i18n
+seam where there are two**, **two documentation corrections where it made
+three**, and listed `SECURITY.md` among the frozen surfaces after this sprint had
+already unfrozen it.
+
+Two were self-contradictions rather than repository errors, and those are the
+ones I am least comfortable with. The executive summary said **"every public page
+renders from"** the status module — a sentence the same document contradicts six
+sections later in its own defect list, and the sentence the whole "candor is
+structural" argument rests on. And two audience headings used **"agents"** as an
+interface word, which the document's own rejected-vocabulary table bans in the
+same breath as it flags that exact drift on the landing page. A brand document
+that cannot follow its own vocabulary rule for the length of one file has not
+earned the right to impose it.
 
 I am recording this at length rather than quietly fixing it because the failure
 mode is worth carrying: every one of these was a claim I believed, several were

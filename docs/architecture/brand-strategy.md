@@ -34,10 +34,12 @@ automation: it is that **every request gets a place, an owner and an ending, and
 you can see all three**.
 
 The brand rests on something unusual and verifiable — this project's claims are
-enforced by tests. Capability statuses live in one module, every public page
-renders from it, and a spec fails CI if a status is quietly promoted. A brand
-built on candor is only worth building when the candor is structural, and here
-it is.
+enforced by tests. Capability statuses live in one module, the landing, features
+and how-it-works pages render from it, and a spec fails CI if a status is quietly
+promoted. A brand built on candor is only worth building when the candor is
+structural, and here it is. It is structural with **six hard-coded exceptions
+this sprint found and 10.1 removes**, which is the honest version of the
+sentence and the one to use.
 
 Three decisions drive everything downstream:
 
@@ -134,7 +136,7 @@ They already have a service desk. What they need is for the permission model to
 survive contact with their org chart.
 
 - **Primary buyer:** service desk or IT manager.
-- **Daily user:** agents and team managers.
+- **Daily user:** technicians and team managers.
 - **Administrator:** an organization administrator who is not the same person.
 - **Champion:** the service desk manager, who is the template the permission
   work was built around.
@@ -158,7 +160,7 @@ get on with their day.
 - **Language:** this audience gets the word **request**, never "ticket", never
   "incident", never "case".
 
-### 5. Managers and agents — the people accountable for the outcome
+### 5. Managers and technicians — the people accountable for the outcome
 
 - **Problem to solve:** work arriving with no context, and no way to place it
   with the group that should have it.
@@ -369,8 +371,11 @@ The repository's writing standard already bans most of these; the brand extends
 the ban to marketing surfaces.
 
 **Empty verbs:** streamline, empower, unlock, supercharge, transform your
-workflow, effortless, seamless. None currently appears anywhere in the web
-source, verified by grep. Keep it that way.
+workflow, effortless, seamless. None appears as marketing filler anywhere in the
+web source. The one literal hit is "the account was unlocked" describing an
+account in the sample conversation, which is the concrete-verb usage this rule is
+not aimed at — worth stating, because "verified by grep" invites a grep that
+would otherwise fail on day one. Keep it that way.
 
 **AI overstatement:** AI-powered, powered by AI, AI-driven, smart (as an
 adjective for a feature), intelligent (as a product descriptor), automatically
