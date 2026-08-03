@@ -356,27 +356,36 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Continue HelpDesk AI. Complete and green on main: the tenancy migration
-> (phases 0-8), Sprint 9.5 (branches/departments/stations with branch-scoped
-> visibility), 9.6 (profiles and org-defined fields, ADR 0018), 9.7
-> (shared-terminal sessions) and 9.8 (invitations, and organizations-service
-> gaining its public face — ADR 0019). Read docs/handoffs/CURRENT-HANDOFF.md,
-> docs/progress/SPRINT-009.8.md and ADR 0019 before touching anything, and
+> Continue HelpDesk AI. Complete and green on main with remote CI: the tenancy
+> migration (phases 0-8), Sprint 9.5 (branches/departments/stations with
+> branch-scoped visibility), 9.6 (profiles and org-defined fields, ADR 0018),
+> 9.7 (shared-terminal sessions), 9.8 (invitations, and organizations-service
+> gaining its public face — ADR 0019) and 9.9 (the people-management surface,
+> and a browser that decides what to render from permissions rather than role
+> names — ADR 0020). Read docs/handoffs/CURRENT-HANDOFF.md,
+> docs/progress/SPRINT-009.9.md and ADR 0020 before touching anything, and
 > verify the repo state with git first.
 >
-> Pick the next sprint — the handoff's "Exact next action" lays out the three
-> candidates and what each unblocks; the people-management UI is the one that
-> turns 9.8 from an API into a product and closes the last unattributable step
-> in onboarding.
+> Pick the next sprint — the handoff's "Exact next action" lays out four
+> candidates and what each unblocks. Member administration is the gap the new
+> People screen makes obvious the moment somebody uses it: an admin can invite
+> with a role but cannot change anyone's afterwards, suspend them, or remove
+> them, and there is neither a public endpoint nor a permission key for any of
+> it. It is also what would retire the interim /internal/* operator endpoints,
+> including the branch assignment that is still the one onboarding step no
+> person can be attributed for. Open whichever you choose with its own
+> Definition of Ready, the pattern the last five sprints set.
 >
 > Standing rules: never a permanent shared password or unattributable request
 > path (ADR 0016); profile fields never become credentials (ADR 0017); an
 > invitation code lives in one HTTP response and never in a path, a log or an
 > event; the redemption refusal stays blind to its cause; expiry stays derived
-> while nothing sweeps; do not seed role-template rows (vocabulary still
-> open); do not remove the retiredBindingKeys literals; do not remove the
-> gateway's x-internal-service-token strip; rotation must keep deriving the
-> born window.
+> while nothing sweeps; client-side permission checks decide what to RENDER and
+> never what to allow (ADR 0015 rule 2 / ADR 0020); the BFF forwards refusals
+> verbatim and decides no access of its own; keep libs/security's permissions
+> module import-free; do not seed role-template rows (vocabulary still open);
+> do not remove the retiredBindingKeys literals; do not remove the gateway's
+> x-internal-service-token strip; rotation must keep deriving the born window.
 
 ## Repository isolation
 
