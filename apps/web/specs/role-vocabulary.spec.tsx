@@ -2,6 +2,8 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ROLE_TEMPLATES } from '@helpdesk-ai/security/role-templates';
 import { AuthProvider } from '../src/components/auth-context';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { roleLabel } from '../src/lib/people';
 import PeoplePage from '../src/app/(app)/people/page';
 import TicketsPage from '../src/app/(app)/tickets/page';
@@ -238,5 +240,75 @@ describe('the team scope control says what it does', () => {
     expect(
       screen.queryByText(/plus any request you opened yourself/),
     ).toBeNull();
+  });
+});
+
+describe('a stored role key never reaches the interface', () => {
+  /**
+   * `ROLE_LABELS` exists so the product's words and the stored values can
+   * change independently — and so a locale can move the words without
+   * touching a row. The layer only works if every screen goes through it,
+   * and until Sprint 10.2 the Account screen did not: it printed
+   * `session.user.roles` straight into spans, so the one place a person
+   * looks at their own role said "agent" where every other screen said
+   * "Technician".
+   *
+   * This reads the source rather than rendering, because the defect is a
+   * missing call: a screen that happens to be showing a key whose label is
+   * identical to it would pass a rendered assertion.
+   */
+  const SRC = join(__dirname, '..', 'src');
+
+  function tsxFiles(dir: string): string[] {
+    return readdirSync(dir).flatMap((entry) => {
+      const full = join(dir, entry);
+      return statSync(full).isDirectory()
+        ? tsxFiles(full)
+        : entry.endsWith('.tsx')
+          ? [full]
+          : [];
+    });
+  }
+
+  it('renders no role or template value without passing it through roleLabel', () => {
+    /**
+     * Only JSX TEXT CHILDREN — `>{role}<` — because that is where a value
+     * becomes something a person reads. `key={role}` and `{styles.role}`
+     * are neither, and a first version of this test flagged both, which is
+     * how a check earns a reputation for crying wolf.
+     *
+     * `person.role` on the marketing pages is a different noun (the role a
+     * card describes, "Technicians"), so the match is scoped to the
+     * authenticated app where `role` means a stored template.
+     */
+    const offenders: string[] = [];
+    for (const path of tsxFiles(SRC)) {
+      const relative = path.slice(SRC.length + 1).replace(/\\/g, '/');
+      if (!relative.startsWith('app/(app)/')) continue;
+      const text = readFileSync(path, 'utf8');
+      for (const [match] of text.matchAll(
+        />\s*\{\s*(?:\w+\.)?(?:role|roleTemplate)\s*\}\s*</g,
+      )) {
+        offenders.push(`${relative}: ${match.replace(/\s+/g, ' ')}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('gives every template in the shared vocabulary a label', () => {
+    // The rule the file's own comment states. A key with no entry falls back
+    // to itself, which is safe but is exactly the leak above.
+    for (const template of [
+      'owner',
+      'organization_admin',
+      'branch_manager',
+      'service_desk_manager',
+      'team_manager',
+      'agent',
+      'requester',
+      'auditor',
+    ]) {
+      expect(roleLabel(template)).not.toBe(template);
+    }
   });
 });

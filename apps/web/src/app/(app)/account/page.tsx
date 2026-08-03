@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '../../../components/auth-context';
+import { roleLabel } from '../../../lib/people';
 import { Button, ButtonLink } from '../../../components/ui/button';
 import { Card } from '../../../components/ui/card';
 import { EmptyState } from '../../../components/ui/empty-state';
@@ -41,10 +42,21 @@ export default function AccountPage() {
           </span>
           <div className={styles.identity}>
             <p className={styles.email}>{session.user.email}</p>
+            {/*
+              These used to print the raw stored keys — "agent" on the one
+              screen where every other screen says "Technician". The label
+              map exists precisely so a key never reaches the interface, and
+              this was the one place the layer was skipped.
+
+              `session.user.roles` is the legacy role array from the user
+              row, kept as display data since Phase 8 removed the `roles`
+              claim; it is NOT what authorizes anything. The permissions do,
+              which is what the line below says out loud.
+            */}
             <div className={styles.roles}>
               {session.user.roles.map((role) => (
                 <span key={role} className={styles.role}>
-                  {role}
+                  {roleLabel(role)}
                 </span>
               ))}
             </div>
