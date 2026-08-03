@@ -322,6 +322,11 @@ slots. Those two paths are covered by the tickets-service controller spec (over
 HTTP, through the real exception filter) and by the web specs, and **were not
 seen in a browser**. Said plainly rather than implied.
 
+**Remote CI: GitHub Actions run `30788005358` on `ec065aa` was green on its
+first attempt**, every step included — format, lint, typecheck, test, build,
+and the integration tests against the real PostgreSQL and RabbitMQ service
+containers. 3m46s, on the tip of `main`.
+
 ### Still true after this sprint
 
 No automatic routing rules — still named out by the project owner, and this
