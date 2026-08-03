@@ -25,6 +25,12 @@ export interface VisibleProfileField {
 export interface ProfileView {
   readonly profile: UserProfile;
   readonly fields: VisibleProfileField[];
+  /**
+   * Present on directory rows, absent on a single-profile read: the listing
+   * reads the membership projection anyway, while /users/:userId does not and
+   * would need a second query to invent one.
+   */
+  readonly roleTemplate?: string;
 }
 
 function viewerFor(actor: Actor, subjectUserId: string): FieldViewer {
@@ -118,21 +124,22 @@ export class ListUserProfilesUseCase {
       throw new ForbiddenProfileActionError();
     }
     const organizationId = requireOrganization(actor);
-    const profiles = await this.profiles.list(organizationId);
+    const entries = await this.profiles.list(organizationId);
     const definitions = await this.definitions.list(organizationId);
     const values = await this.values.listForUsers(
       organizationId,
-      profiles.map((profile) => profile.userId),
+      entries.map((entry) => entry.profile.userId),
     );
     // The viewer is re-derived per row: the caller's own row is a subject
     // view, everyone else's is a staff view.
-    return profiles.map((profile) => ({
-      profile,
+    return entries.map((entry) => ({
+      profile: entry.profile,
+      roleTemplate: entry.roleTemplate,
       fields: assembleFields(
         definitions,
         values,
-        viewerFor(actor, profile.userId),
-        profile.userId,
+        viewerFor(actor, entry.profile.userId),
+        entry.profile.userId,
       ),
     }));
   }

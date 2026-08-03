@@ -1,16 +1,18 @@
 # Current handoff
 
 **Date:** 2026-08-02
-**Sprint:** 9.8 — invitations and the public face of organizations-service, implemented; 9.4-9.7 complete
+**Sprint:** 9.9 — the people-management surface, implemented; 9.4-9.8 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
 
-Read `docs/progress/SPRINT-009.8.md` and **ADR 0019** first — organizations-service
-has a public face now, which reverses a property three earlier sprints were
-built around and which SECURITY.md leaned on. Then 9.7's (the five-mode
-shared-terminal evaluation) and 9.6's with ADR 0018 — users-service is no
-longer disposable, and a session that forgets either will document fiction.
+Read `docs/progress/SPRINT-009.9.md` and **ADR 0020** first — the browser now
+decides what to render from permissions rather than role names, and every
+client gate in the product rests on that. Then 9.8 with **ADR 0019**
+(organizations-service has a public face, which reverses a property three
+sprints were built around and which SECURITY.md leaned on), then 9.6 with ADR
+0018 — users-service is no longer disposable. A session that forgets any of
+these will document fiction.
 
 ## The migration is done. What that means concretely
 
@@ -168,6 +170,49 @@ the generic redemption refusal into specific ones (it is blind to the cause on
 purpose — the caller is not a member yet); never model expiry as a stored
 status while nothing sweeps.
 
+## Sprint 9.9 in one breath
+
+**The browser stopped reasoning about roles.** The session carries
+`permissions` and `organizationId`, echoed from the SAME membership resolution
+that stamps the token's claims (ADR 0020) — not resolved again, so the two
+cannot disagree about the moment they describe. `isStaff` is deleted; each of
+its three gates checks the key its use case checks. The snapshot goes stale
+with the token (900s, nothing compares `mv`), so a 403 MUST render as a real
+message — that fallback is load-bearing, not defensive.
+
+**Client gates are cosmetic, always.** `can(session, key)` in
+`apps/web/src/lib/permissions.ts` decides what to RENDER. Every refusal
+already lives in a use case (ADR 0015 rule 2). Never move a decision there.
+
+**libs/security has a second entry point**:
+`@helpdesk-ai/security/permissions`, the vocabulary alone, no imports. The
+package root exports JwtAccessGuard — importing that from apps/web would pull
+NestJS into the browser bundle. Keep the permissions module import-free.
+
+**Three screens**: `/people` (directory + invitations + invite + revoke, gated
+per section because listing invitations needs `people.invite` while the
+directory needs `people.read`), `(public)/register`, and `/join`. Registration
+does NOT sign anyone in at the BFF — the page chains register then login, so a
+login failure after a created account is visible and recoverable.
+
+**Accepting an invitation does not re-mint the token.** `/join` refreshes the
+session after a successful accept; without that the person joins and still
+appears to belong nowhere. A spec asserts the second refresh.
+
+**An invitation can be previewed without being spent** (organizations-service,
+new route): it names the organization and the role before an irreversible
+accept, and it is the ONLY public place an organization's name is exposed. It
+deliberately does not re-check the issuer's standing — that is a
+redemption-time rule and a second copy would drift.
+
+**The directory shows a role, not a status.** The listing already filters to
+active members, so a status column would have said `active` on every row.
+
+Three things NOT to do: never gate a client control on `session.user.roles`
+(display data only); never let the BFF decide access — it forwards refusals
+verbatim, and the 404-not-403 shapes ARE the security design; never render the
+invitation code anywhere but the issue response it came from.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -194,10 +239,14 @@ status while nothing sweeps.
   machine that applied it pre-edit will see `migrate dev` complain once;
   `migrate deploy` (CI, tests) does not validate applied checksums.
 - **Adding a service still means editing `ci.yml` twice.**
-- **apps/web's client-side staff boolean** still keys on `session.user.roles`
-  (the response field, which survives). It drifts from server policy the day
-  roles and permissions diverge for some user — the role-experience sprint
-  owns replacing it with a permission-shaped session field.
+- **apps/web/specs is type-checked by NOTHING**: neither `tsconfig.json` nor
+  `tsconfig.spec.json` includes it, so specs are transpiled by SWC and a type
+  error there surfaces only as a runtime failure. Pre-existing; 9.9 added
+  three files to the pile.
+- **`refreshRequest` has no timeout.** With the BFF down, AuthProvider’s
+  mount-time refresh never settles, so every authenticated route sits on its
+  loading state forever instead of falling back to signed-out. Long-standing,
+  visible on every page, and not 9.9’s to fix.
 
 ## Work incomplete / deliberately deferred
 
@@ -247,7 +296,8 @@ index and make re-invitation impossible).
 Every sprint closed with the full gate (format, lint, typecheck, test,
 build) plus all nine integration suites against real PostgreSQL and
 RabbitMQ, and a green remote CI run recorded in its sprint document: the
-tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7 and 9.8. The
+tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8 and —
+locally, remote CI still to be recorded — 9.9. The
 backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
@@ -270,24 +320,29 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-The next sprint is a product choice between three things 9.8 left standing,
-in rough order of how much they unblock:
+Record 9.9's remote CI result. Then the next sprint is a product choice, and
+9.9 changed which candidates matter:
 
-1. **The people-management surface (Block B / UI).** Invitations, the
-   directory and profiles are all API-only. Nothing in the product lets an
-   admin actually invite anyone, and the interim `/internal/*` operator
-   endpoints stay the only way to assign an invited branch manager to their
-   branches — an onboarding step no person can be attributed for, which is
-   the sharpest remaining edge against ADR 0016.
-2. **Email delivery.** ADR 0008 says adopting a provider needs the project
-   owner's explicit approval and a superseding ADR naming which and why.
-   Until that decision exists, an invitation reaches its recipient only
-   because an admin copied a code out of an API response.
-3. **The template vocabulary**, still blocking seeded role-template rows.
+1. **Member administration.** The one gap the people surface makes obvious the
+   moment somebody uses it: an admin can invite with a role but cannot change
+   the role of anyone already here, suspend them, or remove them. There is no
+   public endpoint AND no permission key — `people.suspend` and
+   `people.assign_roles` sit in the approved matrix with nothing checking
+   them. This is also what would retire the interim `/internal/*` operator
+   endpoints, including the branch assignment that is still the sharpest
+   unattributable step in onboarding (ADR 0016).
+2. **Email delivery.** Unchanged and still the project owner's decision: ADR
+   0008 requires explicit approval and a superseding ADR naming which provider
+   and why. Until then an invitation reaches its recipient because an admin
+   copied a code and passed it on — which the interface now says out loud.
+3. **Bulk/CSV import**, which 9.9 displaced. It makes sense now in a way it
+   did not before: the people it loads have a screen to appear on.
+4. **The template vocabulary**, still blocking seeded role-template rows.
 
 Short debt unchanged otherwise: R9 beyond organizations-service, per-caller
 service credentials (the attribution half of ADR 0011), `mv` compared by
-nobody, `user_snapshots` keyed on `userId` alone.
+nobody, `user_snapshots` keyed on `userId` alone, `apps/web/specs` outside
+type-checking, `refreshRequest` without a timeout.
 
 ## Resume commands
 

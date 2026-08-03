@@ -43,7 +43,22 @@ export interface UserProfileRepository {
    * leave the directory until the people-management sprint decides how to
    * present them. Pagination arrives with demand.
    */
-  list(organizationId: string): Promise<UserProfile[]>;
+  list(organizationId: string): Promise<DirectoryEntry[]>;
+}
+
+/**
+ * A directory row: the profile plus the role template the membership
+ * projection holds for that person.
+ *
+ * No membership STATUS here, deliberately. The listing already filters to
+ * active members, so a status column would say 'active' on every row —
+ * a field that cannot vary is noise, not information. It arrives with the
+ * increment that decides how to present suspended and invited people, which
+ * is the same increment that would give them a row at all.
+ */
+export interface DirectoryEntry {
+  readonly profile: UserProfile;
+  readonly roleTemplate: string;
 }
 
 export const CLOCK = Symbol('CLOCK');

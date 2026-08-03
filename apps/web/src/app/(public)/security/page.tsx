@@ -56,7 +56,7 @@ const PLATFORM: Principle[] = [
   {
     title: 'Roles and permissions',
     detail:
-      'Roles travel in the token and are enforced by guards inside each service: assignment is staff-only, analytics summaries are staff-only, the audit trail is admin-only, and requesters may close only their own resolved tickets.',
+      'Permissions travel in the token — not role names — and every service checks them at the point of the decision, not at the door: assignment and internal notes need the matching permission, the audit trail is narrower still, and requesters may close only their own resolved tickets. The interface may hide a control; only the server refuses.',
   },
   {
     title: 'Input validation',

@@ -181,3 +181,27 @@
     padding-top: 1.5rem;
   }
 }
+
+/* Mirrors the public layout's skip link (same tokens, same reveal on focus):
+   the authenticated shell had none, which meant keyboard users tabbed through
+   the whole header on every page. */
+.skipLink {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.skipLink:focus-visible {
+  top: 0.75rem;
+}
+
+.main:focus {
+  outline: none;
+}

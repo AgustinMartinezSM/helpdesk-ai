@@ -1,0 +1,61 @@
+.wrap {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  padding: 2rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+/* The confirmation step: what you are about to accept, before you accept it. */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  margin-top: 1.5rem;
+  padding: 1.125rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+}
+
+.previewText {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.previewActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.authActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}

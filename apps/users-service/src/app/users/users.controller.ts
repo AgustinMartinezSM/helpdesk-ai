@@ -87,6 +87,13 @@ interface UserProfileResponse {
    * which return only what they touched.
    */
   fields?: ProfileFieldEntryResponse[];
+  /**
+   * Present on directory rows only. Display data — it names WHICH template
+   * the membership carries, which no permission set can distinguish (owner
+   * and organization_admin resolve alike). It is not an authorization signal
+   * and nothing may branch on it.
+   */
+  roleTemplate?: string;
 }
 
 interface FieldDefinitionResponse {
@@ -122,6 +129,7 @@ function toProfileResponse(profile: UserProfile): UserProfileResponse {
 function toViewResponse(view: ProfileView): UserProfileResponse {
   return {
     ...toProfileResponse(view.profile),
+    ...(view.roleTemplate ? { roleTemplate: view.roleTemplate } : {}),
     fields: view.fields.map((field) => ({
       key: field.definition.key,
       labelEsAr: field.definition.labelEsAr,

@@ -75,6 +75,27 @@ export async function loginRequest(
   return (await response.json()) as BrowserSession;
 }
 
+/**
+ * Creates an account. Deliberately does NOT sign anyone in — the caller
+ * chains loginRequest, so a login failure after a successful registration is
+ * a state the person can see and retry rather than a half-finished
+ * transaction hidden in one response.
+ */
+export async function registerRequest(
+  email: string,
+  password: string,
+): Promise<{ id: string; email: string }> {
+  const response = await fetch(`${BFF_URL}/session/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return (await response.json()) as { id: string; email: string };
+}
+
 /** Returns null when there is no recoverable session (no/expired cookie). */
 export async function refreshRequest(): Promise<BrowserSession | null> {
   const response = await fetch(`${BFF_URL}/session/refresh`, {

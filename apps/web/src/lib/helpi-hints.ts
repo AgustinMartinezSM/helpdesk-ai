@@ -67,6 +67,14 @@ const HINTS: Record<string, HelpiHint> = {
   '/account': {
     message: 'Your roles decide what you can do across the platform.',
   },
+  '/people': {
+    message:
+      'Invite a colleague, then hand them the code yourself — we do not email it.',
+  },
+  '/join': {
+    message:
+      'Paste the code you were given. You will see who invited you before you accept.',
+  },
 };
 
 /** Ticket detail lives at /tickets/<id>, so it needs a pattern. */
@@ -91,7 +99,12 @@ export function hintFor(pathname: string): HelpiHint | null {
   }
   // An unknown authenticated route gets nothing: guessing inside a tool
   // someone is working in is worse than staying quiet.
-  if (pathname.startsWith('/tickets') || pathname.startsWith('/account')) {
+  if (
+    pathname.startsWith('/tickets') ||
+    pathname.startsWith('/account') ||
+    pathname.startsWith('/people') ||
+    pathname.startsWith('/join')
+  ) {
     return null;
   }
   return HINTS['/'];

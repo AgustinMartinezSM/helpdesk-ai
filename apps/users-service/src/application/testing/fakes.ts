@@ -22,6 +22,7 @@ import type {
 import type {
   Clock,
   IdGenerator,
+  DirectoryEntry,
   UserProfileRepository,
 } from '../ports/user-profile.repository';
 
@@ -106,15 +107,20 @@ export class InMemoryMembershipProjectionRepository implements MembershipProject
     return true;
   }
 
-  /** Read side the profile fake scopes its listing with. */
-  activeUserIds(organizationId: string): Set<string> {
-    const ids = new Set<string>();
+  /**
+   * Read side the profile fake scopes its listing with. Returns the role
+   * template alongside the id because the real query reads both from the same
+   * row — a fake that returned only ids would let the directory's role column
+   * be wrong without any spec noticing.
+   */
+  activeMembers(organizationId: string): Map<string, string> {
+    const members = new Map<string, string>();
     for (const row of this.rows.values()) {
       if (row.organizationId === organizationId && row.status === 'active') {
-        ids.add(row.userId);
+        members.set(row.userId, row.roleTemplate);
       }
     }
-    return ids;
+    return members;
   }
 }
 
@@ -139,7 +145,7 @@ export class InMemoryUserProfileRepository implements UserProfileRepository {
   ): Promise<UserProfile | null> {
     // Same null for a foreign user, an inactive member and a stranger —
     // mirroring the scoped SQL, so a spec cannot pass on an unscoped stub.
-    if (!this.memberships.activeUserIds(organizationId).has(userId)) {
+    if (!this.memberships.activeMembers(organizationId).has(userId)) {
       return null;
     }
     return this.profiles.get(userId) ?? null;
@@ -185,11 +191,15 @@ export class InMemoryUserProfileRepository implements UserProfileRepository {
     });
   }
 
-  async list(organizationId: string): Promise<UserProfile[]> {
-    const activeIds = this.memberships.activeUserIds(organizationId);
+  async list(organizationId: string): Promise<DirectoryEntry[]> {
+    const members = this.memberships.activeMembers(organizationId);
     return [...this.profiles.values()]
-      .filter((profile) => activeIds.has(profile.userId))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+      .filter((profile) => members.has(profile.userId))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      .map((profile) => ({
+        profile,
+        roleTemplate: members.get(profile.userId) ?? 'requester',
+      }));
   }
 }
 

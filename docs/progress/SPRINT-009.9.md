@@ -1,9 +1,10 @@
 # Sprint 9.9 — The people-management surface
 
-Status: **In progress (2026-08-02).** Definition of Ready below, written and
-checked before any code. This is the first product surface for anything built
-since 9.5, and the first sprint since 7.6 whose deliverable is a screen rather
-than an API.
+Status: **Implemented and verified locally (2026-08-02).** The Definition of
+Ready below was written and checked before any code; the outcome record at the
+end says what landed against it. This is the first product surface for
+anything built since 9.5, and the first sprint since 7.6 whose deliverable is
+a screen rather than an API.
 
 ## Definition of Ready
 
@@ -254,3 +255,109 @@ migration. The scope is large — comparable to 9.5 — and the cut is already
 taken above rather than left to discover: no membership management, no profile
 field editing, no search, no per-person page. Proceeding under the standing
 autonomous authorization.
+
+## Outcome record (2026-08-02)
+
+Three commits: the opening (`fb0221f` — this DoR and ADR 0020), the session
+and BFF work (`1b499bc`), and the screens.
+
+**The authorization signal changed shape, and the specs are the proof.** The
+session carries `permissions` and `organizationId`, echoed from the resolution
+that already mints the token. `isStaff` is gone; its three gates check the key
+the matching use case checks. The specs that exercised staff behaviour now say
+`permissions: ['tickets.change_status', 'tickets.note_internal']` where they
+used to say `roles: ['agent']` — which is the whole point, stated in the one
+place that cannot drift from the code.
+
+**Everything the sprint promised a person could do, they can do.** An admin
+opens People, sees who is there and which role each holds, invites somebody,
+gets a code that is shown once with the honest line that nothing was sent,
+and can revoke — behind a confirmation that provably does not fire on the
+first click. A newcomer with no account registers, sees who is inviting them
+and to what, accepts, and lands inside. The session refresh after acceptance
+is asserted, because without it the person joins and still appears to belong
+nowhere.
+
+**The belongs-nowhere state is handled everywhere it can occur**, which
+matters more here than anywhere else in the product: it is not an edge case
+on these screens, it is the state the redemption page is _used_ in.
+
+### What the implementation decided that the DoR had left open
+
+- **The directory shows a role but no membership status.** The DoR asked for
+  both. The listing already filters to active members, so a status column
+  would have said `active` on every row — a field that cannot vary is noise.
+  It arrives with the increment that gives suspended and invited people a row
+  at all.
+- **`libs/security` gained a `/permissions` entry point.** Not in the DoR, and
+  discovered by building: `apps/web` had no dependency on the library, and its
+  package root exports `JwtAccessGuard`, which imports `@nestjs/common` and
+  `@nestjs/jwt`. Sharing the vocabulary the obvious way would have pulled a
+  server framework into a browser bundle to read a list of strings. The
+  permissions module has no imports at all, which is what makes the second
+  entry point safe by construction.
+- **The BFF exposes registration but does not sign anyone in.** The DoR said
+  the page would "sign the person in on success"; doing that inside the BFF
+  would have put a credential decision in a layer that has never made one. The
+  page issues both calls, and a spec pins the recoverable middle state — the
+  account exists, the login failed, and the person is told.
+- **`/register` needed a Suspense boundary.** `useSearchParams` opts a route
+  into client rendering, and Next refuses to prerender the shell without one.
+  The parameter carries only the INTENT to redeem (`?next=join`), never the
+  code.
+- **The nav array replaced one hardcoded link**, and the authenticated shell
+  gained the skip link and focusable `<main>` the public layout has had since
+  7.6. Adding a second destination is the moment the two shells stop
+  diverging, not a later cleanup.
+
+### Verified
+
+apps/web: 139 tests across 20 suites, of which 16 are new — the directory
+(rows, one-member organization, permission-gated invite form, the
+belongs-nowhere redirect), the invitation code (shown once, honest delivery
+copy, gone on dismiss), revoke (no request on the first click), the redemption
+walk (preview does not spend the code, accept refreshes the session, an
+already-belonging acceptance explains itself), registration (local refusal
+before any request, register-then-login order, the recoverable failure), and a
+stale-permission 403 rendered as a real message. web-bff 29 across 6 suites,
+including a new controller spec asserting both hops and that the BFF adds no
+authorization of its own. users-service 53, organizations-service 181.
+
+The full gate — format, lint, typecheck, test, build — ran green across all 15
+projects. In a real browser against the dev server: `/register` renders
+complete, the authenticated shell shows the new skip link, and the nav shows
+only Tickets for a caller with no session — the permission gate doing its job.
+
+**One thing the browser check surfaced that this sprint did not cause and did
+not fix**: with no BFF running, `AuthProvider`'s mount-time refresh never
+settles, so an authenticated route sits on its loading state forever rather
+than falling back to signed-out. That is how `/tickets` and `/account` have
+always behaved; `refreshRequest` has no timeout. Worth a fix in the sprint
+that owns session UX, not in this one.
+
+### Still true after this sprint
+
+Changing an existing member's role, suspending or removing them has no product
+surface, no public endpoint and no permission key — `product-status.ts` says
+`planned` and how-it-works now draws exactly that line rather than the old
+blanket "roles are assigned outside the product". Assigning an invited branch
+manager to their branches still goes through the internal operator endpoint,
+which remains the sharpest unattributable step in onboarding. There is no
+directory search, filter, sort or pagination; no per-person page; no profile
+field editing. Nothing is deployed, and the platform still sends no email.
+
+## Documentation
+
+Meaningfully changed this sprint: ADR 0020 (new — the client-side
+authorization signal and the three alternatives that lost),
+`product-status.ts` (Invitations and People directory as available with the
+delivery caveat stated in the note; Member administration as planned; the
+role-based access wording, which described "role guards" the permission model
+replaced), the how-it-works roles note (the sentence this sprint half
+falsified, corrected to the distinction that is actually true), the security
+page's authorization principle (it claimed roles travel in the token, which
+phase 8 ended), `frontend-public-routes.md` (three new routes), the handoff,
+and this document. `tenancy-current-state.md` quotes the same stale sentence
+and was deliberately left alone: it is pinned to commit `43d4593` as an audit
+snapshot, and editing it would falsify what it is. No fictional experience,
+customers, incidents or approvals were introduced.

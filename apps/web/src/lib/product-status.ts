@@ -147,8 +147,28 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
       {
         name: 'Role-based access',
         description:
-          'Users, technicians and administrators, enforced end-to-end by role guards.',
+          'Every action is checked against a permission the role carries, on the server, in every service.',
         status: 'available',
+      },
+      {
+        name: 'Invitations',
+        description:
+          'Invite a colleague with the role they should have; they create their own account to accept.',
+        status: 'available',
+        note: 'The platform sends no email — the administrator passes the one-time code on themselves.',
+      },
+      {
+        name: 'People directory',
+        description:
+          'See who is in your organization and which role each person holds.',
+        status: 'available',
+      },
+      {
+        name: 'Member administration',
+        description:
+          'Changing the role of somebody already here, suspending or removing them.',
+        status: 'planned',
+        note: 'Invitations choose a role when a person joins; changing it afterwards has no product surface yet.',
       },
       {
         name: 'Ticket ownership',

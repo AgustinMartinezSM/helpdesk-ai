@@ -263,9 +263,15 @@ describe('user profile projection (real broker, real database)', () => {
     // Isolation BY IDENTITY: the outsider's only membership is org B, so no
     // amount of profile data may surface them in org A's directory.
     const directoryA = await repository.list(orgA);
-    expect(directoryA.map((profile) => profile.userId)).toEqual([insiderId]);
+    expect(directoryA.map((entry) => entry.profile.userId)).toEqual([
+      insiderId,
+    ]);
 
     const directoryB = await repository.list(orgB);
-    expect(directoryB.map((profile) => profile.userId)).toEqual([outsiderId]);
+    expect(directoryB.map((entry) => entry.profile.userId)).toEqual([
+      outsiderId,
+    ]);
+    // The role travels with the row now, from the same projection query.
+    expect(directoryB[0].roleTemplate).toBeTruthy();
   });
 });

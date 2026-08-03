@@ -21,6 +21,7 @@ Components; each exports its own `metadata`.
 | `/engineering`  | `engineering/page.tsx`  | Architecture, applications, libraries, stack, decisions, delivery                                                       | Server                        |
 | `/contact`      | `contact/page.tsx`      | Contact experience with honest delivery behavior                                                                        | Server + `ContactForm` island |
 | `/login`        | `login/page.tsx`        | Authentication entry point                                                                                              | Client (session interaction)  |
+| `/register`     | `register/page.tsx`     | Account creation — the first step of redeeming an invitation for somebody who has no account yet                        | Client (session interaction)  |
 
 Shared: `layout.tsx` (shell + skip link), `template.tsx` (per-navigation
 entrance animation), `layout.module.css`.
@@ -30,12 +31,14 @@ entrance animation), `layout.module.css`.
 Rendered inside `AppShell` (sticky product header, user menu, minimal
 footer). All client components — they depend on the in-memory session.
 
-| Route           | File                    | Purpose                                                                 |
-| --------------- | ----------------------- | ----------------------------------------------------------------------- |
-| `/tickets`      | `tickets/page.tsx`      | Ticket list with status filters, skeletons, empty states                |
-| `/tickets/new`  | `tickets/new/page.tsx`  | Ticket creation with priority pills                                     |
-| `/tickets/[id]` | `tickets/[id]/page.tsx` | Detail: badges, transitions, comments, internal notes, history timeline |
-| `/account`      | `account/page.tsx`      | Profile, roles, sign out                                                |
+| Route           | File                    | Purpose                                                                                     |
+| --------------- | ----------------------- | ------------------------------------------------------------------------------------------- |
+| `/tickets`      | `tickets/page.tsx`      | Ticket list with status filters, skeletons, empty states                                    |
+| `/tickets/new`  | `tickets/new/page.tsx`  | Ticket creation with priority pills                                                         |
+| `/tickets/[id]` | `tickets/[id]/page.tsx` | Detail: badges, transitions, comments, internal notes, history timeline                     |
+| `/account`      | `account/page.tsx`      | Profile, roles, sign out                                                                    |
+| `/people`       | `people/page.tsx`       | Directory, invitations, invite and revoke — nav entry gated on people.read or people.invite |
+| `/join`         | `join/page.tsx`         | Redeeming an invitation: preview, then accept, then a session refresh                       |
 
 ## Root layout — `src/app/layout.tsx`
 

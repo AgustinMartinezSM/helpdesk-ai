@@ -203,9 +203,11 @@ export default function HowItWorksPage() {
         </div>
         <p className={styles.rolesNote}>
           Requests, conversations, internal notes, history and role-based access
-          work today. Manager dashboards and in-app notifications run behind the
-          API but have no product screens yet, and roles are assigned outside
-          the product — there is no administration UI. The{' '}
+          work today, and so does bringing somebody in: an administrator invites
+          a colleague with the role they should have, and hands them a one-time
+          code — nothing is emailed. Changing the role of somebody already here
+          still happens outside the product. Manager dashboards and in-app
+          notifications run behind the API but have no product screens yet. The{' '}
           <Link href="/features" className={styles.inlineLink}>
             features page
           </Link>{' '}

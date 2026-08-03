@@ -26,6 +26,17 @@ export interface AuthContextValue {
     sharedWorkstation?: boolean,
   ): Promise<void>;
   logout(): Promise<void>;
+  /**
+   * Re-mints the session from the refresh cookie.
+   *
+   * Needed because some server-side changes do not reach an already-issued
+   * token: accepting an invitation creates the membership but leaves the
+   * caller's current token carrying no organization, so without this the
+   * person joins and still appears to belong nowhere. It is also how a
+   * permission snapshot (ADR 0020) is brought up to date deliberately rather
+   * than by waiting out the access-token lifetime.
+   */
+  refresh(): Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -68,6 +79,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const refresh = useCallback(async () => {
+    const recovered = await refreshRequest();
+    setSession(recovered);
+    setStatus(recovered ? 'authenticated' : 'anonymous');
+  }, []);
+
   const logout = useCallback(async () => {
     await logoutRequest();
     setSession(null);
@@ -75,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ status, session, login, logout }}>
+    <AuthContext.Provider value={{ status, session, login, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );
