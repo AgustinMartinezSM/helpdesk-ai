@@ -9,6 +9,7 @@ import { ButtonLink } from '../../components/ui/button';
 import {
   ArrowRightIcon,
   BarChartIcon,
+  GitBranchIcon,
   BellIcon,
   ClockIcon,
   FileTextIcon,
@@ -27,10 +28,10 @@ import styles from './page.module.css';
 
 export const metadata: Metadata = {
   title: {
-    absolute: 'HelpDesk AI — Support operations, improved by AI',
+    absolute: 'HelpDesk AI — help desk for internal requests',
   },
   description:
-    'Centralize requests, assist support teams, automate repetitive analysis, and preserve human control over every important decision.',
+    'Every request gets a place, an owner and an ending. Requests arrive by message, by phone or in a hallway; HelpDesk AI gives each one a branch, a team and a history, and the person who asked confirms when it is done.',
 };
 
 const ROLE_VALUE = [
@@ -62,7 +63,10 @@ const ROLE_VALUE = [
 
 const CAPABILITY_ICONS: Record<string, React.ReactNode> = {
   'Ticket lifecycle': <TicketIcon size={17} />,
-  'Role-based access': <LockIcon size={17} />,
+  'Permission-based access': <LockIcon size={17} />,
+  'Tenant isolation': <ShieldCheckIcon size={17} />,
+  'Where the request came from': <GitBranchIcon size={17} />,
+  'Support teams': <UsersIcon size={17} />,
   'Internal notes': <MessageSquareIcon size={17} />,
   'Ticket history': <ClockIcon size={17} />,
   Summarization: <SparklesIcon size={17} />,
@@ -153,8 +157,8 @@ export default function LandingPage() {
       <Section
         tone="raised"
         eyebrow="Who it serves"
-        title="One platform, four jobs done well"
-        lead="Support is a team sport. HelpDesk AI gives each role exactly the surface it needs — nothing more, nothing less."
+        title="Four people, one request"
+        lead="The same request looks different to the person who reported it, the technician who fixes it, the manager who is accountable for it and the administrator who decides who sees it."
       >
         <div className={styles.rolesGrid}>
           {ROLE_VALUE.map((entry, index) => (
@@ -172,8 +176,8 @@ export default function LandingPage() {
       <Section
         tone="sunken"
         eyebrow="Capabilities"
-        title="Everything a support operation needs"
-        lead="Shipped capabilities are labeled Available. Anything not usable today says so — clearly."
+        title="What works today, labelled"
+        lead="Every capability carries the status the repository can prove. Anything not usable today says so, in the same words everywhere."
       >
         <div className={styles.capabilitiesGrid}>
           {LANDING_CAPABILITIES.map((capability, index) => (
@@ -195,8 +199,8 @@ export default function LandingPage() {
 
       <Section
         eyebrow="How it works"
-        title="From request to resolution, with people in charge"
-        lead="A ticket flows through validation, events and AI analysis. The final action is always a human decision."
+        title="A signal becomes a request"
+        lead="Something breaks and somebody says so. From there it is validated, published as an event, read by the AI, and decided by a person — always in that order."
       >
         <ol className={styles.workflowGrid} role="list">
           {WORKFLOW_PREVIEW.map((entry, index) => (

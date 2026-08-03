@@ -18,6 +18,13 @@
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  /* Clear space: the height of the mark's end stop, scaled to the mark. */
+  gap: 0.5rem;
+}
+
+.wordmarkText {
   font-size: 1.0625rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -163,9 +170,23 @@
   background: var(--surface-2);
 }
 
+/* Same rule as the desktop marker: the yellow says where you are, and it is
+   never the only thing that does. */
 .mobileLinkActive {
-  color: var(--accent);
-  background: var(--accent-soft);
+  position: relative;
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.mobileLinkActive::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
 }
 
 .mobileActions {

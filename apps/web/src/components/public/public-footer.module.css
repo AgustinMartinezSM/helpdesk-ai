@@ -23,13 +23,20 @@
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wordmarkText {
   font-size: 1.0625rem;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
+/* One ink weight — see the note in public-nav.module.css. */
 .wordmark span {
-  color: var(--accent);
+  color: inherit;
 }
 
 .tagline {

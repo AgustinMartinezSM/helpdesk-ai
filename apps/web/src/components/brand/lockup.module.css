@@ -1,0 +1,24 @@
+.lockup {
+  display: inline-flex;
+  align-items: center;
+  /*
+   * Clear space between the mark and the word: the height of the mark's end
+   * stop (3.5 of its 32 units), so it stays proportional at every size
+   * instead of being a number somebody has to re-pick.
+   */
+  gap: calc(var(--lockup-mark, 28px) * 0.22);
+  color: var(--text);
+}
+
+.wordmark {
+  font-size: calc(var(--lockup-mark, 28px) * 0.6);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* One ink weight. See the note in lockup.tsx. */
+.wordmark span {
+  color: inherit;
+}

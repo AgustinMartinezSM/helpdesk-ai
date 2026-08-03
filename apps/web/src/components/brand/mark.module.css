@@ -1,0 +1,23 @@
+.mark {
+  display: block;
+  flex-shrink: 0;
+}
+
+/*
+ * The field is the brand colour and the glyph is the ink that is legal on
+ * it — the one pairing this system has measured, at 14.83:1, and the only
+ * one the mark is ever allowed to use. Both are the same value in the light
+ * and the dark theme, which is why there is one mark rather than two.
+ */
+.field {
+  fill: var(--brand);
+}
+
+.ink {
+  fill: var(--brand-on);
+}
+
+/* Monochrome: the glyph takes the colour of whatever it sits in. */
+.inkMono {
+  fill: currentColor;
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Mark } from './brand/mark';
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { useAuth } from './auth-context';
 import { can, PERMISSIONS } from '../lib/permissions';
@@ -135,7 +136,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <Link href="/" className={styles.wordmark}>
-            HelpDesk&nbsp;<span>AI</span>
+            <Mark size={24} />
+            <span className={styles.wordmarkText}>
+              HelpDesk&nbsp;<span>AI</span>
+            </span>
           </Link>
           <AppNav />
           <div className={styles.actions}>

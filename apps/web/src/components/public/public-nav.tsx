@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Mark } from '../brand/mark';
 import { usePathname } from 'next/navigation';
 import {
   useEffect,
@@ -135,7 +136,10 @@ export function PublicNav() {
       <header className={styles.header}>
         <div className={styles.inner}>
           <Link href="/" className={styles.wordmark}>
-            HelpDesk&nbsp;<span>AI</span>
+            <Mark size={26} />
+            <span className={styles.wordmarkText}>
+              HelpDesk&nbsp;<span>AI</span>
+            </span>
           </Link>
 
           {/* Hidden by CSS below the desktop breakpoint; marked inert while

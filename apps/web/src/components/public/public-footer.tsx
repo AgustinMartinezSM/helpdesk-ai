@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PUBLIC_NAV_LINKS, siteConfig } from '../../lib/site-config';
+import { Mark } from '../brand/mark';
 import { HelpiRestore } from '../helpi';
 import styles from './public-footer.module.css';
 
@@ -26,7 +27,10 @@ export function PublicFooter() {
         <div className={styles.columns}>
           <div className={styles.brandColumn}>
             <p className={styles.wordmark}>
-              HelpDesk <span>AI</span>
+              <Mark size={24} />
+              <span className={styles.wordmarkText}>
+                HelpDesk <span>AI</span>
+              </span>
             </p>
             <p className={styles.tagline}>
               Support operations, improved by artificial intelligence — with
