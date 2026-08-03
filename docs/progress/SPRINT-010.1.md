@@ -1,7 +1,10 @@
 # Sprint 10.1 — Design system, logo and Helpi
 
-Status: **CLOSED (2026-08-03).** The Definition of Ready below was written and
-checked against the repository before any visual change.
+Status: **CLOSED (2026-08-03).** Remote CI green on the final HEAD: run
+[`30840468940`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30840468940)
+on `309d498`, green on its first attempt, covering all nine commits — they were
+pushed together. The Definition of Ready below was written and checked against
+the repository before any visual change.
 
 ## Definition of Ready
 

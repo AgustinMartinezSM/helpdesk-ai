@@ -653,6 +653,10 @@ bilingual scope there.
 
 ## Sprint 10.1 in one breath — the strategy, implemented
 
+Remote CI green on the closing HEAD: run `30840468940` on `309d498`, first
+attempt, one run covering all nine commits. The full local gate ran green too:
+format, lint, typecheck, **249 unit tests across 27 suites** and build.
+
 **The reference is `docs/architecture/design-system.md`.** Read it before
 touching a colour. `frontend-design-system.md` keeps the component inventory
 and Helpi's behavioural contract; its colour half is superseded and says so.
