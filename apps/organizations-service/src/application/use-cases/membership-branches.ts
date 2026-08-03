@@ -7,7 +7,7 @@ import {
 import type { Branch } from '../../domain/branch';
 import {
   BranchNotFoundError,
-  ForbiddenMembershipActionError,
+  ForbiddenStructureActionError,
   MembershipNotFoundError,
 } from '../../domain/errors';
 import { requireAdministrableTarget } from '../membership-administration';
@@ -43,8 +43,11 @@ export class ListBranchesUseCase {
    * drawing a picker or an editor.
    */
   async execute(actor: Actor): Promise<Branch[]> {
+    // The structure refusal, not the membership one: this reads places, and
+    // an error saying "you are not allowed to manage memberships here" would
+    // name the wrong surface to whoever was refused.
     if (!hasPermission(actor, PERMISSIONS.BRANCHES_READ)) {
-      throw new ForbiddenMembershipActionError();
+      throw new ForbiddenStructureActionError();
     }
     return this.branches.list(requireOrganization(actor));
   }
@@ -63,8 +66,11 @@ export class GetMembershipBranchesUseCase {
    * very fact they need to decide whether they may act.
    */
   async execute(actor: Actor, userId: string): Promise<string[]> {
+    // Same reasoning: the key being checked is a branches key, so the
+    // refusal names the structure surface even though the subject is a
+    // membership.
     if (!hasPermission(actor, PERMISSIONS.BRANCHES_READ)) {
-      throw new ForbiddenMembershipActionError();
+      throw new ForbiddenStructureActionError();
     }
     const organizationId = requireOrganization(actor);
     const membership = await this.memberships.findByOrganizationAndUser(

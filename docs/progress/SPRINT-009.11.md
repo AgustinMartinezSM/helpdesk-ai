@@ -294,6 +294,30 @@ first attempt**, every step included — format, lint, typecheck, test, build,
 and the integration tests against the real PostgreSQL and RabbitMQ service
 containers. 3m38s.
 
+**An end-to-end walk through five real processes** (browser client → web-bff →
+api-gateway → auth / organizations): a requester refused both the write and
+the read with 403; the account promoted in SQL, after which the next token
+carried `branches.create` and `branches.update`; a branch registered, its
+duplicate code refused with 409 and a renamed code with 400; a department and
+a station created, the station's responsible person named by `userId` and read
+back as the same `userId`, and a foreign one refused with 404; the branch
+archived, its department and station still `active` underneath, and reopened.
+The four deleted operator routes answered 404 **with the credential present**.
+
+**In a real browser** against the dev stack: the Organization entry appears in
+the nav, the branch list renders with its code and timezone, opening a branch
+shows its departments and service points along with the line saying a service
+point has no login of its own, archiving the branch shows the tag, the Reopen
+button and the explanation that its contents are kept — with the department
+and station visibly not archived — and reopening restores it. Every request
+200, no console errors.
+
+**One thing the walk surfaced and this sprint fixed**: refusing the branch
+listing answered "you are not allowed to manage memberships here". The listing
+had moved to the structure surface but still threw the membership error, which
+named the wrong surface to whoever was refused. Both branch reads now throw
+`ForbiddenStructureActionError`, which is the whole reason that error exists.
+
 ### Still true after this sprint
 
 The organization's own name and slug cannot be changed from inside the

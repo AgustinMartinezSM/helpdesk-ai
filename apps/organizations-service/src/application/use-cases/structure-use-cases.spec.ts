@@ -6,6 +6,7 @@ import {
   DuplicateDepartmentNameError,
   DuplicateStationCodeError,
   ForbiddenMembershipActionError,
+  ForbiddenStructureActionError,
   InvalidRoleTemplateError,
   MembershipNotAdministrableError,
   MembershipNotFoundError,
@@ -661,12 +662,14 @@ describe('branch membership use cases', () => {
     const ctx = buildContext();
     await withCoveredMembership(ctx);
 
+    // The STRUCTURE refusal: this reads places, and a message about managing
+    // memberships would name the wrong surface to whoever was refused.
     await expect(
       ctx.listBranches.execute({
         ...admin(),
         permissions: new Set([PERMISSIONS.PEOPLE_READ]),
       }),
-    ).rejects.toBeInstanceOf(ForbiddenMembershipActionError);
+    ).rejects.toBeInstanceOf(ForbiddenStructureActionError);
   });
 
   it('lists only the caller organization branches', async () => {
