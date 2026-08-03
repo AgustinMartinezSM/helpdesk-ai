@@ -536,17 +536,27 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > (shared-terminal sessions), 9.8 (invitations, and organizations-service
 > gaining its public face — ADR 0019), 9.9 (the people-management surface, and
 > a browser that decides what to render from permissions rather than role names
-> — ADR 0020), 9.10 (member administration — ADR 0021) and 9.11 (organization
-> setup, after which INTERNAL_SERVICE_TOKEN guards no mutation anywhere). Read
-> docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.11.md and ADR 0021
+> — ADR 0020), 9.10 (member administration — ADR 0021), 9.11 (organization
+> setup, after which INTERNAL_SERVICE_TOKEN guards no mutation anywhere) and
+> 9.12 (support teams and ticket routing — ADR 0022). Read
+> docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.12.md and ADR 0022
 > before touching anything, and verify the repo state with git first.
 >
-> Pick the next sprint — the handoff's "Exact next action" lays out five
-> candidates and what each unblocks. Routing is the natural one: departments
-> now have a screen, rows and no behaviour, unrouted intake still falls to the
-> central view, and 9.11 handed the number 9.12 back to it. Open whichever you
-> choose with its own Definition of Ready, the pattern the last seven sprints
-> set.
+> **The one thing not to get wrong**: a support team and a department are
+> DIFFERENT CONCEPTS. A department is the requester's organizational area and
+> belongs to exactly one branch; a support team is the group that resolves a
+> ticket, is organization-owned, and reaches branches through an explicit join
+> where NO ROWS MEANS ORGANIZATION-WIDE. `tickets.read_team` derives from
+> active support-team membership and never from a department. The first draft
+> of ADR 0022 merged them, the project owner stopped it, and the ADR keeps its
+> misleading filename on purpose so the correction stays visible.
+>
+> Pick the next sprint — the handoff's "Exact next action" lays out the
+> candidates and what each unblocks. A screen for support teams is the natural
+> one: 9.12 shipped the whole surface as api-ready, so teams exist today only
+> for whoever calls the API, and the Organization screen already has the
+> shape. Open whichever you choose with its own Definition of Ready, the
+> pattern the last eight sprints set.
 >
 > Standing rules: never a permanent shared password or unattributable request
 > path (ADR 0016); profile fields never become credentials (ADR 0017); an
@@ -560,8 +570,12 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > bounds grants and never decides access; the directory's default listing stays
 > active-only; no public route ever takes an organization id — the tenant comes
 > from the token; archiving never cascades; a station authenticates nothing
-> (ADR 0016/0017); do not seed role-template rows (vocabulary still open); do
-> not remove the retiredBindingKeys literals; do not remove the gateway's
+> (ADR 0016/0017); a support team is never a department and `read_team` never
+> derives from department membership (ADR 0022); an empty branch set on a team
+> is the ORGANIZATION-WIDE case in the domain, the projection and the event,
+> never "serves nothing"; no team field goes on a ticket event payload (that is
+> a v3); do not seed role-template rows (vocabulary still open); do not remove
+> the retiredBindingKeys literals; do not remove the gateway's
 > x-internal-service-token strip; rotation must keep deriving the born window.
 
 ## Repository isolation
