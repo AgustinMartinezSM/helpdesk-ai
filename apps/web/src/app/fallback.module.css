@@ -1,0 +1,113 @@
+/*
+ * Shared by not-found.tsx and error.tsx. Both are reached when a shell
+ * cannot be assumed — a URL matching no route group, or a segment that
+ * threw — so they carry the mark and nothing else, and they use the tokens
+ * directly rather than the product primitives, which pull in a session.
+ */
+
+.page {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--space-6);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 28rem;
+  padding: var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.title {
+  font-size: var(--display-md);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.body {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+/* The same shape as the Button primitive, without importing it: these two
+   screens must render when the rest of the app cannot. */
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-control);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.primary {
+  background: var(--action);
+  color: var(--action-on);
+  border: 1px solid var(--action);
+}
+
+.primary:hover {
+  background: var(--action-hover);
+  border-color: var(--action-hover);
+}
+
+.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-control);
+}
+
+.secondary:hover {
+  background: var(--surface-2);
+}
+
+.digest {
+  margin-top: var(--space-2);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.digest code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: var(--space-6);
+  }
+}
