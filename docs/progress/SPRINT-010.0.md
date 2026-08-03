@@ -236,30 +236,86 @@ correcting on that front.
 - **The bilingual scope is unanswered.** Whether Spanish is Helpi's voice only,
   the product's second language, or its first is the one decision here with a
   large implementation cost and nothing in the repository to settle it. There is
-  no i18n anywhere today — `lang="en"` is hard-coded, every string is a literal,
-  and `ROLE_LABELS` is the only translation-ready seam. 10.1's Definition of
-  Ready must answer it before any i18n work starts.
+  no i18n rendered anywhere today — `lang="en"` is hard-coded and every string is
+  a literal — but part of the decision was already taken: Sprint 9.6 stored
+  organization-defined profile field labels as `label_es_ar` / `label_en_us` so
+  that i18n would be "content, not schema churn", and nothing in `apps/web` reads
+  the es-AR column yet. 10.1's Definition of Ready must answer the scope question
+  and reconcile it with what 9.6 already committed.
 - **No Block A work was started or reopened.**
 
-### Validation
+### Validation, and what it caught
 
-The strategy's claims were checked against the repository by an adversarial
-pass over four independent lenses — the proof points, the measurements, internal
-consistency against the sprint's own rules and the repository writing standard,
-and the ten-item defect list — with a refute-by-default judgement over
-everything flagged.
+The strategy's claims were checked against the repository by an adversarial pass
+over four independent lenses — the proof points, the measurements, internal
+consistency against this sprint's own rules and the repository writing standard,
+and the defect list — each instructed to assume every assertion was wrong until
+the repository confirmed it.
+
+**It found nine real defects in my own document, and the shape of them is the
+point: a strategy whose central pillar is that this project's claims are true was
+itself carrying six overstatements.** Each was verified against the code myself
+before being fixed, and all nine are fixed in `f4694eb` and the commits around
+it.
+
+The two that would have done damage:
+
+- **The section-band re-tune reintroduced the exact defect the banding system
+  exists to prevent.** I measured every band against `--bg` and it passed. But
+  `.technical` renders on `--surface-sunken`, and the landing page orders its
+  sections `raised → sunken → raised → technical → tinted` — so sunken and
+  tinted are adjacent, and my values put them **0.79 L\* apart**, less than half
+  the 1.7 the design system had already found imperceptible. The rule is now
+  "measure against the neighbour, not the base", the tone order is recorded as
+  part of the system, and the corrected set holds ≥3 L\* on every rendered
+  adjacency.
+- **I recorded a SECURITY.md correction that I had not actually made.** The
+  false sentence lives at line 19 — "the credential therefore guards no mutation
+  anywhere in the platform" — and my first pass fixed two _other_ statements
+  further down, leaving the file contradicting itself and the sprint record
+  asserting a fix the file did not contain. That is worse than not fixing it,
+  because a recorded fix stops anyone looking. Line 19 is now corrected.
+
+The rest, briefly. **"Organizations ... created and archived from the product"**
+was false — the organization is created by a migration and nothing in the UI
+creates, renames or archives one. **"Validated at ticket creation"** wrongly
+included departments; a ticket carries a branch and a service point and
+deliberately no department (ADR 0022). **"Used for visibility"** was true of
+branches only — `canView` has four legs and neither departments nor service
+points is one. **"Enforced at every repository port"** does not survive the check
+it invites: `commentsFor` and `historyFor` take no organization. That last one I
+had copied verbatim from `pilot-readiness.md`, so I corrected it there too rather
+than leave the two documents disagreeing. **Three hard-coded AI statuses were
+six** — `how-it-works` renders three `StatusPill` literals that will silently
+disagree with `product-status.ts` the moment 10.1 refreshes it, and those are the
+ones a fix working from my list would have missed. And the doc claimed **one
+i18n seam where there are two**.
+
+I am recording this at length rather than quietly fixing it because the failure
+mode is worth carrying: every one of these was a claim I believed, several were
+inherited from documents in this repository, and the measurement error passed my
+own arithmetic because I checked the wrong pairs. **Computing a number is not the
+same as checking the constraint the number is supposed to satisfy.**
 
 ### Documentation improved
 
 - **`docs/architecture/brand-strategy.md`** — new, and the only new file.
-- **`SECURITY.md`** — corrected a false claim. It said
-  `INTERNAL_SERVICE_TOKEN` "guards no mutation anywhere in the platform", true
-  from 9.11 until 9.16 and false since the on-demand projection reconcile
-  landed. A public trust document overstating containment is exactly the failure
-  the site's own security page says it exists to avoid, so this could not wait
-  for 10.1. The stale "opening two read-only lookups and the interim operator
-  mutations" line went with it — those operator mutations were deleted in 9.10
-  and 9.11 — and the header's sprint range was corrected from 9.8 to 9.16.
+- **`SECURITY.md`** — corrected a false claim, on the second attempt. It said
+  `INTERNAL_SERVICE_TOKEN` opens "two read-only membership lookups and nothing
+  else" and "guards no mutation anywhere in the platform" — true from 9.11 until
+  9.16, false since the on-demand projection reconcile landed. A public trust
+  document overstating containment is exactly the failure the site's own security
+  page says it exists to avoid, so this could not wait for 10.1. The first pass
+  fixed two related statements lower in the file and missed the headline one; the
+  adversarial validation caught that, and both are now corrected. The stale
+  "opening two read-only lookups and the interim operator mutations" line went
+  with it — those operator mutations were deleted in 9.10 and 9.11 — and the
+  header's sprint range was corrected from 9.8 to 9.16.
+- **`docs/architecture/pilot-readiness.md`** — its "What is genuinely solid"
+  section claimed tenant isolation was enforced "at every repository port, and
+  ahead of every permission check". Neither half survives the check the document
+  invites, and I had copied the sentence into the brand strategy before checking
+  it. Both now state the property that is true.
 - **`docs/architecture/frontend-design-system.md`** — Helpi's path and framing
   were stale: the file moved out of `components/public/` and is mounted in both
   shells with its own hint set for each, so the document described half the
