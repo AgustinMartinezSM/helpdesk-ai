@@ -81,6 +81,33 @@
   color: var(--text-muted);
 }
 
+/* Which support team owns resolving this ticket. A Card rather than a plain
+   section: it is a decision about the ticket, sitting beside the status
+   actions rather than inside the conversation. */
+.routing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 1rem 1.25rem;
+}
+
+.routingCurrent {
+  font-size: 0.9375rem;
+}
+
+.routingForm {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.routingHint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .comments {
   display: flex;
   flex-direction: column;

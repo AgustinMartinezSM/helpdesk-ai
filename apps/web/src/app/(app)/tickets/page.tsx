@@ -16,6 +16,8 @@ import {
 import { Skeleton } from '../../../components/ui/skeleton';
 import { PriorityDot, StatusBadge } from '../../../components/ui/status';
 import { relativeTime } from '../../../lib/format';
+import { can, PERMISSIONS } from '../../../lib/permissions';
+import { listMyTeams, type SupportTeam } from '../../../lib/teams';
 import {
   listTickets,
   type Ticket,
@@ -52,9 +54,39 @@ function RowSkeletons() {
 export default function TicketsPage() {
   const { status, session } = useAuth();
   const [filter, setFilter] = useState<Filter>('all');
+  const [team, setTeam] = useState<string>('all');
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [teams, setTeams] = useState<SupportTeam[]>([]);
+
+  const canReadTeams = can(session, PERMISSIONS.TICKETS_READ_TEAM);
+  const accessToken = session?.accessToken;
+
+  useEffect(() => {
+    if (status !== 'authenticated' || !accessToken || !canReadTeams) {
+      return;
+    }
+    let cancelled = false;
+    // The caller's OWN teams, which is what the server would intersect the
+    // filter with anyway. Nobody's ticket list should offer a team whose
+    // work they cannot see.
+    listMyTeams(accessToken)
+      .then((mine) => {
+        if (!cancelled) {
+          setTeams(mine);
+        }
+      })
+      .catch(() => {
+        // The team filter simply does not appear; the listing is unaffected.
+        if (!cancelled) {
+          setTeams([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status, accessToken, canReadTeams]);
 
   useEffect(() => {
     if (status !== 'authenticated' || !session) {
@@ -64,7 +96,10 @@ export default function TicketsPage() {
     setTickets(null);
     setTotal(null); // a stale count would describe the previous filter
     setError(null);
-    listTickets(session.accessToken, filter === 'all' ? {} : { status: filter })
+    listTickets(session.accessToken, {
+      ...(filter === 'all' ? {} : { status: filter }),
+      ...(team === 'all' ? {} : { assignedTeamId: team }),
+    })
       .then((page) => {
         if (!cancelled) {
           setTickets(page.items);
@@ -79,7 +114,7 @@ export default function TicketsPage() {
     return () => {
       cancelled = true;
     };
-  }, [status, session, filter]);
+  }, [status, session, filter, team]);
 
   if (status === 'loading') {
     return <RowSkeletons />;
@@ -132,6 +167,45 @@ export default function TicketsPage() {
           </button>
         ))}
       </div>
+
+      {/* Only when the person is in more than nothing: an organization that
+          has configured no teams, or somebody who belongs to none, is not
+          asked about a concept that does not apply to them (ADR 0016). */}
+      {teams.length > 0 ? (
+        <div
+          className={styles.filters}
+          role="group"
+          aria-label="Filter by support team"
+        >
+          <button
+            type="button"
+            className={
+              team === 'all'
+                ? `${styles.filter} ${styles.filterActive}`
+                : styles.filter
+            }
+            aria-pressed={team === 'all'}
+            onClick={() => setTeam('all')}
+          >
+            All teams
+          </button>
+          {teams.map((option) => (
+            <button
+              key={option.teamId}
+              type="button"
+              className={
+                team === option.teamId
+                  ? `${styles.filter} ${styles.filterActive}`
+                  : styles.filter
+              }
+              aria-pressed={team === option.teamId}
+              onClick={() => setTeam(option.teamId)}
+            >
+              {option.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {error ? <FormError>{error}</FormError> : null}
 

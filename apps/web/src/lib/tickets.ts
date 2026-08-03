@@ -17,6 +17,14 @@ export interface Ticket {
   category: string | null;
   requesterId: string;
   assigneeId: string | null;
+  /** Where the request was filed. Null forever is legitimate (ADR 0016). */
+  branchId: string | null;
+  /**
+   * The SUPPORT TEAM that owns resolving this, never the requester's
+   * department (ADR 0022). Null means nobody has routed it yet, which is an
+   * ordinary state and not a gap.
+   */
+  assignedTeamId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -87,12 +95,23 @@ async function call<T>(
   return (await response.json()) as T;
 }
 
+/**
+ * The listing, already scoped by the server to whatever the caller may see.
+ *
+ * `assignedTeamId` narrows to one support team. For a `tickets.read_team`
+ * holder the server intersects it with their own team set and answers the
+ * empty page for anything outside it — never an error, because a 4xx would
+ * confirm the team exists.
+ */
 export function listTickets(
   accessToken: string,
-  filter: { status?: TicketStatus } = {},
+  filter: { status?: TicketStatus; assignedTeamId?: string } = {},
 ): Promise<TicketPage> {
-  const query = filter.status ? `?status=${filter.status}` : '';
-  return call(accessToken, 'GET', `/tickets${query}`);
+  const query = new URLSearchParams();
+  if (filter.status) query.set('status', filter.status);
+  if (filter.assignedTeamId) query.set('assignedTeamId', filter.assignedTeamId);
+  const suffix = query.size > 0 ? `?${query.toString()}` : '';
+  return call(accessToken, 'GET', `/tickets${suffix}`);
 }
 
 export function getTicket(
@@ -158,6 +177,26 @@ export function addComment(
       body,
     },
   );
+}
+
+/**
+ * Sends the ticket to the support team that should resolve it, or takes it
+ * back with null.
+ *
+ * This changes WHO CAN SEE the ticket, which is why it needs `routing.manage`
+ * rather than being an ordinary field edit. The server answers one generic
+ * 422 for every reason a team cannot take it — archived, another tenant's,
+ * out of branch scope, or a ticket with no branch at all sent to a scoped
+ * team — and the caller should render that message rather than guess which.
+ */
+export function routeTicket(
+  accessToken: string,
+  id: string,
+  teamId: string | null,
+): Promise<Ticket> {
+  return call(accessToken, 'PATCH', `/tickets/${encodeURIComponent(id)}/team`, {
+    teamId,
+  });
 }
 
 export function changeStatus(

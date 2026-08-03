@@ -102,7 +102,11 @@ function AppNav() {
     {
       href: '/organization',
       label: 'Organization',
-      visible: can(session, PERMISSIONS.BRANCHES_READ),
+      // Two keys, because the screen has two sections and a service desk
+      // manager runs the support teams without administering branches.
+      visible:
+        can(session, PERMISSIONS.BRANCHES_READ) ||
+        can(session, PERMISSIONS.TEAMS_MANAGE),
     },
   ];
 

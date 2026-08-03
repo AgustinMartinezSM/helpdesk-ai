@@ -170,3 +170,19 @@
   flex-wrap: wrap;
   padding-top: 0.25rem;
 }
+
+/* The team editors pick from a set rather than adding one row at a time, so
+   the label wraps the control: clicking the name toggles it, which is what a
+   list of people invites you to do. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.check input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}

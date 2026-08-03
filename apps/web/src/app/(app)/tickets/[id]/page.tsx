@@ -36,6 +36,7 @@ import {
   type TicketDetails,
   type TicketStatus,
 } from '../../../../lib/tickets';
+import { TicketRouting } from './ticket-routing';
 import styles from './page.module.css';
 
 /** Legal next statuses, mirrored from the domain for button rendering only. */
@@ -222,6 +223,21 @@ export default function TicketDetailPage() {
                 Confirm fix and close
               </Button>
             </div>
+          ) : null}
+
+          {/* Which group owns resolving this. Renders itself away for
+              anybody who neither routes nor reads by team — a requester has
+              no business knowing the internal structure. */}
+          {session ? (
+            <TicketRouting
+              session={session}
+              ticketId={params.id}
+              assignedTeamId={ticket.assignedTeamId}
+              onRouted={(message) => {
+                setStatusNote(message);
+                void load();
+              }}
+            />
           ) : null}
 
           {/* tickets.note_internal is the key the AI endpoints check: the
