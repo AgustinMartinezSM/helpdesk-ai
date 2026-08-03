@@ -1,7 +1,7 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** 9.16 — projection bootstrap/reconciliation, IMPLEMENTED BUT NOT CLOSED; 9.4-9.15 complete
+**Sprint:** 9.16 complete — projection bootstrap and reconciliation; 9.4-9.15 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -495,14 +495,7 @@ Three things NOT to do: never let the import create structure or a template;
 never put an address or a code in the batch event; never merge the preview and
 the apply.
 
-## Sprint 9.16 in one breath — IMPLEMENTED, NOT CLOSED
-
-**Read this before touching anything: the sprint is committed and green
-locally, but it was NOT pushed and remote CI has NOT run.** The tip of `main`
-is ahead of `origin/main`. `docs/progress/SPRINT-009.16.md` lists what is owed
-at the end; the short version is the runbook, the ADR and pilot-readiness
-updates, the other eight integration suites, a controller spec for the three
-new snapshot endpoints, push and CI.
+## Sprint 9.16 in one breath
 
 **A cold tickets-service now repairs itself.** organizations-service offers
 three read-only keyset-paginated snapshots under `/internal/structure/*`
@@ -537,6 +530,33 @@ and 9.11 deleted for memberships and structure. The justification is written in
 the controller rather than assumed: those changed DOMAIN state with no person
 attached, this converges a cache toward its owner and expresses no decision.
 
+**The operator procedure is `docs/architecture/projection-reconciliation.md`.**
+Bootstrap, dry-run integrity check, repair, the seven counters and what a
+healthy projection answers (`inserted` and `updated` both zero), a
+symptom-to-cause table for every failure the code can produce, and safe
+recovery. The two things a hurried reader gets wrong: **re-running from the
+beginning IS the recovery mechanism** (the resume cursors are a convenience, and
+a resumed run deliberately reports no orphans because it never saw the earlier
+pages), and **deleting projection rows to force a rebuild helps nothing** — it
+makes every located ticket unfileable until the walk finishes and corrects
+nothing the walk would not have corrected in place.
+
+**The rules now live in the ADRs rather than only in the sprint record**: 0003
+(rebuild without crossing a database — the snapshot is read-only, keyset
+paginated by id, and the row carries its own tenant), 0005 (a durable queue does
+not exist before its consumer's first boot; subscribe-then-reconcile plus
+last-write-wins on source timestamps is the whole argument), 0013 (other
+services hold a cache of the organizational graph; repair is one-way), 0022
+(departments publish nothing, so there is nothing to project — "no consumer, no
+promise").
+
+**`INTERNAL_SERVICE_TOKEN` guards a mutation again, and the wording elsewhere
+had to change.** From 9.11 until this sprint it guarded none; the on-demand
+reconcile writes. It writes projection rows only — no domain entity, no
+deletion, nothing a person decided — which is why it is justified rather than a
+reversal, but the old one-line summary is now false and pilot-readiness item 3
+says so.
+
 Three things NOT to do: never reverse subscribe-then-reconcile; never make
 reconciliation delete a row; never let the snapshot endpoints become a general
 cross-service data layer — they are three specific reads for four specific
@@ -547,15 +567,21 @@ projections.
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
   belongs-nowhere → token without tenant claims, refused at writes with 403.
 - **`INTERNAL_SERVICE_TOKEN` lives in three `.env` files** (auth, tickets,
-  organizations) and, since 9.11, guards NO MUTATION — only the two read-only
-  membership lookups. Since 9.8 it is ROTATABLE
+  organizations). From 9.11 until 9.16 it guarded NO MUTATION anywhere; that
+  sentence is now false and is worth unlearning deliberately, because three
+  sprints leaned on it. What it opens today: the two read-only membership
+  lookups, 9.16's three read-only structure snapshots, and 9.16's on-demand
+  reconcile, which WRITES — projection rows only, nothing a person decided, no
+  deletion. Since 9.8 it is ROTATABLE
   (`INTERNAL_SERVICE_TOKEN_PREVIOUS`, accepted alongside the current value;
   runbook in SECURITY.md) and the gateway strips its header inbound. What is
   still missing is ATTRIBUTION: nothing records which process called, and
   closing that needs per-caller secrets or a signed service assertion — a
   self-declared caller header would log a claim the credential does not bind.
   tickets-service without the credential refuses every assignment with 503, by
-  design.
+  design — and since 9.16 it also boots with a warning that reconciliation is
+  not configured, after which a cold projection fills only from new events. If
+  a fresh environment refuses every located ticket, read that warning first.
 - **`JWT_ACCESS_SECRET` is now required by organizations-service too.** Seven
   services verify with it, auth-service signs. A local `.env` from before 9.8
   will fail that service's boot with a named variable, which is the intent —
@@ -633,10 +659,19 @@ projections.
   reason changed in 9.14. The vocabulary decision that blocked them is made;
   what remains is a migration, a repository and an evaluator read. Whoever
   picks it up is doing engineering, not adjudication.
+- **Reconciliation for the other four projections.** 9.16 closed the one with
+  a product consequence (tickets-service's structure refs). `directory_memberships`,
+  `ticket_snapshots`, `user_snapshots` and `ticket_refs` have the same
+  cold-start exposure and no equivalent path — their documented rebuilds are
+  HTTP refetches with known gaps. Milder consequences, same shape of problem.
+  Two residuals came with the fix: nothing SCHEDULES the integrity check (there
+  is no scheduler anywhere in this repo), and drift produces a log line rather
+  than an alert.
 - **R9 beyond organizations-service**: 9.8 built a scoped two-organization
   fixture for that service only (its invitations table cascades, so teardown
   order became load-bearing). The other eight suites still teardown with
-  unfiltered `deleteMany()`; the shared module is still owed.
+  unfiltered `deleteMany()`; the shared module is still owed, and 9.16's
+  cold-start spec added one more file to that pile.
 - **`mv` is minted and bumped but nothing compares it** — narrowed on
   purpose to "cheap staleness signal" (ADR 0014 amendment).
 - **No organization selector / token exchange**; resolution picks the oldest
@@ -698,7 +733,12 @@ attempt, and 9.11 is run `30783298165` on `5cc0036`, green on its first and the
 second of two for that sprint, 9.12 is run `30785560179` on `f6a2600`, green on
 its first attempt, 9.13 is run `30788005358` on `ec065aa`, green on its first
 attempt, 9.14 is run `30791213751` on `3aa7070`, green on its first attempt,
-and 9.15's run is recorded in `SPRINT-009.15.md`.
+9.15's run is recorded in `SPRINT-009.15.md`, and **9.16 is run `30798798526`
+on `612bea2`, green on its first attempt** — one run covering all five of that
+sprint's commits, which were pushed together. Its closing pass also ran the nine
+suites locally: 75 integration tests (messaging 6, auth 6, tickets 19, users 3,
+audit 5, notification 2, analytics 4, ai 7, organizations 23) plus 325 unit
+tests.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
@@ -730,8 +770,8 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-The next sprint is a product choice. 9.15 took bulk import, which had been top
-of this list:
+The next sprint is a product choice. 9.15 took bulk import and 9.16 took
+projection reconciliation, which were the top two of this list:
 
 1. **Email delivery.** It moves to the top by consequence rather than by
    preference: an import of two hundred people now produces two hundred codes
@@ -741,14 +781,13 @@ of this list:
    ADR naming which provider and why. Nothing should be built here without it.
 2. **Seeded role-template rows.** Mechanism, not a decision, since 9.14. Turns
    the code map into rows and is what custom roles would later reuse.
-3. **Projection reconciliation** — item 1 of
-   `docs/architecture/pilot-readiness.md`, and the only piece of debt with a
-   product consequence somebody would actually hit. A consumer's durable queue
-   does not exist before its first boot and a topic exchange discards
-   unroutable messages, so a service deployed after its producers starts with
-   an empty projection and nothing catches it up. A cold tickets-service
-   refuses every located ticket with a 422 until each branch is edited to
-   re-emit. Reproduced, not theorized.
+3. **Reconciliation for the remaining four projections.** 9.16 closed the one
+   that refused tickets; `directory_memberships`, `ticket_snapshots`,
+   `user_snapshots` and `ticket_refs` still start empty and stay that way. The
+   mechanism is decided now, so this is repetition rather than design — which
+   also means it competes with product work on cost alone. Weigh it against
+   the two residuals 9.16 left: nothing schedules the check, and drift is a log
+   line rather than an alert.
 4. **Transfer of ownership**, plus the organization's own name: the two small
    gaps that keep a fresh organization from being fully self-serve.
 5. **Automatic routing rules**, now that manual routing is real and visible.
@@ -757,15 +796,18 @@ of this list:
    can see where a ticket sits and move it.
 
 **The short debt now lives in one place: `docs/architecture/pilot-readiness.md`**
-(written in 9.15's closing pass). It consolidates what used to be scattered
-across this file, several sprint records and a comment or two — R9 beyond
-organizations-service, per-caller service credentials, `mv` compared by nobody,
-`apps/web/specs` outside type-checking, `refreshRequest` without a timeout, no
-rate limiting, and the projection cold-start above — each with the evidence for
-it and what closing it would take. **It also says where the assessment
-stopped**: no load or concurrency testing, no second pair of eyes on security,
-no backup story, no metrics or alerts, and Chromium only. Read that section
-before treating the document as a clean bill of health.
+(written in 9.15's closing pass, amended in 9.16's). It consolidates what used
+to be scattered across this file, several sprint records and a comment or two —
+R9 beyond organizations-service, per-caller service credentials, `mv` compared by
+nobody, `apps/web/specs` outside type-checking, `refreshRequest` without a
+timeout, no rate limiting, and the projection cold-start — each with the
+evidence for it and what closing it would take. Item 1 is now **partly
+resolved** and says so in those words: the defect that refused tickets is fixed
+and its proof cited, the four projections with the same exposure are still open.
+**It also says where the assessment stopped**: no load or concurrency testing,
+no second pair of eyes on security, no backup story, no metrics or alerts, and
+Chromium only. Read that section before treating the document as a clean bill of
+health.
 
 ## Resume commands
 
@@ -792,10 +834,12 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > the product: the Support teams section, manual routing on a ticket, and the
 > team scope control on the ticket list) and 9.14 (the role-template and
 > permission-scope vocabulary, which closed the question that had blocked
-> ADR 0015's seeded rows since 9.4) and 9.15 (bulk CSV onboarding, and the
-> "Validación integral" hardening pass that closes it). Read
-> docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.15.md,
-> SPRINT-009.14.md and ADR 0022 before touching anything, and verify the repo
+> ADR 0015's seeded rows since 9.4), 9.15 (bulk CSV onboarding, and the
+> "Validación integral" hardening pass that closes it) and 9.16 (projection
+> bootstrap and reconciliation — a cold tickets-service repairs itself from the
+> service that owns the data). Read
+> docs/handoffs/CURRENT-HANDOFF.md, docs/progress/SPRINT-009.16.md,
+> SPRINT-009.15.md and ADR 0022 before touching anything, and verify the repo
 > state with git first.
 >
 > **The one thing not to get wrong**: a support team and a department are
@@ -828,6 +872,19 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > now carry a branch and a department, applied at redemption inside the
 > transaction that inserts the membership.
 >
+> **What 9.16 makes true, and the ordering that must not be touched**: a cold
+> tickets-service rebuilds its structure projections from organizations-service
+> over HTTP, never from another service's database. `subscribe()` resolves only
+> after the queue is bound and every apply is last-write-wins on the SOURCE's
+> timestamp, so the rule is subscribe first, snapshot second — reversing it
+> reopens the window it closes, and nothing would fail loudly if you did.
+> Reconciliation reports orphans and deletes nothing. There is no
+> `department_refs` and there must not be one: departments publish no contract,
+> because there is no consumer and therefore no promise. And
+> `INTERNAL_SERVICE_TOKEN` guards a write again — the on-demand reconcile —
+> after three sprints in which it guarded none; unlearn the old sentence rather
+> than half-remembering it.
+>
 > Pick the next sprint — the handoff's "Exact next action" lays out the
 > candidates. **Email delivery is top by consequence**: an import of two
 > hundred people now produces two hundred codes distributed by hand, which is
@@ -857,7 +914,10 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > fallback stays 500 (it is what finds an unmapped error); do not seed
 > role-template rows (vocabulary still open); do not remove the
 > retiredBindingKeys literals; do not remove the gateway's
-> x-internal-service-token strip; rotation must keep deriving the born window.
+> x-internal-service-token strip; rotation must keep deriving the born window;
+> never reverse subscribe-then-reconcile; reconciliation reports orphans and
+> deletes nothing; the three snapshot endpoints stay three specific reads for
+> four specific projections and never become a cross-service data layer.
 
 ## Repository isolation
 

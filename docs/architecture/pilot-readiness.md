@@ -1,10 +1,9 @@
 # Pilot readiness — validación integral
 
 Status: **Assessment, 2026-08-03, at `main` after Sprint 9.15, amended after
-Sprint 9.16.** Nothing here
-is a plan that was approved; it is what I found when I went looking, with the
-evidence for each item and what closing it would take. Items are ordered by
-what would hurt a pilot first, not by how hard they are.
+Sprint 9.16.** Nothing here is a plan that was approved; it is what I found when
+I went looking, with the evidence for each item and what closing it would take.
+Items are ordered by what would hurt a pilot first, not by how hard they are.
 
 Item 1 was the reason Sprint 9.16 happened, and it is now **partly resolved** —
 the verified defect is fixed, the class of problem is not. The numbering is kept

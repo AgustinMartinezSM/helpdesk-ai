@@ -1,8 +1,9 @@
 # Sprint 9.16 — Projection bootstrap and reconciliation
 
-Status: **Implemented; closing pass done, remote CI pending (2026-08-03).** The
-Definition of Ready below was written and
-checked against the repository before any code.
+Status: **CLOSED (2026-08-03).** Remote CI green on its first attempt: run
+[`30798798526`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30798798526)
+on `612bea2`. The Definition of Ready below was written and checked against the
+repository before any code.
 
 ## Definition of Ready
 
@@ -419,3 +420,26 @@ discussion, user research or external approval was introduced. Every result
 recorded here was produced by a command run on this machine, and the two things
 that are not covered — the Prisma keyset SQL and the four projections without a
 reconciliation path — are stated as gaps rather than left to be assumed closed.
+
+## Remote CI
+
+Run [`30798798526`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30798798526)
+on `612bea2`, **green on its first attempt**, covering the five implementation
+and closure commits pushed together: `6dea4fb` (opening), `cb01c33`
+(implementation), `31a45b7` (the interim record), `7837b62` (the controller
+spec) and `612bea2` (the runbook, ADR amendments and readiness update). The
+workflow ran `format:check`, `lint`, `typecheck`, `test`, `build` and all nine
+integration suites against the service containers.
+
+The commit that records this result is itself pushed to `main` and runs the
+same workflow, as every closing commit here does.
+
+### Sprint closed
+
+- Remote CI green.
+- `main` equals `origin/main`.
+- Working tree clean.
+- This document says closed.
+- `docs/handoffs/CURRENT-HANDOFF.md` carries the final commit and the run.
+- `pilot-readiness.md` says what closed, what did not, and what this sprint
+  added to the open list.
