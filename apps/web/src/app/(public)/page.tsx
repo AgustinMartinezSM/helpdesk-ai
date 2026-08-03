@@ -115,17 +115,21 @@ export default function LandingPage() {
         <div className={styles.heroGrid} aria-hidden="true" />
         <div className={styles.heroInner}>
           <div className={styles.heroCopy}>
+            {/* The five slots of the tagline architecture, in order: the
+                descriptor, the promise, the lead that grounds it, and — after
+                the buttons — the status line. The brand line ("from signal to
+                resolution") is deliberately not here; it is rare and
+                high-level, and a line used everywhere stops being a line. */}
             <p className={styles.heroEyebrow}>
-              HelpDesk AI · intelligent support operations
+              HelpDesk AI · help desk for internal requests
             </p>
             <h1 className={styles.heroTitle}>
-              Support operations, improved by{' '}
-              <span>artificial intelligence.</span>
+              Every request gets a place, an owner and <span>an ending.</span>
             </h1>
             <p className={styles.heroLead}>
-              Centralize requests, assist support teams, automate repetitive
-              analysis — and preserve human control over every important
-              decision.
+              Support requests arrive by message, by phone, or in a hallway.
+              HelpDesk AI turns them into requests with a branch, a team and a
+              history — and the person who asked confirms when it is done.
             </p>
             <div className={styles.heroActions}>
               <ButtonLink href="/how-it-works">
@@ -278,7 +282,10 @@ export default function LandingPage() {
       </Section>
 
       <section className={styles.finalCta}>
-        <div className={styles.finalCtaInner}>
+        {/* Always dark in both themes — see the inverted-surface block in
+            global.css, which supplies action, text, border and focus tokens
+            that resolve against a dark background. */}
+        <div className={styles.finalCtaInner} data-surface="inverted">
           <h2 className={styles.finalCtaTitle}>Take a closer look</h2>
           <p className={styles.finalCtaLead}>
             Follow the workflow end to end, read how the platform is put

@@ -275,6 +275,38 @@ describe('yellow marks, and never says anything', () => {
     ).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('always brings its own text colour when it becomes a background', () => {
+    /**
+     * The defect this catches was found by measuring the rendered page, not
+     * by reading CSS: the hero's emphasis span painted a yellow marker
+     * behind the heading and inherited the heading's colour, which in the
+     * dark theme is near-white. It measured 1.06:1 — the emphasised words
+     * were invisible exactly where the emphasis was.
+     *
+     * So: any rule that sets a brand background must set a colour in the
+     * same rule. Inheriting is the bug, because what it inherits differs
+     * between themes while the brand does not.
+     */
+    const offenders: string[] = [];
+    for (const sheet of STYLESHEETS) {
+      // Split into rule bodies and look at the ones that paint the brand.
+      for (const [, body] of sheet.text.matchAll(/\{([^{}]*)\}/g)) {
+        const paintsBrand =
+          /(?:^|[\s;])background(?:-color)?:\s*var\(\s*--brand\s*[),]/m.test(
+            body,
+          );
+        if (!paintsBrand) continue;
+        // A pseudo-element with empty content is a mark — a dash, a rule, a
+        // dot. It has no text, so it has nothing to make illegible.
+        if (/content:\s*(''|"")/.test(body)) continue;
+        if (!/(?:^|[\s;])color:\s*/m.test(body)) {
+          offenders.push(`${sheet.relative}: ${body.trim().slice(0, 60)}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('is never assigned to a text colour in any stylesheet', () => {
     /**
      * The measurement above says it must not; this says it does not. A

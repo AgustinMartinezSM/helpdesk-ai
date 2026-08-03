@@ -24,8 +24,16 @@
   white-space: nowrap;
 }
 
+/*
+ * "AI" is no longer the only coloured word. It was the visual place of
+ * honour, in every header and footer, given to the least available part of
+ * the product — the AI capabilities are built and need credentials nobody
+ * has supplied, while requests, structure and permissions are what works.
+ * One ink weight across the wordmark; the yellow mark beside it carries the
+ * identity instead.
+ */
 .wordmark span {
-  color: var(--accent);
+  color: inherit;
 }
 
 .desktopNav {
@@ -56,19 +64,25 @@
 .navLinkActive,
 .navLinkActive:hover {
   position: relative;
-  color: var(--accent);
+  color: var(--text);
   font-weight: 600;
 }
 
+/*
+ * The marker is BRAND yellow, because marking where you are is the yellow's
+ * job in this system. It is not the only signal — the weight changes and
+ * aria-current says it out loud — so the colour carries nothing on its own,
+ * which is what keeps a 1.12:1 hue legal here.
+ */
 .navLinkActive::after {
   content: '';
   position: absolute;
   left: 0.75rem;
   right: 0.75rem;
   bottom: 0.0625rem;
-  height: 2px;
+  height: 3px;
   border-radius: var(--radius-pill);
-  background: var(--accent);
+  background: var(--brand);
 }
 
 .actions {

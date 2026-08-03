@@ -20,7 +20,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--text-secondary);
 }
 
 .title {
@@ -77,6 +77,11 @@
   font-size: 0.9375rem;
   font-weight: 500;
   color: var(--accent);
+  /* Ink acts, so an inline link is told apart by its underline rather
+     than by a hue. One offset across the product (global.css). */
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: from-font;
 }
 
 .directLink:hover {

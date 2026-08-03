@@ -32,8 +32,9 @@
   white-space: nowrap;
 }
 
+/* One ink weight — see the note in public-nav.module.css. */
 .wordmark span {
-  color: var(--accent);
+  color: inherit;
 }
 
 .nav {

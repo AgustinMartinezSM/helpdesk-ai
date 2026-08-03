@@ -7,9 +7,17 @@ describe('Landing page', () => {
   it('renders the product headline and hero CTAs that lead somewhere real', () => {
     render(<LandingPage />);
 
+    /**
+     * The hero carries the PROMISE slot of the tagline architecture
+     * (brand-strategy.md), and the promise is the one line the product has
+     * to be able to defend: a place, an owner and an ending are three
+     * things a person can go and check. It replaced "Support operations,
+     * improved by artificial intelligence", which led with the least
+     * available part of the product.
+     */
     const heading = screen.getByRole('heading', { level: 1 });
     expect(heading.textContent).toBe(
-      'Support operations, improved by artificial intelligence.',
+      'Every request gets a place, an owner and an ending.',
     );
     expect(screen.getByRole('link', { name: 'See how it works' })).toBeTruthy();
     expect(
