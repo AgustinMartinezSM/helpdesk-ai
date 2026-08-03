@@ -33,8 +33,8 @@ export function PublicFooter() {
               </span>
             </p>
             <p className={styles.tagline}>
-              Support operations, improved by artificial intelligence — with
-              human control over every important decision.
+              Help desk for internal requests. Every request gets a place, an
+              owner and an ending.
             </p>
             <p className={styles.status}>
               Portfolio project · in active development
@@ -93,7 +93,7 @@ export function PublicFooter() {
         <div className={styles.bottomBar}>
           <p>{siteConfig.attribution}</p>
           <p className={styles.bottomNote}>
-            Demo environment — no production data.
+            Runs locally from the repository — nothing is hosted yet.
           </p>
         </div>
       </div>

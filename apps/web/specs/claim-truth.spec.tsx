@@ -126,13 +126,13 @@ describe('capability status is never written by hand', () => {
   });
 });
 
-describe('the product does not claim what it cannot do', () => {
-  const publicAndApp = FILES.filter(
-    (file) =>
-      file.relative.startsWith('app/') ||
-      file.relative.startsWith('components/'),
-  );
+/** Every page and component — the surfaces a person actually reads. */
+const publicAndApp = FILES.filter(
+  (file) =>
+    file.relative.startsWith('app/') || file.relative.startsWith('components/'),
+);
 
+describe('the product does not claim what it cannot do', () => {
   it('never says an invitation was sent', () => {
     /**
      * ADR 0008 left adopting an email provider to the project owner and it
@@ -179,6 +179,86 @@ describe('the product does not claim what it cannot do', () => {
       )
       .map((file) => file.relative);
 
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('the public site teaches the product its own shape', () => {
+  /**
+   * Until Sprint 10.3 a visitor could not learn from this site that the
+   * product is multi-tenant. "Department" and "service point" appeared in no
+   * public prose at all, and "branch" only in a technical listing — so the
+   * thing the brand calls its first differentiator was invisible.
+   */
+  const HOW_IT_WORKS = FILES.find(
+    (file) => file.relative === 'app/(public)/how-it-works/page.tsx',
+  );
+
+  it('finds the page that teaches the vocabulary', () => {
+    expect(HOW_IT_WORKS).toBeDefined();
+  });
+
+  it('names every structural concept in plain prose', () => {
+    const text = HOW_IT_WORKS?.text ?? '';
+    for (const term of [
+      'Organization',
+      'Branch',
+      'Department',
+      'Service point',
+      'Support team',
+    ]) {
+      expect({ term, taught: text.includes(term) }).toEqual({
+        term,
+        taught: true,
+      });
+    }
+  });
+
+  it('states that a department is not a support team', () => {
+    /**
+     * ADR 0022's first draft merged the two concepts, the project owner
+     * caught it, and the ADR keeps its misleading filename so the correction
+     * stays visible. The product says the distinction on the Organization
+     * screen; this is the public half of the same sentence, and it is the
+     * one line most likely to stop somebody modelling their company wrong.
+     */
+    // Whitespace-tolerant: this is source, and the formatter decides where
+    // the sentence breaks. Matching a literal space would make the test fail
+    // the next time a word is added earlier in the paragraph.
+    const text = (HOW_IT_WORKS?.text ?? '').replace(/\s+/g, ' ');
+    expect(text).toMatch(/A department is not a support team/i);
+    expect(text).toMatch(
+      /department says where somebody works.*support team says what they fix/i,
+    );
+  });
+
+  it('never says a support team belongs to a branch', () => {
+    // It is organization-owned; its branch reach is an explicit join where
+    // no rows means organization-wide (ADR 0022). "The branch's support
+    // team" would recreate exactly the merged model.
+    const offenders = publicAndApp
+      .filter((file) =>
+        /support team (of|for|in|belonging to) (a|the|each|its) branch|branch'?s support team/i.test(
+          file.text,
+        ),
+      )
+      .map((file) => file.relative);
+    expect(offenders).toEqual([]);
+  });
+
+  it('uses no term from the strategy rejected list', () => {
+    /**
+     * The vocabulary was clean when Sprint 10.3 swept it, and a sweep is
+     * only worth as much as its repetition. Terms that describe things this
+     * product does not have are the dangerous half: they are the ones a
+     * plausible sentence reaches for.
+     */
+    const rejected =
+      /enterprise-grade|world-class|revolutionary|cutting-edge|next-generation|best-in-class|production-ready|streamline|empower|supercharge|transform your workflow|effortless|seamless|AI-powered|powered by AI|AI-driven|automatically resolves|self-healing|escalation polic|workflow automation|routing rules|24\/7|\bend users?\b/i;
+
+    const offenders = publicAndApp
+      .filter((file) => rejected.test(file.text))
+      .map((file) => file.relative);
     expect(offenders).toEqual([]);
   });
 });

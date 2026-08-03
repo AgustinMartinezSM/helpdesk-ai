@@ -74,6 +74,43 @@ const LIFECYCLE: Array<{
   },
 ];
 
+/**
+ * The product's structural vocabulary, taught in the order somebody would
+ * meet it rather than in the order the schema declares it.
+ *
+ * Every term here is the product's own word, not the model's — ADR 0016 is
+ * explicit that the two may differ, so this says "service point" where the
+ * database says "operational station", and the examples use the names a real
+ * place would have.
+ */
+const STRUCTURE = [
+  {
+    term: 'Organization',
+    detail:
+      'Your company. Everything below belongs to exactly one, and nothing in one organization is visible from another.',
+  },
+  {
+    term: 'Branch',
+    detail:
+      'A place you work from — a store, an office, a workshop. A request carries the branch it came from, checked against your real branches when it is created.',
+  },
+  {
+    term: 'Department',
+    detail:
+      'The area inside a branch where the person who asked works: accounting, the shop floor, reception. It describes the requester, not the fix.',
+  },
+  {
+    term: 'Service point',
+    detail:
+      'A specific spot inside a branch — till 2, the reception desk, the meeting room. It is a place, never a login: a service point signs nobody in.',
+  },
+  {
+    term: 'Support team',
+    detail:
+      'The group that resolves requests. It belongs to the organization rather than to a branch, so one team can cover everywhere, several branches, or just one.',
+  },
+];
+
 const ORGANIZATION_ROLES = [
   {
     role: 'Employees',
@@ -187,6 +224,50 @@ export default function HowItWorksPage() {
         <Reveal>
           <ConversationExample />
         </Reveal>
+      </Section>
+
+      <Section
+        tone="sunken"
+        eyebrow="Where the work happens"
+        title="A request knows the place it came from"
+        lead="Most help desks treat location as a text field somebody types into. This one models it, because “the till is broken” is not actionable until you know which till."
+      >
+        <dl className={styles.structureList}>
+          {STRUCTURE.map((entry) => (
+            <div key={entry.term} className={styles.structureItem}>
+              <dt className={styles.structureTerm}>{entry.term}</dt>
+              <dd className={styles.structureDetail}>{entry.detail}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {/*
+          The distinction ADR 0022's first draft got wrong, in the same words
+          the Organization screen uses inside the product. It has never
+          appeared on the public site before, and it is the single sentence
+          most likely to stop somebody modelling their own company wrong.
+        */}
+        <p className={styles.structureNote}>
+          <strong>A department is not a support team.</strong> A department says
+          where somebody works; a support team says what they fix. One central
+          team can serve every branch, or a team can cover only the branches it
+          is responsible for — and the people who ask are organized separately
+          from the people who resolve.
+        </p>
+        <p className={styles.structureNote}>
+          None of this is compulsory. A company at one address with one person
+          who fixes things can create a single support team and never touch
+          branches or departments at all. The structure is there for the day a
+          second location makes “which one?” a real question.
+        </p>
+        <p className={styles.structureNote}>
+          Each organization&apos;s data is separated in the database itself, so
+          one organization cannot read another&apos;s — see the{' '}
+          <Link href="/security" className={styles.inlineLink}>
+            security page
+          </Link>{' '}
+          for how that is enforced.
+        </p>
       </Section>
 
       <Section

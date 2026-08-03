@@ -102,6 +102,30 @@ const WORKFLOW_PREVIEW = [
   },
 ];
 
+/**
+ * The three things the structure buys, rather than the five things it is.
+ * The vocabulary itself is taught on /how-it-works, which is the page
+ * written for somebody who has never used a help desk; this section exists
+ * to say why a visitor should care enough to go and read it.
+ */
+const STRUCTURE_VALUE = [
+  {
+    icon: <GitBranchIcon size={18} />,
+    title: 'Every request carries its place',
+    text: 'The branch it came from and the service point inside it — till 2, the reception desk — checked against your real records when it is created, not typed into a box.',
+  },
+  {
+    icon: <UsersIcon size={18} />,
+    title: 'The people who ask are not the people who fix',
+    text: 'A department says where somebody works. A support team says what they fix. Modelling them separately is what lets one central team serve every branch, or a team cover only its own.',
+  },
+  {
+    icon: <ShieldCheckIcon size={18} />,
+    title: 'One organization can never read another',
+    text: 'Separation is enforced by the database itself rather than by application code, and applied before any permission is evaluated.',
+  },
+];
+
 const SECURITY_PRINCIPLES = [
   'argon2id password hashing with refresh token rotation',
   'Access tokens live in memory, sessions in httpOnly cookies',
@@ -219,6 +243,37 @@ export default function LandingPage() {
         <div className={styles.sectionCta}>
           <Link href="/how-it-works" className={styles.inlineLink}>
             Follow the complete workflow
+            <ArrowRightIcon size={15} />
+          </Link>
+        </div>
+      </Section>
+
+      {/*
+        The multi-tenant story, at the level of a differentiator rather than a
+        feature bullet. It is the product's actual shape and it appeared
+        nowhere in public prose until Sprint 10.3 — a visitor could not learn
+        from this site that the thing models where work happens at all.
+      */}
+      <Section
+        tone="sunken"
+        eyebrow="Where work happens"
+        title="A place, not a text field"
+        lead="“The till is broken” is not something anyone can act on until you know which till. So the places are real records rather than something somebody types."
+      >
+        <div className={styles.rolesGrid}>
+          {STRUCTURE_VALUE.map((entry, index) => (
+            <Reveal key={entry.title} delay={index * 70}>
+              <article className={styles.roleCard}>
+                <span className={styles.roleIcon}>{entry.icon}</span>
+                <h3 className={styles.roleName}>{entry.title}</h3>
+                <p className={styles.roleValue}>{entry.text}</p>
+              </article>
+            </Reveal>
+          ))}
+        </div>
+        <div className={styles.sectionCta}>
+          <Link href="/how-it-works" className={styles.inlineLink}>
+            See how branches, departments and support teams fit together
             <ArrowRightIcon size={15} />
           </Link>
         </div>

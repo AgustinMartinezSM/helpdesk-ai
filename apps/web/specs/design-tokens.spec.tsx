@@ -419,14 +419,32 @@ describe('section bands are separable where they actually meet', () => {
    * from the sequence, which is the difference between testing the system
    * and testing my memory of it.
    */
-  const LANDING_TONES = [
-    'raised',
-    'sunken',
-    'default',
-    'raised',
-    'technical',
-    'tinted',
-  ];
+  /**
+   * READ FROM THE PAGES, not written down beside them. Sprint 10.1 hard-coded
+   * the sequence it believed the landing had and passed while the rendered
+   * page carried a join it had not counted; Sprint 10.3 then added a section
+   * and changed the sequence, which would have made the hard-coded list stale
+   * a second time within two sprints.
+   *
+   * A `<Section>` with no `tone` prop renders the page background, which is
+   * the `default` tone — and forgetting that is precisely how the missed join
+   * happened, so it is spelled out here.
+   */
+  function tonesOf(page: string): string[] {
+    const source = readFileSync(
+      join(SRC, 'app', '(public)', page, 'page.tsx'),
+      'utf8',
+    );
+    return source
+      .split('<Section')
+      .slice(1)
+      .map((chunk) => {
+        const opening = chunk.slice(0, chunk.indexOf('>'));
+        return opening.match(/tone="(\w+)"/)?.[1] ?? 'default';
+      });
+  }
+
+  const PAGES_WITH_BANDS = ['', 'how-it-works', 'features'];
 
   const TONE_TOKEN: Record<string, string> = {
     default: '--bg',
@@ -450,22 +468,39 @@ describe('section bands are separable where they actually meet', () => {
 
   const key = (a: string, b: string) => [a, b].sort().join('|');
 
+  it('reads a real sequence from the pages, so nothing passes vacuously', () => {
+    // Every tone a page uses must be one this test knows how to resolve — a
+    // new tone would otherwise be skipped in silence, which is the whole
+    // failure mode this suite exists for. /features has a single section and
+    // therefore no adjacency; the guard is that the SET is non-trivial.
+    const all = PAGES_WITH_BANDS.map(tonesOf);
+    for (const tones of all) {
+      for (const tone of tones) {
+        expect(Object.keys(TONE_TOKEN)).toContain(tone);
+      }
+    }
+    expect(Math.max(...all.map((tones) => tones.length))).toBeGreaterThan(4);
+  });
+
   it.each(THEMES)(
-    '$name: every adjacency the landing renders clears 3 L*, or is a named hairline join',
+    '$name: every adjacency any page renders clears 3 L*, or is a named hairline join',
     ({ name, tokens }) => {
       const page = parseHex(tokens['--bg']);
       const exempt = HAIRLINE_CARRIED[name].map(([a, b]) => key(a, b));
 
       const failures: string[] = [];
-      for (let i = 1; i < LANDING_TONES.length; i += 1) {
-        const a = TONE_TOKEN[LANDING_TONES[i - 1]];
-        const b = TONE_TOKEN[LANDING_TONES[i]];
-        if (a === b) continue;
-        const delta = Math.abs(
-          lstar(resolve(tokens, a, page)) - lstar(resolve(tokens, b, page)),
-        );
-        if (delta >= 3 || exempt.includes(key(a, b))) continue;
-        failures.push(`${a}↔${b} = ${delta.toFixed(1)} L*`);
+      for (const route of PAGES_WITH_BANDS) {
+        const tones = tonesOf(route);
+        for (let i = 1; i < tones.length; i += 1) {
+          const a = TONE_TOKEN[tones[i - 1]];
+          const b = TONE_TOKEN[tones[i]];
+          if (a === b) continue;
+          const delta = Math.abs(
+            lstar(resolve(tokens, a, page)) - lstar(resolve(tokens, b, page)),
+          );
+          if (delta >= 3 || exempt.includes(key(a, b))) continue;
+          failures.push(`${route || '/'}: ${a}↔${b} = ${delta.toFixed(1)} L*`);
+        }
       }
       expect(failures).toEqual([]);
     },

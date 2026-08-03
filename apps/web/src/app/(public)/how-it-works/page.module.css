@@ -362,3 +362,58 @@
     padding: 0 1rem;
   }
 }
+
+/* ------------------------------------------------------- structure (10.3) */
+
+/* Definitions, so the markup says what the content is: each term is a <dt>
+   and its explanation the <dd> beside it. */
+.structureList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.structureItem {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.structureTerm {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.structureDetail {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.structureNote {
+  margin-top: 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.structureNote strong {
+  color: var(--text);
+}
+
+@media (min-width: 720px) {
+  .structureItem {
+    grid-template-columns: 11rem 1fr;
+    gap: 1.25rem;
+    align-items: baseline;
+  }
+}
