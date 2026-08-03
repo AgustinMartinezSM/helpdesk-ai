@@ -1,6 +1,6 @@
 # Sprint 10.0 — Brand strategy
 
-Status: **OPEN (2026-08-03).** The Definition of Ready below was written and
+Status: **CLOSED (2026-08-03).** The Definition of Ready below was written and
 checked against the repository before any strategy work.
 
 ## Definition of Ready
@@ -146,7 +146,7 @@ and what I deliberately did not settle.
 I expected the usual failure — a site claiming more than the product does. The
 opposite is true, and it reframed the sprint.
 
-**The public surface understates the product in six places, because it lagged
+**The public surface understates the product systematically, because it lagged
 it.** `apps/web/src/lib/product-status.ts` was last touched in the Sprint 9.12
 documentation commit, so it still tells visitors the support-teams screen "is
 planned" while an administrator has been using it since 9.13, and CSV import,

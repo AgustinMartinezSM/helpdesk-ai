@@ -81,7 +81,9 @@ circle whose silhouette conventionally means "chat with us", which is the one
 thing Helpi refuses to be.
 
 **Misrepresenting** — and this is the surprise: the site does not overstate. It
-_understates_, in six places, because it lagged the product. The single
+_understates_, systematically, because it lagged the product — the defects
+section at the end enumerates where, and there are more of them than I expected
+when I started counting. The single
 exception runs the other way and is listed in the defects section at the end.
 
 ## Audiences
