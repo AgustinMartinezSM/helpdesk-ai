@@ -3,20 +3,33 @@
  *
  * Helpi is a written guide, not a chatbot and not AI. Every string here is
  * authored by hand and selected by route; nothing is generated. That is a
- * hard constraint, not a style choice, and the reason is structural rather
- * than a matter of current status: nothing here is generated, so a companion
- * that behaved (or read) like an AI assistant would promise a kind of answer
- * nothing behind it can produce.
+ * hard constraint, not a style choice, and the reason is structural: because
+ * nothing is generated, a companion that behaved (or read) like an AI
+ * assistant would promise a kind of answer nothing behind it can produce.
  *
  * The old wording rested this on "the whole public site states that AI
  * assistance is planned", which had been false since Sprint 9.0 — four AI
  * capabilities are built and reachable. Resting a hard constraint on a
  * status that moves is how a constraint quietly stops applying.
  *
+ * WHY THIS FILE IS IN SPANISH AND THE REST OF THE PRODUCT IS NOT.
+ * es-AR is the product's primary language (Sprint 10.1's owner decision) and
+ * full internationalization is Sprint 10.8. Translating the whole product
+ * ahead of the machinery that would keep two languages in step is how a
+ * half-translated interface happens. Helpi moves first because it is the
+ * product's voice in its most concentrated form, it is one file, and its
+ * specs guard it — so it is the cheapest place to find out what the voice
+ * actually sounds like before committing every screen to it.
+ *
  * Rules for adding a hint:
  * - One or two short sentences, second person, under ~90 characters.
- * - Never promise a capability `product-status.ts` marks as planned.
- * - Never invite conversation ("ask me", "chat with me") — Helpi cannot.
+ *   Spanish runs longer than English; the budget did not move, so cut.
+ * - Voseo, naturally: contá, pegá, invitá, fijate. Never tuteo, never
+ *   vosotros, never "usted". Register stays professional — voseo is how
+ *   people here speak, not slang.
+ * - Never promise a capability `product-status.ts` marks below `available`.
+ * - Never invite conversation ("preguntame", "chateá conmigo") — Helpi
+ *   cannot answer, in either language.
  */
 
 export interface HelpiHint {
@@ -26,73 +39,100 @@ export interface HelpiHint {
   action?: { href: string; label: string };
 }
 
-export const HELPI_INTRO = "I'm Helpi. I can show you how HelpDesk AI works.";
+export const HELPI_INTRO = 'Soy Helpi. Te muestro cómo funciona HelpDesk AI.';
 
 /** Shown under every hint so Helpi never gets mistaken for a chatbot. */
-export const HELPI_DISCLAIMER = 'Short written hints — not a chatbot.';
+export const HELPI_DISCLAIMER = 'Ayudas escritas y breves — no es un chat.';
 
 const HINTS: Record<string, HelpiHint> = {
   '/': {
     message: HELPI_INTRO,
-    action: { href: '/how-it-works', label: 'Start here to understand it' },
+    action: { href: '/how-it-works', label: 'Empezá por acá' },
   },
   '/how-it-works': {
-    message: 'A ticket is simply a request for help that stays organized.',
+    message: 'Un ticket es un pedido de ayuda que queda ordenado.',
   },
   '/features': {
-    message: 'Every capability here is labeled with what works today.',
-    action: { href: '/how-it-works', label: 'See it in practice' },
+    message: 'Cada cosa de esta lista dice qué funciona hoy.',
+    action: { href: '/how-it-works', label: 'Verlo en la práctica' },
   },
   '/security': {
-    message: 'These are real engineering decisions, not certifications.',
+    message: 'Son decisiones de ingeniería reales, no certificaciones.',
   },
   '/engineering': {
-    message: 'Here you can explore how the system is built.',
+    message: 'Acá está cómo se construyó el sistema, por dentro.',
   },
   '/about': {
-    message: 'Why I built this, in my own words.',
+    // Helpi's "I" is always Helpi. On this page the first person belongs to
+    // the author, so Helpi points at him instead of speaking as him.
+    message: 'Acá te cuenta por qué lo hizo, con sus palabras.',
   },
   '/contact': {
-    message: 'This form prepares a message — it does not send one.',
+    message: 'Este formulario prepara un mensaje: no lo envía.',
   },
   '/login': {
-    message: 'You can sign in here to access the platform.',
+    message: 'Desde acá entrás. Si la máquina es compartida, marcalo.',
   },
 
   // Authenticated app. These hints are shorter and fewer on purpose:
   // someone already working does not need to be taught the product, only
   // pointed at a control they may not have noticed.
   '/tickets': {
-    message: 'Use these filters to find requests faster.',
-    action: { href: '/tickets/new', label: 'Or open a new request' },
+    message: 'Usá los filtros para encontrar un pedido más rápido.',
+    action: { href: '/tickets/new', label: 'O abrí un pedido nuevo' },
   },
   '/tickets/new': {
     message:
-      'Describe the problem in your own words. Priority helps the team triage.',
+      'Contá el problema con tus palabras. La prioridad ayuda a ordenar.',
   },
   '/account': {
-    message: 'Your roles decide what you can do across the platform.',
+    message: 'Tus permisos deciden qué podés hacer en la plataforma.',
+  },
+  '/organization': {
+    // The route that used to fall through to the public intro. See hintFor.
+    message: 'Acá definís sucursales, áreas y equipos de soporte.',
   },
   '/people': {
     message:
-      'Invite a colleague, then hand them the code yourself — we do not email it.',
+      'Invitá a alguien y pasale el código vos: no lo mandamos por mail.',
   },
   '/join': {
-    message:
-      'Paste the code you were given. You will see who invited you before you accept.',
+    message: 'Pegá el código que te dieron. Vas a ver quién te invitó.',
   },
 };
 
 /** Ticket detail lives at /tickets/<id>, so it needs a pattern. */
 const TICKET_DETAIL_HINT: HelpiHint = {
-  message:
-    'Everything stays here: replies, status, history, and AI drafts for staff.',
+  // "AI drafts for staff" was here in the present tense for a capability
+  // that needs provider credentials no deployment has supplied. The panel
+  // itself says when no model is connected; the hint stops promising it.
+  message: 'Acá queda todo: respuestas, estado e historial del pedido.',
 };
 
 /**
+ * Every authenticated route prefix. A path under one of these that has no
+ * hint gets SILENCE, because guessing inside a tool somebody is working in
+ * is worse than staying quiet.
+ *
+ * `/organization` was missing from this list, so it fell through to the
+ * public marketing intro — an administrator configuring branches was offered
+ * "let me show you how HelpDesk AI works" and a link off to the public site.
+ * The list is exported so the specs can assert that every authenticated
+ * route in the app is covered by it, which is what stops the next route from
+ * repeating this.
+ */
+export const APP_ROUTE_PREFIXES = [
+  '/tickets',
+  '/account',
+  '/people',
+  '/join',
+  '/organization',
+] as const;
+
+/**
  * The hint for a route, or null when Helpi has nothing useful to add.
- * Unknown routes fall back to the intro rather than showing nothing, so a
- * new page never leaves the guide silently broken.
+ * Unknown PUBLIC routes fall back to the intro rather than showing nothing,
+ * so a new marketing page never leaves the guide silently broken.
  */
 export function hintFor(pathname: string): HelpiHint | null {
   const exact = HINTS[pathname];
@@ -103,14 +143,7 @@ export function hintFor(pathname: string): HelpiHint | null {
   if (/^\/tickets\/[^/]+$/.test(pathname)) {
     return TICKET_DETAIL_HINT;
   }
-  // An unknown authenticated route gets nothing: guessing inside a tool
-  // someone is working in is worse than staying quiet.
-  if (
-    pathname.startsWith('/tickets') ||
-    pathname.startsWith('/account') ||
-    pathname.startsWith('/people') ||
-    pathname.startsWith('/join')
-  ) {
+  if (APP_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return null;
   }
   return HINTS['/'];

@@ -41,9 +41,21 @@
 /* ---------------------------------------------------------------- launcher */
 
 /*
- * The one persistent place where the brand yellow is a surface rather than
- * decoration: --brand-on over --brand measures 15.07:1, so the glyph stays
+ * A persistent place where the brand yellow is a surface rather than
+ * decoration: --brand-on over --brand measures 14.83:1, so the glyph stays
  * legible in both themes without the colour ever carrying text elsewhere.
+ *
+ * THE SHAPE IS THE POINT, and it changed in Sprint 10.1. A floating CIRCLE
+ * in a bottom corner is the universal silhouette for "chat with us" — the
+ * one thing Helpi is contractually not. Everything that made it different
+ * was invisible at a glance: the compass instead of a bubble, the absence of
+ * a text field, the disclaimer you only see after opening it.
+ *
+ * It is now a rounded square with the mark's own corner ratio, so it reads
+ * as a sibling of the brand mark rather than as a chat widget. That gives
+ * the identity a rule worth keeping: THE FIELD SAYS WHOSE IT IS, THE GLYPH
+ * SAYS WHICH ONE. Yellow field plus dot-track-stop is the product; yellow
+ * field plus compass is the guide.
  */
 .launcher {
   display: grid;
@@ -51,7 +63,8 @@
   width: 2.5rem;
   height: 2.5rem;
   border: 1px solid color-mix(in srgb, var(--brand-on) 18%, transparent);
-  border-radius: var(--radius-pill);
+  /* 8/32 of the mark's box, matched at this size. */
+  border-radius: 0.625rem;
   background: var(--brand);
   color: var(--brand-on);
   box-shadow: var(--shadow-md);

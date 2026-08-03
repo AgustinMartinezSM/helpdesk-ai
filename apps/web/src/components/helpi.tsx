@@ -190,7 +190,7 @@ export function Helpi({ side = 'right' }: HelpiProps = {}) {
               type="button"
               className={styles.iconButton}
               onClick={close}
-              aria-label="Close Helpi"
+              aria-label="Cerrar Helpi"
             >
               <XIcon size={15} />
             </button>
@@ -208,7 +208,7 @@ export function Helpi({ side = 'right' }: HelpiProps = {}) {
           <div className={styles.panelFoot}>
             <p className={styles.disclaimer}>{HELPI_DISCLAIMER}</p>
             <button type="button" className={styles.dismiss} onClick={dismiss}>
-              Don&apos;t show again
+              No mostrar más
             </button>
           </div>
         </div>
@@ -223,7 +223,7 @@ export function Helpi({ side = 'right' }: HelpiProps = {}) {
         // A disclosure keeps one stable name and lets aria-expanded carry
         // the state; renaming it would also collide with the panel's own
         // close button.
-        aria-label="Helpi, the product guide"
+        aria-label="Helpi, la guía del producto"
         onClick={() => (open ? close() : setOpen(true))}
       >
         <CompassIcon size={20} />
@@ -262,7 +262,7 @@ export function HelpiRestore() {
         window.dispatchEvent(new Event(HELPI_RESTORE_EVENT));
       }}
     >
-      Show Helpi again
+      Mostrar Helpi de nuevo
     </button>
   );
 }

@@ -2,10 +2,14 @@ import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Helpi, HelpiRestore } from '../src/components/helpi';
 import {
+  APP_ROUTE_PREFIXES,
   HELPI_DISCLAIMER,
+  HELPI_INTRO,
   hintFor,
   type HelpiHint,
 } from '../src/lib/helpi-hints';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { CAPABILITY_AREAS } from '../src/lib/product-status';
 
 let currentPath = '/';
@@ -24,9 +28,26 @@ const PUBLIC_ROUTES = [
   '/login',
 ];
 
+/**
+ * Every authenticated route that has a hint. `/tickets/<id>` is covered by
+ * the pattern rather than by this list, and `/join` is here because someone
+ * redeeming an invitation is inside the app even though they are not a
+ * member yet.
+ */
+const APP_ROUTES = [
+  '/tickets',
+  '/tickets/new',
+  '/account',
+  '/organization',
+  '/people',
+  '/join',
+];
+
+const ALL_ROUTES = [...PUBLIC_ROUTES, ...APP_ROUTES];
+
 function openPanel() {
   fireEvent.click(
-    screen.getByRole('button', { name: 'Helpi, the product guide' }),
+    screen.getByRole('button', { name: 'Helpi, la guía del producto' }),
   );
 }
 
@@ -48,40 +69,134 @@ describe('Helpi hints are honest guidance, not a chatbot', () => {
       HELPI_DISCLAIMER,
     ].join(' ');
 
+    /**
+     * Both languages. The English list alone would have guarded nothing
+     * once the copy became Spanish — a passing test asserting about strings
+     * that no longer exist is worse than no test, because it reads as
+     * coverage.
+     */
     expect(everything).not.toMatch(
       /ask me|chat with|talk to me|I can answer|AI assistant|powered by AI|my AI/i,
     );
+    expect(everything).not.toMatch(
+      /pregunt(ame|á|as)|chate(á|a) conmigo|habl(á|a) conmigo|te respondo|asistente de ia|con inteligencia artificial/i,
+    );
   });
 
-  it('never presents a planned capability as something Helpi can do', () => {
-    const planned = CAPABILITY_AREAS.flatMap((area) =>
+  it('never presents a capability Helpi cannot deliver, on ANY route', () => {
+    /**
+     * This used to scan public routes only, which left the one hint that
+     * mentioned AI — the ticket detail's "AI drafts for staff" — permanently
+     * unchecked. It was also the only hint that overstated. A guard whose
+     * blind spot is exactly where the problem lives is not a guard.
+     *
+     * The bar is `available`, not `planned`: a capability that needs
+     * credentials nobody has supplied is not something Helpi can point at
+     * either, even though it exists.
+     */
+    const unavailable = CAPABILITY_AREAS.flatMap((area) =>
       area.capabilities
-        .filter((capability) => capability.status === 'planned')
+        .filter((capability) => capability.status !== 'available')
         .map((capability) => capability.name.toLowerCase()),
     );
-    // Sanity check on the fixture itself: if nothing is planned any more,
+    // Sanity check on the fixture itself: if everything became available,
     // this test would pass while checking nothing.
-    expect(planned).toContain('duplicate detection');
+    expect(unavailable).toContain('duplicate detection');
 
-    const messages = PUBLIC_ROUTES.map((r) => hintFor(r)?.message ?? '')
+    const messages = [
+      ...ALL_ROUTES.map((r) => hintFor(r)?.message ?? ''),
+      hintFor('/tickets/25556001-c028-4f75-bb66-25197de840c6')?.message ?? '',
+    ]
       .join(' ')
       .toLowerCase();
-    for (const name of planned) {
+    for (const name of unavailable) {
       expect(messages).not.toContain(name);
     }
   });
 
+  it('says nothing about AI anywhere, in either language', () => {
+    // Helpi is not AI and does not speak for the AI capabilities. The panel
+    // on the ticket does that, with the provider named and a notice when no
+    // model is connected.
+    const everything = [
+      ...ALL_ROUTES.map((r) => hintFor(r)?.message ?? ''),
+      hintFor('/tickets/abc-123')?.message ?? '',
+      HELPI_DISCLAIMER,
+    ]
+      .join(' ')
+      // The product's NAME contains the two letters, and Helpi is allowed to
+      // say the name of the product it guides. What it may not do is talk
+      // about the capability.
+      .replace(/HelpDesk AI/g, 'HelpDesk');
+    expect(everything).not.toMatch(/\bia\b|inteligencia artificial|\bai\b/i);
+  });
+
+  it('gives every authenticated route with a screen its own hint', () => {
+    /**
+     * `/organization` had no hint and no prefix guard, so it fell through to
+     * the public marketing intro: an administrator configuring branches was
+     * told "let me show you how HelpDesk AI works" and offered a link off
+     * the product. Every app route now either has a hint or is silent by a
+     * rule somebody wrote down.
+     */
+    for (const route of APP_ROUTES) {
+      const hint = hintFor(route);
+      expect({ route, hasHint: hint !== null }).toEqual({
+        route,
+        hasHint: true,
+      });
+      expect((hint as HelpiHint).message).not.toBe(HELPI_INTRO);
+    }
+  });
+
+  it('covers every authenticated route prefix, so none can fall through', () => {
+    // The list the fallback consults, checked against the routes that exist.
+    for (const route of APP_ROUTES) {
+      expect(
+        APP_ROUTE_PREFIXES.some((prefix) => route.startsWith(prefix)),
+      ).toBe(true);
+    }
+  });
+
+  it('writes its Spanish in voseo rather than tuteo', () => {
+    /**
+     * Objective enough to be worth asserting: the tuteo imperatives of the
+     * verbs this copy actually uses. "Contá" not "cuenta", "pegá" not
+     * "pega", "invitá" not "invita", "usá" not "usa", "empezá" not
+     * "empieza". A wider check would fight Spanish; these are the words on
+     * screen.
+     */
+    const messages = [
+      ...ALL_ROUTES.map((r) => hintFor(r)?.message ?? ''),
+      ...ALL_ROUTES.map((r) => hintFor(r)?.action?.label ?? ''),
+    ].join(' ');
+
+    expect(messages).not.toMatch(
+      /\b(cuenta el|pega el|invita a|usa los|empieza por|fíjate)/i,
+    );
+    /**
+     * And it really is Spanish, so the check above is not vacuous.
+     *
+     * No trailing \b: in JavaScript regex an accented vowel is not a word
+     * character, so /contá\b/ requires a WORD character after the "á" and
+     * therefore never matches "Contá el". That cost a debugging round and
+     * is the kind of thing worth writing down rather than rediscovering.
+     */
+    expect(messages).toMatch(/\b(contá|pegá|invitá|usá|empezá)/i);
+  });
+
   it('guides the authenticated app routes too', () => {
-    expect(hintFor('/tickets')?.message).toMatch(/filters/i);
-    expect(hintFor('/tickets/new')?.message).toMatch(/your own words/i);
-    expect(hintFor('/account')?.message).toMatch(/roles/i);
+    expect(hintFor('/tickets')?.message).toMatch(/filtros/i);
+    expect(hintFor('/tickets/new')?.message).toMatch(/con tus palabras/i);
+    expect(hintFor('/account')?.message).toMatch(/permisos/i);
+    expect(hintFor('/organization')?.message).toMatch(/equipos de soporte/i);
   });
 
   it('matches the ticket detail route by pattern, not by guessing', () => {
     const detail = hintFor('/tickets/25556001-c028-4f75-bb66-25197de840c6');
-    expect(detail?.message).toMatch(/replies, status, history/);
+    expect(detail?.message).toMatch(/respuestas, estado e historial/);
     // /tickets/new must win over the dynamic pattern.
-    expect(hintFor('/tickets/new')?.message).not.toMatch(/replies, status/);
+    expect(hintFor('/tickets/new')?.message).not.toMatch(/respuestas, estado/);
   });
 
   it('stays quiet on an unknown authenticated route', () => {
@@ -91,15 +206,42 @@ describe('Helpi hints are honest guidance, not a chatbot', () => {
   });
 
   it('falls back to the intro on an unknown public route', () => {
-    expect(hintFor('/something-new')?.message).toMatch(/I'm Helpi/);
+    expect(hintFor('/something-new')?.message).toMatch(/Soy Helpi/);
   });
 
   it('keeps app hints within the same length budget', () => {
-    for (const route of ['/tickets', '/tickets/new', '/account']) {
+    for (const route of [...APP_ROUTES]) {
       const message = hintFor(route)?.message ?? '';
       expect(message.length).toBeGreaterThan(10);
       expect(message.length).toBeLessThanOrEqual(90);
     }
+  });
+});
+
+describe('Helpi never looks like the thing it is not', () => {
+  const SOURCE = readFileSync(
+    join(__dirname, '..', 'src', 'components', 'helpi.tsx'),
+    'utf8',
+  );
+
+  it('uses the compass and never the sparkle', () => {
+    /**
+     * Orientation, not conversation. SparklesIcon is reserved for the AI
+     * capabilities, and Helpi carrying one would say the opposite of the
+     * constraint it exists under. The design system stated this rule with
+     * the same force as the not-a-chatbot rule; only the other one had a
+     * test, which is how a rule becomes a suggestion.
+     */
+    expect(SOURCE).toContain('CompassIcon');
+    expect(SOURCE).not.toContain('SparklesIcon');
+  });
+
+  it('draws no speech bubble', () => {
+    // The silhouette of a floating circle in a corner already says "chat
+    // with us" to anyone who has used the web. The glyph inside it is the
+    // only thing that can say otherwise, so it must not help.
+    expect(SOURCE).not.toContain('MessageSquareIcon');
+    expect(SOURCE).not.toContain('MessageCircleIcon');
   });
 });
 
@@ -126,7 +268,7 @@ describe('Helpi behaviour', () => {
     render(<Helpi />);
 
     expect(
-      screen.getByRole('button', { name: 'Helpi, the product guide' }),
+      screen.getByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeTruthy();
     // A text field would make it a chatbot; there must never be one.
     expect(document.querySelector('input, textarea')).toBeNull();
@@ -139,9 +281,7 @@ describe('Helpi behaviour', () => {
     openPanel();
 
     expect(
-      screen.getByText(
-        'A ticket is simply a request for help that stays organized.',
-      ),
+      screen.getByText('Un ticket es un pedido de ayuda que queda ordenado.'),
     ).toBeTruthy();
     expect(screen.getByText(HELPI_DISCLAIMER)).toBeTruthy();
   });
@@ -150,7 +290,7 @@ describe('Helpi behaviour', () => {
     render(<Helpi />);
 
     const launcher = screen.getByRole('button', {
-      name: 'Helpi, the product guide',
+      name: 'Helpi, la guía del producto',
     });
     expect(launcher.getAttribute('aria-expanded')).toBe('false');
     expect(launcher.getAttribute('aria-controls')).toBe('helpi-panel');
@@ -164,7 +304,7 @@ describe('Helpi behaviour', () => {
 
     expect(document.getElementById('helpi-panel')).toBeNull();
     const reopened = screen.getByRole('button', {
-      name: 'Helpi, the product guide',
+      name: 'Helpi, la guía del producto',
     });
     expect(reopened.getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(reopened);
@@ -182,17 +322,17 @@ describe('Helpi behaviour', () => {
   it('stays dismissed across mounts and records the choice', () => {
     const first = render(<Helpi />);
     openPanel();
-    fireEvent.click(screen.getByRole('button', { name: "Don't show again" }));
+    fireEvent.click(screen.getByRole('button', { name: 'No mostrar más' }));
 
     expect(
-      screen.queryByRole('button', { name: 'Helpi, the product guide' }),
+      screen.queryByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeNull();
     expect(localStorage.getItem('helpi-dismissed')).toBe('true');
 
     first.unmount();
     render(<Helpi />);
     expect(
-      screen.queryByRole('button', { name: 'Helpi, the product guide' }),
+      screen.queryByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeNull();
   });
 
@@ -207,16 +347,18 @@ describe('Helpi behaviour', () => {
 
     // Hidden, but recoverable — a dismissal must not be a one-way door.
     expect(
-      screen.queryByRole('button', { name: 'Helpi, the product guide' }),
+      screen.queryByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeNull();
-    const restore = screen.getByRole('button', { name: 'Show Helpi again' });
+    const restore = screen.getByRole('button', {
+      name: 'Mostrar Helpi de nuevo',
+    });
 
     act(() => {
       fireEvent.click(restore);
     });
 
     expect(localStorage.getItem('helpi-dismissed')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Close Helpi' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cerrar Helpi' })).toBeTruthy();
   });
 
   it('anchors left inside the app so it clears the primary buttons', () => {
@@ -262,18 +404,18 @@ describe('Helpi behaviour', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: 'Helpi, the product guide' }),
+      screen.getByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeTruthy();
 
     // A floating element must never sit over the field being used.
     fireEvent.focusIn(screen.getByLabelText('Description'));
     expect(
-      screen.queryByRole('button', { name: 'Helpi, the product guide' }),
+      screen.queryByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeNull();
 
     fireEvent.focusOut(screen.getByLabelText('Description'));
     expect(
-      screen.getByRole('button', { name: 'Helpi, the product guide' }),
+      screen.getByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeTruthy();
   });
 
@@ -283,7 +425,7 @@ describe('Helpi behaviour', () => {
     render(<Helpi />);
     expect(
       screen
-        .getByRole('button', { name: 'Helpi, the product guide' })
+        .getByRole('button', { name: 'Helpi, la guía del producto' })
         .closest('div')?.className,
     ).toMatch(/root/);
   });
@@ -303,7 +445,7 @@ describe('Helpi behaviour', () => {
     render(<Helpi />);
     // Still usable; only the memory of the choice is lost.
     expect(
-      screen.getByRole('button', { name: 'Helpi, the product guide' }),
+      screen.getByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeTruthy();
     openPanel();
     expect(screen.getByText(HELPI_DISCLAIMER)).toBeTruthy();
@@ -333,7 +475,7 @@ describe('Helpi behaviour', () => {
     // Second visit: available, but no longer opening on its own.
     expect(document.getElementById('helpi-panel')).toBeNull();
     expect(
-      screen.getByRole('button', { name: 'Helpi, the product guide' }),
+      screen.getByRole('button', { name: 'Helpi, la guía del producto' }),
     ).toBeTruthy();
   });
 });
