@@ -1,9 +1,9 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** **10.2 complete — the migration finished, and the surfaces nobody
-had written. BLOCK A IS CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy),
-10.1 (design system) and 9.4-9.16 complete
+**Sprint:** **10.3 complete — the public site says what the product is. BLOCK A
+IS CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy), 10.1 (design system),
+10.2 (migration) and 9.4-9.16 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -796,6 +796,55 @@ the public-site copy the brand strategy scoped — the multi-tenant story is
 the product's actual shape and is nearly absent from public prose. Open it
 with its own Definition of Ready.
 
+## Sprint 10.3 in one breath
+
+**A visitor can now learn from the site that the product is multi-tenant.**
+Before this sprint "department" and "service point" appeared in NO public
+prose and "branch" only in a technical listing — so the thing the brand calls
+its first differentiator was invisible. `/how-it-works` now defines the five
+structural terms, and the landing has a section saying what the structure
+BUYS rather than what it is.
+
+**The public site and the product now say the same sentence about the thing
+most likely to be modelled wrong**: "A department says where somebody works; a
+support team says what they fix." A test asserts the page teaches it and that
+no copy anywhere says a support team belongs to a branch.
+
+**The band test now DERIVES the tone sequence from the page source.** This is
+the part worth carrying. 10.1 hard-coded the sequence it believed the landing
+had and passed while the page carried a join it had not counted; 10.3 added a
+section, which would have made that list stale a second time in two sprints.
+It reads `<Section>` tones out of the page files, treats a missing `tone`
+prop as `default` — the exact thing 10.1 forgot — and covers
+`/how-it-works` and `/features` too. It immediately caught the new section
+sitting 2.1 L* from its neighbour.
+
+**Two stragglers from 10.1 were still in the footer**: the fourth competing
+tagline, and "Demo environment — no production data", which claimed a
+deployment that does not exist two pages after the hero says nothing is
+hosted.
+
+**`aria-hidden` hides something from assistive technology, not from eyes.**
+The hero's decorative panel had labels at 4.00:1 and had never been
+questioned because the scene is hidden. They are `--text-secondary` now.
+
+Three things NOT to do: never hard-code a page's tone sequence beside the
+test that checks it — derive it, or it goes stale the next time somebody adds
+a section; never assume a `<Section>` without a `tone` prop is not a band
+(it is the page background, and it is adjacent to whatever follows); never
+insert a declaration into a CSS rule without checking what is already there —
+mine landed above an existing `color` and lost silently, and the browser was
+right while my reading of the file was wrong.
+
+**The next action is Sprint 10.4.** What remains of the design-system debt is
+small and listed in `design-system.md`: no checkbox/radio/Dialog/Banner/
+Tooltip primitives — and none should be invented ahead of a use case — and
+the authenticated surface still unopened in a browser (six dev servers
+against five preview slots). The larger Block B work left is organizational
+onboarding, where the brand's promise meets the fact that the first
+administrator of a new database is still made by hand. Open it with its own
+Definition of Ready.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -954,7 +1003,7 @@ do NOT "simplify" the Prisma model to @@unique, it would generate a total
 index and make re-invitation impossible). Sprint 9.15: organizations
 invitation_placement (`branch_id` + `department_id` on invitations, additive,
 nullable, real foreign keys with ON DELETE SET NULL — applied to dev and
-`_test`). Sprints 9.9, 9.10, 9.11, 9.13, 9.14, **10.0, 10.1 and 10.2**: none.
+`_test`). Sprints 9.9, 9.10, 9.11, 9.13, 9.14, **10.0, 10.1, 10.2 and 10.3**: none.
 
 ## Tests executed (through 2026-08-03, local)
 
@@ -1018,7 +1067,7 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-**The next action is Sprint 10.3**, as described in the Sprint 10.2 entry
+**The next action is Sprint 10.4**, as described in the Sprint 10.3 entry
 above. The list below is **Block A's** candidate list, kept because it is still
 the right list for whenever Block A resumes. Nothing on it is the next thing to
 do, and email in particular still requires the project owner's approval under

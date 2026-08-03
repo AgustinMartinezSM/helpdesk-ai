@@ -1,6 +1,6 @@
 # Sprint 10.3 — The public site says what the product is
 
-Status: **OPEN (2026-08-03).** The Definition of Ready below was written and
+Status: **CLOSED (2026-08-03).** The Definition of Ready below was written and
 checked against the repository before any copy changed.
 
 ## Definition of Ready
@@ -78,3 +78,101 @@ change, any visual change beyond what existing components already do, i18n
 - The full gate passes, commits are focused Conventional Commits, merge to
   `main` is `--ff-only`, remote CI green on the final HEAD, working tree
   clean, and `CURRENT-HANDOFF.md` names the next exact action.
+
+## Outcome
+
+### What the site now teaches
+
+A new section on `/how-it-works` — the page whose voice is already pitched at
+somebody who has never used a help desk — defines the five structural terms as
+a definition list, in the order somebody meets them rather than the order the
+schema declares them, and using the product's own words rather than the
+model's: **service point**, not "operational station", because ADR 0016 is
+explicit that the two may differ.
+
+Three sentences carry the weight:
+
+- **"A department is not a support team. A department says where somebody
+  works; a support team says what they fix."** This is the distinction ADR
+  0022's first draft got wrong, and it had never appeared publicly. It is now
+  the same sentence the Organization screen shows inside the product, so the
+  site and the app agree word for word.
+- **"None of this is compulsory."** The small-business objection the strategy
+  named — a company at one address can create one support team and never touch
+  branches or departments. Without this the section reads as a reason not to
+  start.
+- **Tenant separation is enforced in the database**, with a link to the
+  security page rather than a claim repeated in two places.
+
+On the landing, a new section states what the structure BUYS rather than what
+it is — three cards, and a link into the page that teaches the vocabulary.
+Raising it there was the point: this is the brand's first differentiator and
+it had been living as a feature bullet.
+
+### Two stragglers from 10.1, found by reading the rendered page
+
+Both in the footer, which 10.1's tagline work did not reach:
+
+- **The fourth competing tagline was still there** — "Support operations,
+  improved by artificial intelligence — with human control over every
+  important decision." It is now the descriptor and the promise, per the
+  architecture.
+- **"Demo environment — no production data."** claimed a deployment that does
+  not exist. Two pages earlier the hero says nothing is hosted. It now says
+  the same thing.
+
+### The band the new section broke, and the test that caught it
+
+The landing section was first written as `tinted`, which put it **2.1 L***
+from the page background it sits next to. The band test caught it — but only
+because the same commit changed the test to **derive the tone sequence from
+the page source** instead of listing it.
+
+That change matters more than the section. Sprint 10.1 hard-coded the
+sequence it believed the landing had and passed while the rendered page
+carried a join it had not counted; this sprint then added a section, which
+would have made the hard-coded list stale a second time within two sprints.
+It now reads `<Section>` tones out of the page files, treats a missing
+`tone` prop as `default` — the exact thing 10.1 forgot — and checks
+`/how-it-works` and `/features` as well as the landing.
+
+The section is `sunken`: 5.3 L* from the page background in light, 7.4 from
+the raised section that follows.
+
+### One contrast defect, and a duplicate declaration of my own making
+
+The hero's decorative AI panel draws its own wash over the ticket card, which
+lifts the surface just enough to put `--text-muted` at **4.00:1** on it. The
+scene is `aria-hidden`, and that was the reason it had never been questioned
+— but `aria-hidden` hides something from assistive technology, not from the
+people looking at it. Those labels are `--text-secondary` now.
+
+Fixing it took two attempts, and the first one is worth recording: my edit
+inserted `color: var(--text-secondary)` **above** a `color: var(--text-muted)`
+that was already in the same rule, so the old one still won. The browser said
+the computed colour was still muted; reading the file said the fix was
+applied. **The measurement was right and the reading was wrong.**
+
+### Verification
+
+Full gate green: format, lint, typecheck across 15 projects, **266 unit tests
+across 28 suites**, build.
+
+In a real browser, both themes, on the landing and `/how-it-works`: **zero
+contrast failures** across every text node — worst case 5.19:1 in dark and
+5.30:1 in light — every rendered band separation at or above 3.2 L* in light,
+and no horizontal overflow.
+
+The authenticated surface was again not opened in a browser: six dev servers
+against five preview slots, unchanged since 9.10. Nothing this sprint changed
+lives there.
+
+### Documentation
+
+- `docs/handoffs/CURRENT-HANDOFF.md` — Sprint 10.3's entry and the next exact
+  action.
+
+No fictional experience, customer, testimonial, incident, external approval or
+commercial adoption was introduced. Every term used on the new surfaces comes
+from the brand strategy's approved vocabulary, and a test now refuses the
+rejected list rather than trusting a sweep.
