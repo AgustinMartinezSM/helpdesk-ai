@@ -278,9 +278,20 @@ Worth stating, because a readiness document that only lists problems
 misrepresents the thing it is assessing.
 
 Tenant isolation is enforced in the database (`NOT NULL` on seven tables since
-phase 7), at every repository port, and ahead of every permission check — a bug
-in permission evaluation can produce an over-broad in-tenant read and not a
-cross-tenant one. Authorization is permission-based end to end with one
+phase 7), and every read that addresses a ticket takes the organization from the
+token before it addresses the row — so a bug in permission evaluation can produce
+an over-broad in-tenant read and not a cross-tenant one.
+
+**One correction, found during Sprint 10.0 while checking this paragraph rather
+than quoting it.** It used to say "at every repository port, and ahead of every
+permission check", and neither half survives the check it invites.
+`TicketRepository.commentsFor` and `historyFor` take no organization —
+they reach a ticket already located by `findById`, which is scoped, so the
+property holds transitively rather than at the port. And several use cases
+evaluate the permission before `requireOrganization` rather than after. The
+guarantee above is the one that is true and is the one that matters; the
+stronger wording was an overstatement in a document whose value is that it
+does not overstate. Authorization is permission-based end to end with one
 vocabulary shared by services and browser (9.14). Every grant path reads one
 derivation, so privilege cannot escalate through invitation, role change or
 import. Refusals are deliberately blind where telling them apart would leak

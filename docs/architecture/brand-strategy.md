@@ -13,9 +13,10 @@ things. That file says what is true.
 ## Why this sprint happened before any redesign
 
 The product got substantially better through Block A and the way it presents
-itself did not keep up. Five public surfaces each freeze a different sprint —
+itself did not keep up. Five public surfaces each froze at a different sprint —
 `product-vision.md` at Sprint 1, `README.md` at 9.2, `SECURITY.md` at 9.8,
-`frontend-public-routes.md` at 7.6, `product-status.ts` at 9.12 — so the site
+`frontend-public-routes.md` at 7.6, `product-status.ts` at 9.12 (two of those
+were corrected during this sprint and are noted at the end) — so the site
 tells visitors the support-teams screen "is planned" while an administrator has
 been using it since 9.13. Four different taglines coexist. The one visual asset
 that is actually ours, the pastel yellow, appears inside the authenticated
@@ -106,10 +107,10 @@ still broken.
   Answer: keep it; what the group cannot do is tell you what is still open.
 
 This audience is primary because it is where the product's actual
-differentiation pays off. Branches, departments and service points are modelled
-with real foreign keys and validated at ticket creation; a support team's reach
-across branches is an explicit join. That is a lot of machinery for a single-site
-company and exactly right for this one.
+differentiation pays off. A ticket carries the branch and the service point it
+came from, each validated at creation; a support team's reach across branches is
+an explicit join. That is a lot of machinery for a single-site company and
+exactly right for this one.
 
 ### 2. Small businesses without a formal support department — the entry point
 
@@ -198,9 +199,12 @@ later nobody can answer what was open, who had it, or how long it took.
 **The differentiation**, in the order it is defensible:
 
 1. **Operational context is a first-class citizen, not a custom field.** Branch,
-   department and service point are modelled entities with real foreign keys,
-   validated at creation, and used for visibility. Most tools in this category
-   offer "categories" and a text field.
+   department and service point are modelled entities with real foreign keys
+   rather than free text. A ticket carries its branch and service point,
+   validated when it is created, and **branch is a visibility input** — a branch
+   manager sees the branches they cover. Most tools in this category offer
+   "categories" and a text field. (Departments are not a visibility input and a
+   ticket does not carry one yet; see the deferred claims.)
 2. **A support team is not a department, and the model says so.** The people
    who ask and the people who fix are modelled separately; a team's branch reach
    is an explicit join where no rows means organization-wide. Blurring the two is
@@ -253,18 +257,18 @@ Say these plainly when they come up; never imply the opposite.
 Every claim the brand makes must land on one of these. Each is verified against
 the repository, and each names what a sceptic can check.
 
-| Claim                                                            | What backs it                                                                                                                                                                                                     |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tenant isolation is structural, not a filter in application code | `NOT NULL` tenant columns on seven tables since phase 7, enforced at every repository port and ahead of every permission check                                                                                    |
-| Authorization is permission-based end to end                     | One vocabulary in `libs/security` shared by services and browser; every grant path reads one derivation, so privilege cannot escalate through invitation, role change or import (9.14)                            |
-| Membership changes are attributable to a person                  | The unattributable operator endpoints were deleted rather than deprecated; ADR 0021's four rules read stored rows, and nobody administers their own membership (9.10)                                             |
-| Where work happens is modelled, not typed                        | Branches, departments and service points with real foreign keys, validated at ticket creation, archived without cascading (9.5, 9.11)                                                                             |
-| A support team is not a department                               | ADR 0022, `support_team_branches` where no rows means organization-wide (9.12), and the distinction written into the Organization screen itself (9.13)                                                            |
-| Invitations cannot be forged or replayed                         | `sha256` of the secret only, constant-time compare, single use via a conditional update, redemption and membership insert in one transaction (9.8)                                                                |
-| A cold service repairs itself instead of refusing work           | Subscribe-then-snapshot with last-write-wins on source timestamps; the integration spec deletes the durable queue, proves the events were discarded, shows a ticket refused, reconciles, shows it accepted (9.16) |
-| AI never acts on its own                                         | Suggestions are staff-only, mutate nothing, are labelled with provider/model/latency/tokens, and the panel discloses when no model is connected                                                                   |
-| The claims are tested                                            | `product-status.ts` plus specs that pin the AI labels and assert none reads "Available"                                                                                                                           |
-| The work is verified, not asserted                               | Every sprint since the tenancy migration closed with the full gate plus nine integration suites against real PostgreSQL and RabbitMQ, each with a recorded green remote CI run id                                 |
+| Claim                                                            | What backs it                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tenant isolation is structural, not a filter in application code | `NOT NULL` tenant columns on seven tables since phase 7; a read that addresses a ticket takes the organization from the token before it addresses the row, so a permission bug produces an over-broad in-tenant read and never a cross-tenant one. **Not "every repository port"** — `commentsFor` and `historyFor` reach a ticket already scoped by its id and take no organization of their own |
+| Authorization is permission-based end to end                     | One vocabulary in `libs/security` shared by services and browser; every grant path reads one derivation, so privilege cannot escalate through invitation, role change or import (9.14)                                                                                                                                                                                                            |
+| Membership changes are attributable to a person                  | The unattributable operator endpoints were deleted rather than deprecated; ADR 0021's four rules read stored rows, and nobody administers their own membership (9.10)                                                                                                                                                                                                                             |
+| Where work happens is modelled, not typed                        | Branches, departments and service points are real rows with real foreign keys inside organizations-service, and archive without cascading (9.5, 9.11). A **ticket** carries a branch and a service point, each validated at creation against a local projection — never a department: that column is deliberately not on a ticket yet (ADR 0022)                                                  |
+| A support team is not a department                               | ADR 0022, `support_team_branches` where no rows means organization-wide (9.12), and the distinction written into the Organization screen itself (9.13)                                                                                                                                                                                                                                            |
+| Invitations cannot be forged or replayed                         | `sha256` of the secret only, constant-time compare, single use via a conditional update, redemption and membership insert in one transaction (9.8)                                                                                                                                                                                                                                                |
+| A cold service repairs itself instead of refusing work           | Subscribe-then-snapshot with last-write-wins on source timestamps; the integration spec deletes the durable queue, proves the events were discarded, shows a ticket refused, reconciles, shows it accepted (9.16)                                                                                                                                                                                 |
+| AI never acts on its own                                         | Suggestions are staff-only, mutate nothing, are labelled with provider/model/latency/tokens, and the panel discloses when no model is connected                                                                                                                                                                                                                                                   |
+| The claims are tested                                            | `product-status.ts` plus specs that pin the AI labels and assert none reads "Available"                                                                                                                                                                                                                                                                                                           |
+| The work is verified, not asserted                               | Every sprint since the tenancy migration closed with the full gate plus nine integration suites against real PostgreSQL and RabbitMQ, each with a recorded green remote CI run id                                                                                                                                                                                                                 |
 
 Two rules about using them. **Cite the mechanism, not an adjective** — "the
 database refuses a row without a tenant" beats "enterprise-grade isolation", and
@@ -449,27 +453,29 @@ Measured with the WCAG 2.x relative-luminance formula. These are the anchors
 
 **Light — warm paper**
 
-| Role               | Value     | Measured                                         |
-| ------------------ | --------- | ------------------------------------------------ |
-| `--bg` page        | `#faf9f5` | L\* 97.9                                         |
-| `--surface` cards  | `#ffffff` | L\* 100                                          |
-| `--text` ink       | `#1a1a17` | 16.56:1 on page, 17.44:1 on card                 |
-| `--text-secondary` | `#55534c` | 7.31:1                                           |
-| `--text-muted`     | `#6a6860` | 5.30:1 on page, 5.58:1 on card, 4.90:1 on sunken |
-| `--border-control` | `#8a867c` | 3.63:1 on card, 3.45:1 on page, 3.19:1 on sunken |
-| `--accent` action  | `#1a1a17` | ink; paper text on it                            |
+| Role                     | Value     | Measured                                                |
+| ------------------------ | --------- | ------------------------------------------------------- |
+| `--bg` page              | `#faf9f5` | L\* 97.9                                                |
+| `--surface` cards        | `#ffffff` | L\* 100                                                 |
+| `--text` ink             | `#1a1a17` | 16.56:1 on page, 17.44:1 on card                        |
+| `--text-secondary`       | `#55534c` | 7.31:1                                                  |
+| `--surface-2` hover fill | `#f2f0e9` | L\* 94.8                                                |
+| `--text-muted`           | `#6a6860` | 5.30:1 on page, 5.58:1 on card, 4.90:1 on `--surface-2` |
+| `--border-control`       | `#8a867c` | 3.63:1 on card, 3.45:1 on page, 3.19:1 on `--surface-2` |
+| `--accent` action        | `#1a1a17` | ink; paper text on it                                   |
 
 **Dark — warm ink**
 
-| Role               | Value     | Measured                                             |
-| ------------------ | --------- | ---------------------------------------------------- |
-| `--bg`             | `#0d0c0a` | L\* 3.3                                              |
-| `--surface`        | `#171613` | L\* 7.3                                              |
-| `--text` paper     | `#f5f3ed` | 17.62:1 on bg, 16.31:1 on surface                    |
-| `--text-secondary` | `#a8a49a` | 7.86:1                                               |
-| `--text-muted`     | `#8d8980` | 5.61:1 on bg, 5.19:1 on surface                      |
-| `--border-control` | `#726e64` | 3.85:1 on bg, 3.56:1 on surface, 3.24:1 on surface-2 |
-| `--accent` action  | `#f5f3ed` | paper; ink text on it                                |
+| Role                     | Value     | Measured                                                 |
+| ------------------------ | --------- | -------------------------------------------------------- |
+| `--bg`                   | `#0d0c0a` | L\* 3.3                                                  |
+| `--surface`              | `#171613` | L\* 7.3                                                  |
+| `--surface-2` hover fill | `#211f1b` | L\* 11.8                                                 |
+| `--text` paper           | `#f5f3ed` | 17.62:1 on bg, 16.31:1 on surface                        |
+| `--text-secondary`       | `#a8a49a` | 7.86:1                                                   |
+| `--text-muted`           | `#8d8980` | 5.61:1 on bg, 5.19:1 on surface, 4.72:1 on `--surface-2` |
+| `--border-control`       | `#726e64` | 3.85:1 on bg, 3.56:1 on surface, 3.24:1 on `--surface-2` |
+| `--accent` action        | `#f5f3ed` | paper; ink text on it                                    |
 
 **Brand — identical in both themes, which is the whole point**
 
@@ -497,19 +503,44 @@ direction after the palette itself.
 The existing bands are tuned in L\* because WCAG ratios compress uselessly near
 white. Warming the base neutral breaks the existing tinted band: `#faf6e6` sits
 1.1 L\* from a warm `#faf9f5` page, and the design system's own finding is that
-1.7 L\* is imperceptible. Re-tuned candidates, measured:
+1.7 L\* is imperceptible.
 
-| Band   | Light     | L\*  | Δ from base |
-| ------ | --------- | ---- | ----------- |
-| base   | `#faf9f5` | 97.9 | —           |
-| sunken | `#f2f0e9` | 94.8 | 3.1         |
-| tinted | `#f4eed6` | 94.0 | 3.9         |
+**Measure against the neighbour, not against the base.** My first re-tune
+measured every band against `--bg` and passed, and it was wrong: it put sunken
+at 94.8 and tinted at 94.0, which are **0.79 L\* apart** — and those two are
+adjacent in the shipped layout, because `.technical` renders on
+`--surface-sunken` and the landing page orders its sections
+`raised → sunken → raised → technical → tinted`. That re-tune would have
+reintroduced the exact Sprint 7.6 defect the banding system exists to prevent,
+on the landing page, in a table asserting it did not. The set below is measured
+against every adjacency the layout actually produces.
 
-Adjacent bands stay ≥3 L\* apart in light. **In dark they cannot**: below about
-L\* 4 the scale compresses and the separations fall under 3 no matter what is
-chosen. The current system already relies on the `--section-border` hairline
-there, and 10.1 should keep relying on it rather than pretending the L\* delta is
-doing the work.
+| Band   | Light     | L\*  | Dark      | L\*  |
+| ------ | --------- | ---- | --------- | ---- |
+| base   | `#faf9f5` | 97.9 | `#0d0c0a` | 3.3  |
+| raised | `#ffffff` | 100  | `#1a1814` | 8.3  |
+| sunken | `#f5f3ec` | 95.8 | `#050505` | 1.4  |
+| tinted | `#f2e9cd` | 92.4 | `#221e14` | 11.4 |
+
+Rendered adjacencies, light: raised↔sunken **4.2**, sunken↔tinted **3.4**.
+Dark: base↔raised **5.0**, raised↔sunken **7.0**, sunken↔tinted **10.0**. Muted
+text holds on every band — 5.03:1 and 4.60:1 in light, 5.85:1 and 4.77:1 in
+dark.
+
+**The dark theme is not the hard case; it is the easy one, and I had that
+backwards.** The shipped dark bands separate by 5.98 to 7.37 L\* on every
+rendered adjacency — the largest separations in the system — because
+`--surface-raised` and `--surface-tinted` were lifted well clear of the
+compressed region below L\* 4 rather than kept inside it. The `--section-border`
+hairline reinforces those deltas; it does not carry them. 10.1 keeps that
+technique.
+
+**Two rules that follow, so nobody re-derives the mistake.** `.technical` shares
+`--surface-sunken` and is therefore not a separate level — give it one in 10.1
+or keep counting it as sunken. And **the order of tones on a page is part of the
+design system**: not every pair in the set is ≥3 L\* apart (base and raised are
+2.1, and cannot both be near white and further), so a new page that introduces a
+new adjacency has to be re-measured rather than assumed.
 
 ### Depth, density, motion, illustration
 
@@ -650,8 +681,10 @@ and no ending.
 ### What the product does to it
 
 It turns a signal into a **request**: a description in the person's own words, a
-place (branch, department, service point), a priority, a requester with a real
-identity, and a record that starts the moment it is created. Then it puts that
+place (the branch, and the service point inside it), a priority, a requester
+with a real identity, and a record that starts the moment it is created. The
+requester's own department is not on the request yet — it is modelled, and
+putting it on a ticket is deferred work, not a claim. Then it puts that
 request where somebody is responsible for it — routing to a support team whose
 reach is explicit — and keeps every step attributable: who changed the status,
 who commented, who assigned, who resolved.
@@ -723,17 +756,30 @@ makes visually.
 
 ## Spanish and English
 
-**Today there is no Spanish anywhere.** `lang="en"` is hard-coded, there is no
-i18n configuration, and every string is a literal in a component. The only
-translation-ready seam in the codebase is `ROLE_LABELS`, which was built for this
-on purpose. Bilingual delivery is therefore architecture work, not copywriting,
-and it belongs to 10.1 or later.
+**Today there is no Spanish rendered anywhere.** `lang="en"` is hard-coded in
+the root layout, there is no i18n configuration, and every string is a literal
+in a component.
 
-**Scope is deliberately left open**, because it is the one decision in this
-document with a large cost attached and no repository fact to settle it: whether
-Spanish is Helpi's voice only, the product's second language, or the product's
-first language. Sprint 10.1's Definition of Ready must answer it before any i18n
-work starts. What this document fixes is the principles, which hold under any of
+**There are two translation-ready seams, and the second one surprised me.** In
+the browser, `ROLE_LABELS` separates the product's words from the stored keys and
+its own comment says that is what makes them translatable later. Behind it, and
+already carrying data, users-service stores organization-defined profile field
+labels as a locale pair — `label_es_ar` and `label_en_us`
+(`apps/users-service/prisma/schema.prisma`) — which Sprint 9.6 recorded as
+deliberate preparation so that i18n would be "content, not schema churn".
+Nothing in `apps/web` reads the es-AR column yet, so the seam is built and
+unconsumed.
+
+That matters for scoping: part of this decision was already taken in 9.6 and is
+waiting rather than open. Bilingual delivery is still architecture work rather
+than copywriting.
+
+**The rest of the scope is deliberately left open**, because it is the one
+decision in this document with a large cost attached and no repository fact to
+settle it: whether Spanish is Helpi's voice only, the product's second language,
+or the product's first language. Sprint 10.1's Definition of Ready must answer it
+before any i18n work starts, and must reconcile its answer with what 9.6 already
+committed. What this document fixes is the principles, which hold under any of
 the three answers.
 
 **Principles.**
@@ -793,8 +839,10 @@ product today and are the standard.
 ### What may be claimed now
 
 Ticket lifecycle with priorities, comments, internal notes and full history.
-Requesters confirming and closing their own requests. Organizations, branches,
-departments and service points, created and archived from the product.
+Requesters confirming and closing their own requests. Branches, departments and
+service points, created and archived from the product — **not the organization
+itself**, which is created by migration and can be neither renamed nor archived
+from anywhere in the UI.
 Permission-based authorization with eight role templates and scoped visibility.
 Member administration with attributable changes. Invitations as single-use codes,
 **handed over by the administrator**. CSV import that issues invitations.
@@ -832,8 +880,8 @@ only.
 
 Recorded here with evidence; **fixed in 10.1**, not in 10.0, because every one of
 them changes a rendered page or a public claim and this sprint writes no UI. The
-exceptions are two documentation corrections applied in this sprint's commits and
-noted in the sprint record.
+exceptions are three documentation corrections applied in this sprint's commits
+and noted in the sprint record.
 
 1. **`product-status.ts` is four sprints stale.** Support teams still reads
    api-ready with "the screen for it is planned"; the screen shipped in 9.13.
@@ -842,9 +890,16 @@ noted in the sprint record.
    "Implemented" list stops around 9.0. ADR 0009 commits that list to being kept
    in sync with `docs/progress`; it is not. **This is the first thing 10.1 does**
    — every other claim change depends on it.
-2. **Three places hard-code an AI status**, against ADR 0009's rule that no page
-   hard-codes one: the landing workflow step "AI analyzes — planned", the
-   technicians card's "on the roadmap", and the root metadata description.
+2. **Six places hard-code an AI status**, against ADR 0009's rule that no page
+   hard-codes one. Three are prose: the landing workflow step "AI analyzes —
+   planned", the technicians card's "on the roadmap", and the root metadata
+   description. The other three are worse and are easy to miss —
+   `how-it-works/page.tsx` renders `<StatusPill status="api-ready" />` at lines
+   243 and 262 and `<StatusPill status="planned" />` at line 268 as literals in
+   the JSX rather than from `CAPABILITY_AREAS`. Those three will silently
+   disagree with `product-status.ts` the moment step one of 10.1 changes an AI
+   status. (The features page's legend is not one of these: it defines the
+   vocabulary rather than claiming a capability's status.)
 3. **The authenticated app footer says "HelpDesk AI — AI-assisted support"** with
    no status qualifier — the one line in the product less honest than the
    product, in a shell whose own AI panel says "No language model is connected".
@@ -871,11 +926,14 @@ noted in the sprint record.
     public site marks AI as planned. A future editor could tighten the wrong
     constraint from it.
 
-Applied in 10.0 as documentation corrections: `SECURITY.md`'s claim that
-`INTERNAL_SERVICE_TOKEN` "guards no mutation anywhere in the platform", false
-since 9.16 and exactly the kind of overstatement the security page says makes a
-security page a vulnerability; and `frontend-design-system.md`'s stale Helpi path
-and public-only framing.
+Applied in 10.0 as documentation corrections, in three files. `SECURITY.md` — it
+said `INTERNAL_SERVICE_TOKEN` opens "two read-only membership lookups and nothing
+else" and "guards no mutation anywhere in the platform", both false since 9.16,
+and exactly the kind of overstatement the security page says makes a security
+page a vulnerability; the header's sprint range went from 9.8 to 9.16 with it.
+`frontend-design-system.md` — the stale Helpi path and public-only framing.
+`product-vision.md` — labelled as the Sprint 1 document it is, and pointed at
+`product-status.ts` for capability questions and here for phrasing.
 
 ## What this means for Sprint 10.1 and later
 
