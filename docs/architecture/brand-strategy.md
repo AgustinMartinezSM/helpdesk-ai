@@ -84,10 +84,11 @@ circle whose silhouette conventionally means "chat with us", which is the one
 thing Helpi refuses to be.
 
 **Misrepresenting** — and this is the surprise: the site does not overstate. It
-_understates_, systematically, because it lagged the product — the defects
-section at the end enumerates where, and there are more of them than I expected
-when I started counting. The single
-exception runs the other way and is listed in the defects section at the end.
+_understates_, systematically, because it lagged the product. The defects section
+at the end enumerates where, and there were more of them than I expected when I
+started counting. The single exception runs the other way, and it is inside the
+product rather than on the site: the authenticated shell's footer claims
+"AI-assisted support" with no status qualifier.
 
 ## Audiences
 
