@@ -686,9 +686,14 @@ of this list:
    ADR naming which provider and why. Nothing should be built here without it.
 2. **Seeded role-template rows.** Mechanism, not a decision, since 9.14. Turns
    the code map into rows and is what custom roles would later reuse.
-3. **The hardening list below**, which 9.15's "Validación integral" pass wrote
-   down rather than fixed. The projection cold-start item is the one with a
-   real product consequence.
+3. **Projection reconciliation** — item 1 of
+   `docs/architecture/pilot-readiness.md`, and the only piece of debt with a
+   product consequence somebody would actually hit. A consumer's durable queue
+   does not exist before its first boot and a topic exchange discards
+   unroutable messages, so a service deployed after its producers starts with
+   an empty projection and nothing catches it up. A cold tickets-service
+   refuses every located ticket with a 422 until each branch is edited to
+   re-emit. Reproduced, not theorized.
 4. **Transfer of ownership**, plus the organization's own name: the two small
    gaps that keep a fresh organization from being fully self-serve.
 5. **Automatic routing rules**, now that manual routing is real and visible.
@@ -696,10 +701,16 @@ of this list:
    can see are unfalsifiable — that objection is now answered, because a person
    can see where a ticket sits and move it.
 
-Short debt unchanged otherwise: R9 beyond organizations-service, per-caller
-service credentials (the attribution half of ADR 0011), `mv` compared by
-nobody, `user_snapshots` keyed on `userId` alone, `apps/web/specs` outside
-type-checking, `refreshRequest` without a timeout.
+**The short debt now lives in one place: `docs/architecture/pilot-readiness.md`**
+(written in 9.15's closing pass). It consolidates what used to be scattered
+across this file, several sprint records and a comment or two — R9 beyond
+organizations-service, per-caller service credentials, `mv` compared by nobody,
+`apps/web/specs` outside type-checking, `refreshRequest` without a timeout, no
+rate limiting, and the projection cold-start above — each with the evidence for
+it and what closing it would take. **It also says where the assessment
+stopped**: no load or concurrency testing, no second pair of eyes on security,
+no backup story, no metrics or alerts, and Chromium only. Read that section
+before treating the document as a clean bill of health.
 
 ## Resume commands
 

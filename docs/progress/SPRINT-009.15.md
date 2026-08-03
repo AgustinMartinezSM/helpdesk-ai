@@ -289,6 +289,11 @@ One migration applied to the dev and `_test` databases: `invitations.branch_id`
 and `invitations.department_id`, additive, nullable, with foreign keys and
 `ON DELETE SET NULL`.
 
+**Remote CI: GitHub Actions run `30793934764` on `1f6d194` was green on its
+first attempt**, every step included — format, lint, typecheck, test, build,
+and the integration tests against real PostgreSQL and RabbitMQ service
+containers. 3m35s, on the tip of `main`.
+
 ### Still true after this sprint
 
 No accounts are created and nothing is sent — the two constraints that shape
@@ -307,3 +312,38 @@ arrived while the branch-manager key did not; and this document.
 
 No fictional experience, customer, incident, deployment or approval was
 introduced.
+
+## Closing pass — validación integral / pilot hardening
+
+This sprint closes with an assessment rather than more code:
+**`docs/architecture/pilot-readiness.md`**. It exists because the debt was
+scattered across this handoff, several sprint records and a few comments, and
+somebody deciding whether to put a real organization on this needs it in one
+place — able to tell a finding I verified from one I was carrying.
+
+**The carried-forward finding was verified, not restated.** A consumer's
+durable queue does not exist before its first boot, and a topic exchange
+discards a message with no bound queue, so a service deployed after its
+producers starts with an empty projection and nothing catches it up. I did not
+reason this out: I hit it. Before this sprint, `team_refs` and `branch_refs`
+were empty in the tickets dev database despite branches existing since 9.5 and
+a team since 9.12, because tickets-service had never run on this machine while
+those events were published. Archiving and reopening the team through the
+product emitted the event that filled the row.
+
+Its consequence is sharper than "a projection is stale": ticket creation
+validates `branchId` against `branch_refs` and refuses an unknown one, so a
+cold tickets-service would **refuse every located ticket** until each branch was
+edited to re-emit. The refusal is correct; the emptiness is not. That is item 1
+of the readiness document and the piece of debt most worth a sprint.
+
+**It does not block CSV import, and the repository was checked rather than
+assumed.** `ImportPeopleUseCase` resolves branches and departments through
+repositories whose Prisma implementations read `prisma.branch` and
+`prisma.department` — organizations-service's own tables, the source of truth
+rather than a copy. The import path reads no projection at all.
+
+The assessment also names what it did NOT check — no load or concurrency
+testing, no second reviewer on security, no backup story, no metrics or alerts,
+Chromium only — because an assessment that does not say where it stopped reads
+as more complete than it is.
