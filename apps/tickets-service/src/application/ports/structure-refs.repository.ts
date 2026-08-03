@@ -99,3 +99,58 @@ export interface StationRefRepository {
   /** Active stations of the branch, ordered by name for the picker. */
   listActive(organizationId: string, branchId: string): Promise<StationRef[]>;
 }
+
+export const TEAM_REF_REPOSITORY = Symbol('TEAM_REF_REPOSITORY');
+
+/**
+ * Local projection of a support team (Sprint 9.12, ADR 0022) — the group that
+ * RESOLVES a ticket, never the requester's department.
+ *
+ * `branchIds` is the team's reach, and AN EMPTY ARRAY MEANS
+ * ORGANIZATION-WIDE. That is the one thing a reader of this file has to know:
+ * absence is the meaning, so a validator that treated empty as "serves
+ * nothing" would refuse every assignment to a central team.
+ */
+export interface TeamRef {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly name: string;
+  readonly status: string;
+  readonly branchIds: readonly string[];
+  readonly updatedAt: Date;
+}
+
+export interface ApplyTeamRef {
+  teamId: string;
+  organizationId: string;
+  name: string;
+  status: string;
+  /** The payload's own timestamp; the LWW key, as for branches. */
+  occurredAt: Date;
+}
+
+export interface ApplyTeamScope {
+  teamId: string;
+  organizationId: string;
+  /** The WHOLE desired set. Empty is organization-wide, not "no change". */
+  branchIds: string[];
+  occurredAt: Date;
+}
+
+/**
+ * Same last-writer-wins contract as the branch projection, plus a second
+ * apply for the scope.
+ *
+ * The scope arrives as a replace rather than a delta because that is how it
+ * is published: a consumer reconstructing it from additions and removals
+ * would drift the moment one was lost, and drift here means a team either
+ * receiving work it must not or refusing work it should.
+ */
+export interface TeamRefRepository {
+  apply(input: ApplyTeamRef): Promise<void>;
+  applyScope(input: ApplyTeamScope): Promise<void>;
+  /** The active team under this organization, or null — never a foreign row. */
+  findActive(organizationId: string, teamId: string): Promise<TeamRef | null>;
+  /** Active teams of the organization, ordered by name for the picker. */
+  listActive(organizationId: string): Promise<TeamRef[]>;
+}

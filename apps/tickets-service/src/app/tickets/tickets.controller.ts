@@ -38,7 +38,9 @@ import {
   ChangeStatusDto,
   CreateTicketDto,
   ListTicketsQueryDto,
+  RouteTicketDto,
 } from './dto';
+import { RouteTicketUseCase } from '../../application/use-cases/route-ticket';
 import { TicketDomainErrorFilter } from './ticket-domain-error.filter';
 
 interface AuthenticatedRequest {
@@ -61,6 +63,9 @@ function actorOf(req: AuthenticatedRequest): Actor {
     // the difference visible, and both deny branch-scoped visibility — an
     // old token loses scope rather than gaining it (D2).
     branchIds: req.user.br ? new Set(req.user.br) : undefined,
+    // Absent stays undefined rather than becoming an empty set: absence
+    // denies, and an empty set would read as a decision nobody made.
+    teamIds: req.user.tm ? new Set(req.user.tm) : undefined,
   };
 }
 
@@ -85,6 +90,7 @@ export class TicketsController {
     private readonly getTicket: GetTicketUseCase,
     private readonly listTickets: ListTicketsUseCase,
     private readonly changeStatus: ChangeTicketStatusUseCase,
+    private readonly routeTicket: RouteTicketUseCase,
     private readonly assignTicket: AssignTicketUseCase,
     private readonly addComment: AddCommentUseCase,
     private readonly listBranches: ListBranchesForPickerUseCase,
@@ -163,6 +169,21 @@ export class TicketsController {
       dto.assigneeId,
       traceIdOf(req),
     );
+  }
+
+  @Patch(':id/team')
+  @ApiOperation({
+    summary: 'Route the ticket to a support team, or clear it (routing.manage)',
+  })
+  route(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RouteTicketDto,
+  ) {
+    return this.routeTicket.execute(actorOf(req), {
+      ticketId: id,
+      teamId: dto.teamId ?? null,
+    });
   }
 
   @Post(':id/comments')

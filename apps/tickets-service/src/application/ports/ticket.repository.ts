@@ -51,6 +51,18 @@ export interface TicketListFilter {
     branchIds: readonly string[];
     requesterId: string;
   };
+  /** Exact team narrowing for the org-wide read, like branchId. */
+  assignedTeamId?: string;
+  /**
+   * The team-visibility predicate for `tickets.read_team` (Sprint 9.12):
+   * rows assigned to one of `teamIds` OR requested by `requesterId`. One
+   * field for the same reason branchScope is one — either half alone means
+   * something narrower or wider than the rule.
+   */
+  teamScope?: {
+    teamIds: readonly string[];
+    requesterId: string;
+  };
   skip: number;
   take: number;
 }

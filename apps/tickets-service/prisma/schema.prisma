@@ -57,6 +57,12 @@ model Ticket {
   /// permanently legitimate state.
   branchId String? @map("branch_id") @db.Uuid
 
+  /// The SUPPORT TEAM that owns resolving this ticket (Sprint 9.12,
+  /// ADR 0022) — not the requester's department, which is a different
+  /// concept this column deliberately does not hold. Nullable forever: a
+  /// ticket nobody has routed is a permanently legitimate state.
+  assignedTeamId String? @map("assigned_team_id") @db.Uuid
+
   /// Station the request came from. Context, never a principal (ADR 0016):
   /// this names a place, and requesterId keeps naming the person. Same
   /// permanent nullability as branchId.
@@ -74,6 +80,7 @@ model Ticket {
   /// The branch-scoped list's shape: WHERE organization_id AND branch_id IN
   /// (the caller's branch set).
   @@index([organizationId, branchId])
+  @@index([organizationId, assignedTeamId])
   @@map("tickets")
 }
 
@@ -151,4 +158,36 @@ model TicketHistoryEntry {
 
   @@index([ticketId])
   @@map("ticket_history")
+}
+
+/// Local projection of a support team (Sprint 9.12, ADR 0022), fed by the
+/// support-team.* events. Not a domain entity: ticket creation and routing
+/// are hot paths, so validation reads these rows instead of asking
+/// organizations-service synchronously (ADR 0014).
+model TeamRef {
+  id             String   @id @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  status         String
+  /// LWW key: an event older than this is ignored, so a DLQ replay cannot
+  /// regress a newer status.
+  updatedAt      DateTime @map("updated_at") @db.Timestamptz(3)
+
+  branches TeamBranchRef[]
+
+  @@index([organizationId, status])
+  @@map("team_refs")
+}
+
+/// The team's branch reach. NO ROWS MEANS ORGANIZATION-WIDE — the absence is
+/// the meaning, so a validator that read it as "serves nothing" would refuse
+/// every assignment to a central team.
+model TeamBranchRef {
+  teamId String  @map("team_id") @db.Uuid
+  team   TeamRef @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  branchId String @map("branch_id") @db.Uuid
+
+  @@id([teamId, branchId])
+  @@map("team_branch_refs")
 }

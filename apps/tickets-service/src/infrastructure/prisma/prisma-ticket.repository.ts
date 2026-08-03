@@ -27,6 +27,8 @@ interface TicketRow {
   /** Nullable forever — see the schema comment. */
   branchId: string | null;
   operationalStationId: string | null;
+  /** Nullable forever — a ticket nobody routed is a normal state. */
+  assignedTeamId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,11 +75,24 @@ export class PrismaTicketRepository implements TicketRepository {
       // a branchless row fails the IN-set leg because NULL is never in a
       // list, which is exactly the rule — unrouted tickets belong to the
       // central view.
+      ...(filter.assignedTeamId
+        ? { assignedTeamId: filter.assignedTeamId }
+        : {}),
       ...(filter.branchScope
         ? {
             OR: [
               { branchId: { in: [...filter.branchScope.branchIds] } },
               { requesterId: filter.branchScope.requesterId },
+            ],
+          }
+        : {}),
+      // The read_team predicate, whole. An unrouted row fails the IN-set leg
+      // because NULL is never in a list — same rule as branchless intake.
+      ...(filter.teamScope
+        ? {
+            OR: [
+              { assignedTeamId: { in: [...filter.teamScope.teamIds] } },
+              { requesterId: filter.teamScope.requesterId },
             ],
           }
         : {}),
@@ -102,6 +117,7 @@ export class PrismaTicketRepository implements TicketRepository {
           status: ticket.status,
           priority: ticket.priority,
           assigneeId: ticket.assigneeId,
+          assignedTeamId: ticket.assignedTeamId,
           updatedAt: ticket.updatedAt,
         },
       }),

@@ -1,8 +1,11 @@
 import type {
   ApplyBranchRef,
   ApplyStationRef,
+  ApplyTeamRef,
+  ApplyTeamScope,
   BranchRefRepository,
   StationRefRepository,
+  TeamRefRepository,
 } from '../ports/structure-refs.repository';
 
 /**
@@ -27,5 +30,27 @@ export class ApplyStationEventUseCase {
 
   async execute(input: ApplyStationRef): Promise<void> {
     await this.stations.apply(input);
+  }
+}
+
+/**
+ * Support teams (Sprint 9.12). Two applies rather than one because the
+ * team's identity and its branch reach arrive as separate facts: a rename
+ * must not silently reset a scope, and a scope change must not need the
+ * name to be restated.
+ */
+export class ApplyTeamEventUseCase {
+  constructor(private readonly teams: TeamRefRepository) {}
+
+  async execute(input: ApplyTeamRef): Promise<void> {
+    await this.teams.apply(input);
+  }
+}
+
+export class ApplyTeamScopeEventUseCase {
+  constructor(private readonly teams: TeamRefRepository) {}
+
+  async execute(input: ApplyTeamScope): Promise<void> {
+    await this.teams.applyScope(input);
   }
 }

@@ -9,14 +9,20 @@ import {
   MissingTenantContextError,
   stationCreatedV1,
   stationUpdatedV1,
+  supportTeamCreatedV1,
+  supportTeamScopeChangedV1,
+  supportTeamUpdatedV1,
 } from '@helpdesk-ai/messaging';
 import {
   ApplyBranchEventUseCase,
   ApplyStationEventUseCase,
+  ApplyTeamEventUseCase,
+  ApplyTeamScopeEventUseCase,
 } from '../../application/use-cases/apply-structure-events';
 import {
   InMemoryBranchRefRepository,
   InMemoryStationRefRepository,
+  InMemoryTeamRefRepository,
 } from '../../application/testing/fakes';
 import {
   StructureEventsConsumer,
@@ -46,16 +52,19 @@ function buildConsumer() {
   const messaging = new CapturingMessagingClient();
   const branches = new InMemoryBranchRefRepository();
   const stations = new InMemoryStationRefRepository();
+  const teams = new InMemoryTeamRefRepository();
   const consumer = new StructureEventsConsumer(
     messaging as unknown as MessagingClient,
     new ApplyBranchEventUseCase(branches),
     new ApplyStationEventUseCase(stations),
+    new ApplyTeamEventUseCase(teams),
+    new ApplyTeamScopeEventUseCase(teams),
   );
-  return { messaging, branches, stations, consumer };
+  return { messaging, branches, stations, teams, consumer };
 }
 
 describe('StructureEventsConsumer', () => {
-  it('subscribes its own durable queue to the four structure contracts, serialized', async () => {
+  it('subscribes its own durable queue to every structure contract, serialized', async () => {
     const { messaging, consumer } = buildConsumer();
 
     await consumer.start();
@@ -69,6 +78,11 @@ describe('StructureEventsConsumer', () => {
       branchUpdatedV1.type,
       stationCreatedV1.type,
       stationUpdatedV1.type,
+      // Sprint 9.12: support teams. Routing keys on them, not on
+      // departments — which still publish nothing (ADR 0022).
+      supportTeamCreatedV1.type,
+      supportTeamUpdatedV1.type,
+      supportTeamScopeChangedV1.type,
     ]);
   });
 

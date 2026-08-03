@@ -1,6 +1,9 @@
 import {
   branchCreatedV1,
   branchUpdatedV1,
+  supportTeamCreatedV1,
+  supportTeamScopeChangedV1,
+  supportTeamUpdatedV1,
   requireEnvelopeOrganization,
   stationCreatedV1,
   stationUpdatedV1,
@@ -10,6 +13,8 @@ import {
 import type {
   ApplyBranchEventUseCase,
   ApplyStationEventUseCase,
+  ApplyTeamEventUseCase,
+  ApplyTeamScopeEventUseCase,
 } from '../../application/use-cases/apply-structure-events';
 
 /** Durable queue owned by this service (see docs/architecture/messaging.md). */
@@ -31,6 +36,8 @@ export class StructureEventsConsumer {
     private readonly messaging: MessagingClient,
     private readonly applyBranch: ApplyBranchEventUseCase,
     private readonly applyStation: ApplyStationEventUseCase,
+    private readonly applyTeam: ApplyTeamEventUseCase,
+    private readonly applyTeamScope: ApplyTeamScopeEventUseCase,
     private readonly logger?: MessagingLogger,
   ) {}
 
@@ -59,6 +66,9 @@ export class StructureEventsConsumer {
         branchUpdatedV1,
         stationCreatedV1,
         stationUpdatedV1,
+        supportTeamCreatedV1,
+        supportTeamUpdatedV1,
+        supportTeamScopeChangedV1,
       ],
       prefetch: 1,
       handler: async (event) => {
@@ -73,6 +83,36 @@ export class StructureEventsConsumer {
         // the LWW key: >= wins in the repository, so a replay of either is
         // safe and a stale one is ignored.
         switch (event.type) {
+          case 'support-team.created.v1':
+            await this.applyTeam.execute({
+              teamId: event.payload.teamId,
+              organizationId: event.payload.organizationId,
+              name: event.payload.name,
+              status: event.payload.status,
+              occurredAt: new Date(event.payload.createdAt),
+            });
+            return;
+          case 'support-team.updated.v1':
+            await this.applyTeam.execute({
+              teamId: event.payload.teamId,
+              organizationId: event.payload.organizationId,
+              name: event.payload.name,
+              status: event.payload.status,
+              occurredAt: new Date(event.payload.updatedAt),
+            });
+            return;
+          case 'support-team.scope-changed.v1':
+            // An EMPTY branchIds is the organization-wide case and is applied
+            // as such: treating it as "nothing to do" would leave a widened
+            // team still narrowed here, which is the one drift that would
+            // hide work from the people who should get it.
+            await this.applyTeamScope.execute({
+              teamId: event.payload.teamId,
+              organizationId: event.payload.organizationId,
+              branchIds: [...event.payload.branchIds],
+              occurredAt: new Date(event.payload.changedAt),
+            });
+            return;
           case 'branch.created.v1':
             await this.applyBranch.execute({
               branchId: event.payload.branchId,

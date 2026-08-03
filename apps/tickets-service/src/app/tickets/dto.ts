@@ -128,3 +128,14 @@ export class ListTicketsQueryDto {
   @Min(1)
   take?: number;
 }
+
+/**
+ * Routing a ticket to the SUPPORT TEAM that should resolve it. Null clears
+ * it, and the ticket returns to the central view.
+ */
+export class RouteTicketDto {
+  @ApiProperty({ format: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  teamId!: string | null;
+}

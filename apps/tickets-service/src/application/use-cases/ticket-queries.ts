@@ -60,6 +60,12 @@ export interface ListTicketsInput {
    * read_branch — asking for a branch outside it answers the empty page.
    */
   branchId?: string;
+  /**
+   * Narrow to one support team. Honored organization-wide for read_all;
+   * intersected with the caller's team set for read_team — asking for a
+   * team outside it answers the empty page.
+   */
+  assignedTeamId?: string;
   skip?: number;
   take?: number;
 }
@@ -83,6 +89,7 @@ export class ListTicketsUseCase {
         status: input.status,
         assigneeId: input.assigneeId,
         branchId: input.branchId,
+        assignedTeamId: input.assignedTeamId,
         skip,
         take,
       });
@@ -106,7 +113,7 @@ export class ListTicketsUseCase {
       // survives the branch narrowing: a manager's own requests are theirs
       // to see wherever they were filed. Branchless tickets fail the
       // IN-set leg by construction — unrouted intake belongs to the
-      // central view until routing (9.12) exists.
+      // central view: nobody placed it, so no branch owns it.
       return this.tickets.list({
         organizationId,
         branchScope: {
@@ -120,8 +127,41 @@ export class ListTicketsUseCase {
       });
     }
 
-    // Without the org-wide or branch read — including read_branch with an
-    // empty or absent branch set, which denies rather than grants (D2) —
+    const teamIds = actor.teamIds;
+    if (
+      hasPermission(actor, PERMISSIONS.TICKETS_READ_TEAM) &&
+      teamIds !== undefined &&
+      teamIds.size > 0
+    ) {
+      // Third leg, after read_all and read_branch, first-match like them.
+      // No template holds both read_branch and read_team today, so this is
+      // not yet a union question; the first one that does is what forces
+      // the answer (Sprint 9.12, D8).
+      if (
+        input.assignedTeamId !== undefined &&
+        !teamIds.has(input.assignedTeamId)
+      ) {
+        // A team outside the caller's set answers the empty page, never an
+        // error — the same existence-hiding rule the branch filter follows.
+        return { items: [], total: 0 };
+      }
+      return this.tickets.list({
+        organizationId,
+        teamScope: {
+          teamIds:
+            input.assignedTeamId !== undefined
+              ? [input.assignedTeamId]
+              : [...teamIds],
+          requesterId: actor.id,
+        },
+        status: input.status,
+        skip,
+        take,
+      });
+    }
+
+    // Without the org-wide, branch or team read — including either scoped
+    // key with an empty or absent set, which denies rather than grants —
     // callers are scoped to their own tickets, whatever they ask.
     return this.tickets.list({
       organizationId,

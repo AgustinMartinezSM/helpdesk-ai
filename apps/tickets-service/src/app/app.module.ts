@@ -14,6 +14,8 @@ import {
 import {
   BRANCH_REF_REPOSITORY,
   STATION_REF_REPOSITORY,
+  TEAM_REF_REPOSITORY,
+  type TeamRefRepository,
   type BranchRefRepository,
   type StationRefRepository,
 } from '../application/ports/structure-refs.repository';
@@ -28,6 +30,8 @@ import { AddCommentUseCase } from '../application/use-cases/add-comment';
 import {
   ApplyBranchEventUseCase,
   ApplyStationEventUseCase,
+  ApplyTeamEventUseCase,
+  ApplyTeamScopeEventUseCase,
 } from '../application/use-cases/apply-structure-events';
 import { CreateTicketUseCase } from '../application/use-cases/create-ticket';
 import {
@@ -38,6 +42,7 @@ import {
   GetTicketUseCase,
   ListTicketsUseCase,
 } from '../application/use-cases/ticket-queries';
+import { RouteTicketUseCase } from '../application/use-cases/route-ticket';
 import {
   AssignTicketUseCase,
   ChangeTicketStatusUseCase,
@@ -49,6 +54,7 @@ import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-eve
 import {
   PrismaBranchRefRepository,
   PrismaStationRefRepository,
+  PrismaTeamRefRepository,
 } from '../infrastructure/prisma/prisma-structure-refs.repository';
 import { PrismaTicketRepository } from '../infrastructure/prisma/prisma-ticket.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
@@ -241,23 +247,56 @@ export class AppModule {
           inject: [STATION_REF_REPOSITORY],
         },
         {
+          provide: TEAM_REF_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaTeamRefRepository(prisma),
+          inject: [PrismaService],
+        },
+        {
+          provide: ApplyTeamEventUseCase,
+          useFactory: (teams: TeamRefRepository) =>
+            new ApplyTeamEventUseCase(teams),
+          inject: [TEAM_REF_REPOSITORY],
+        },
+        {
+          provide: ApplyTeamScopeEventUseCase,
+          useFactory: (teams: TeamRefRepository) =>
+            new ApplyTeamScopeEventUseCase(teams),
+          inject: [TEAM_REF_REPOSITORY],
+        },
+        {
+          provide: RouteTicketUseCase,
+          useFactory: (
+            tickets: TicketRepository,
+            teams: TeamRefRepository,
+            clock: Clock,
+          ) => new RouteTicketUseCase(tickets, teams, clock),
+          inject: [TICKET_REPOSITORY, TEAM_REF_REPOSITORY, CLOCK],
+        },
+        {
           provide: StructureEventsConsumer,
           useFactory: (
             messaging: MessagingClient,
             applyBranch: ApplyBranchEventUseCase,
             applyStation: ApplyStationEventUseCase,
+            applyTeam: ApplyTeamEventUseCase,
+            applyTeamScope: ApplyTeamScopeEventUseCase,
             logger: Logger,
           ) =>
             new StructureEventsConsumer(
               messaging,
               applyBranch,
               applyStation,
+              applyTeam,
+              applyTeamScope,
               logger,
             ),
           inject: [
             MessagingClient,
             ApplyBranchEventUseCase,
             ApplyStationEventUseCase,
+            ApplyTeamEventUseCase,
+            ApplyTeamScopeEventUseCase,
             Logger,
           ],
         },

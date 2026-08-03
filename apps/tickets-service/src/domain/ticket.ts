@@ -65,6 +65,13 @@ export interface Ticket {
    * until device registration exists — nothing verifies provenance yet.
    */
   readonly operationalStationId: string | null;
+  /**
+   * The SUPPORT TEAM that owns resolving this ticket (Sprint 9.12,
+   * ADR 0022): the operational group, never the requester's department.
+   * Null forever is legitimate — a ticket nobody has routed is a normal
+   * state, and unrouted intake stays with the organization-wide readers.
+   */
+  readonly assignedTeamId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -122,11 +129,15 @@ export function requireOrganizationOf(actor: Actor, ticket: Ticket): string {
  * actor's membership covers. Callers that fail this get the not-found
  * answer, never a 403 — confirming the ticket exists is the leak.
  *
- * A branchless ticket is deliberately invisible to the branch read: until
- * routing (9.12) exists, unrouted intake belongs to the central view — a
- * branch manager does not see unrouted tickets, read_all holders (and the
- * requester) do. And an absent branch set denies rather than grants (D2):
- * an old token loses visibility, never gains it.
+ * The team read sees tickets ASSIGNED to a support team the actor actively
+ * belongs to (Sprint 9.12, ADR 0022) — the group that resolves it, never the
+ * requester's department, which grants nothing here.
+ *
+ * A branchless ticket is deliberately invisible to the branch read, and an
+ * unrouted one to the team read: intake nobody has placed belongs to the
+ * central view — read_all holders and the requester see it, a branch or team
+ * manager does not. And an absent set DENIES rather than grants, for both
+ * scopes: an old token loses visibility, never gains it.
  */
 export function canView(actor: Actor, ticket: Ticket): boolean {
   return (
@@ -134,6 +145,9 @@ export function canView(actor: Actor, ticket: Ticket): boolean {
     (hasPermission(actor, PERMISSIONS.TICKETS_READ_BRANCH) &&
       ticket.branchId !== null &&
       (actor.branchIds?.has(ticket.branchId) ?? false)) ||
+    (hasPermission(actor, PERMISSIONS.TICKETS_READ_TEAM) &&
+      ticket.assignedTeamId !== null &&
+      (actor.teamIds?.has(ticket.assignedTeamId) ?? false)) ||
     ticket.requesterId === actor.id
   );
 }

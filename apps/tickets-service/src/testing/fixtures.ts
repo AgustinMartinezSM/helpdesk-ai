@@ -69,6 +69,7 @@ export function aTicket(overrides: Partial<Ticket> = {}): Ticket {
     // suites that do not care about routing should say nothing about it.
     branchId: null,
     operationalStationId: null,
+    assignedTeamId: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,

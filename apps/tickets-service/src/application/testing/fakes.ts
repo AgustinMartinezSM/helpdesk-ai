@@ -23,6 +23,10 @@ import {
   type BranchRefRepository,
   type StationRef,
   type StationRefRepository,
+  type ApplyTeamRef,
+  type ApplyTeamScope,
+  type TeamRef,
+  type TeamRefRepository,
 } from '../ports/structure-refs.repository';
 import type {
   Clock,
@@ -69,6 +73,21 @@ export class InMemoryTicketRepository implements TicketRepository {
           (t.branchId !== null &&
             filter.branchScope.branchIds.includes(t.branchId)) ||
           t.requesterId === filter.branchScope.requesterId,
+      )
+      .filter(
+        (t) =>
+          !filter.assignedTeamId || t.assignedTeamId === filter.assignedTeamId,
+      )
+      // The team predicate, enforced for real for the same reason: an
+      // unrouted ticket fails the IN-set leg exactly like NULL does in SQL,
+      // and a fake that skipped this would pass a use case that leaked one
+      // team's work to another.
+      .filter(
+        (t) =>
+          !filter.teamScope ||
+          (t.assignedTeamId !== null &&
+            filter.teamScope.teamIds.includes(t.assignedTeamId)) ||
+          t.requesterId === filter.teamScope.requesterId,
       )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return {
@@ -299,5 +318,74 @@ export class FixedClock implements Clock {
 
   advanceSeconds(seconds: number): void {
     this.current = new Date(this.current.getTime() + seconds * 1000);
+  }
+}
+
+/**
+ * The support team projection (Sprint 9.12, ADR 0022), with the same LWW
+ * guard the real one runs in SQL — a stale replay must lose here too, or a
+ * consumer bug would pass its tests.
+ */
+export class InMemoryTeamRefRepository implements TeamRefRepository {
+  readonly rows = new Map<string, TeamRef>();
+
+  /** Seeds a projected row directly, bypassing the LWW guard — arranging. */
+  seed(ref: TeamRef): void {
+    this.rows.set(ref.id, ref);
+  }
+
+  async apply(input: ApplyTeamRef): Promise<void> {
+    const existing = this.rows.get(input.teamId);
+    if (existing && !(existing.updatedAt <= input.occurredAt)) {
+      return;
+    }
+    this.rows.set(input.teamId, {
+      id: input.teamId,
+      organizationId: input.organizationId,
+      name: input.name,
+      status: input.status,
+      // A rename or an archive must not reset the reach: the two facts
+      // arrive separately and neither restates the other.
+      branchIds: existing?.branchIds ?? [],
+      updatedAt: input.occurredAt,
+    });
+  }
+
+  async applyScope(input: ApplyTeamScope): Promise<void> {
+    const existing = this.rows.get(input.teamId);
+    if (existing && existing.updatedAt > input.occurredAt) {
+      return;
+    }
+    this.rows.set(input.teamId, {
+      id: input.teamId,
+      organizationId: input.organizationId,
+      name: existing?.name ?? '',
+      status: existing?.status ?? 'active',
+      // An empty array is the ORGANIZATION-WIDE case, applied as such.
+      branchIds: [...input.branchIds],
+      updatedAt: existing?.updatedAt ?? input.occurredAt,
+    });
+  }
+
+  async findActive(
+    organizationId: string,
+    teamId: string,
+  ): Promise<TeamRef | null> {
+    const row = this.rows.get(teamId);
+    return row &&
+      row.organizationId === organizationId &&
+      row.status === ACTIVE_REF_STATUS
+      ? row
+      : null;
+  }
+
+  async listActive(organizationId: string): Promise<TeamRef[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.organizationId === organizationId &&
+          row.status === ACTIVE_REF_STATUS,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 }

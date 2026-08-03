@@ -85,6 +85,9 @@ export class CreateTicketUseCase {
       requesterId: actor.id,
       assigneeId: null,
       branchId,
+      // Tickets are born unrouted. Automatic routing rules are what would
+      // change that, and they do not exist (Sprint 9.12, out of scope).
+      assignedTeamId: null,
       operationalStationId: stationId,
       createdAt: now,
       updatedAt: now,

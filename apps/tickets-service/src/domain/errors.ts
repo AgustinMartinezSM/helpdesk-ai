@@ -86,6 +86,21 @@ export class InvalidStationError extends TicketDomainError {
 }
 
 /**
+ * The chosen support team cannot receive this ticket.
+ *
+ * Same one-message discipline as InvalidBranchError, covering every cause:
+ * an unknown or archived team, a team of another organization, a team whose
+ * branch reach excludes the ticket's branch, and a scoped team asked to take
+ * a ticket that has no branch at all. Telling them apart would turn routing
+ * into an oracle for another tenant's team ids.
+ */
+export class InvalidTeamContextError extends TicketDomainError {
+  constructor() {
+    super('The support team cannot receive this ticket');
+  }
+}
+
+/**
  * The stations picker was asked about a branch that is not active in the
  * caller's organization. Also the answer for an archived or foreign branch:
  * the picker's 404 hides existence exactly as the ticket read's does.
