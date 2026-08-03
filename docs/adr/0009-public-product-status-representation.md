@@ -28,6 +28,18 @@ forgotten, and the site starts lying by omission.
 defines every capability, its area and its status. Landing, features and
 how-it-works all render from it; no page hard-codes a status.
 
+> **Amendment, Sprint 10.1.** That last sentence stopped being true and
+> nobody noticed for four sprints, which is worth recording rather than
+> quietly correcting. `how-it-works/page.tsx` imported `StatusPill` and
+> imported nothing from this module, so its three status pills were
+> literals typed into the JSX — and so were four more, in the landing
+> page's workflow step and role cards, the root metadata description, and
+> the hero visual. Seven in total, all found in Sprint 10.0's audit. The
+> rule was right; the enforcement was a sentence in a decision record,
+> which is not enforcement. Sprint 10.1 removed all seven and added a
+> spec that fails when a page hard-codes a status label instead of
+> rendering one. **A rule about what code must not do belongs in a test.**
+
 Four status values, each with an explicit meaning:
 
 | Status           | Label          | Meaning                                                                    |
@@ -117,3 +129,23 @@ untracked on a branch, so the adapter and the label had to land together.
 Code existing has never been enough to earn `available`, and now it is
 not enough to earn `api-ready` either — the note has to say what is
 missing.
+
+## Amendment, Sprint 10.1 — `available` does not mean "has a screen"
+
+Sprint 10.1 had to classify projection recovery and found the vocabulary
+underspecified in a way that had not come up before. It runs unattended at
+every service start, so nobody has to build or configure anything to get
+it; but its on-demand half is an operator procedure behind a service
+credential, deliberately unreachable from a browser, so "implemented
+behind the gateway" — `api-ready`'s wording — is literally false of it.
+
+The resolution: **`available` means somebody can rely on the capability
+end to end without building anything first, not that a screen exists for
+it.** Recovery earns that by running on its own. Its note says the
+on-demand half is an operator procedure, which is the note discipline
+doing exactly the job it was added for — naming what a reader would
+otherwise assume.
+
+The alternative was a fifth status for "runs, but not through the
+product". One capability does not justify a vocabulary the whole site has
+to explain, and the note carries the distinction at less cost.

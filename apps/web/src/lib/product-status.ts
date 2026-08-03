@@ -14,6 +14,12 @@
  * assignment has an API and no picker UI yet, while the AI capabilities have
  * both an API and a UI but need provider credentials per deployment. Code
  * existing is never enough on its own to earn `available`.
+ *
+ * `available` does not require a SCREEN — it requires that somebody can use
+ * the capability end to end without building anything first. Projection
+ * recovery earns it by running unattended at every start; its on-demand half
+ * is an operator procedure, and the note says so rather than implying a
+ * button exists (Sprint 10.1, ADR 0009's amendment).
  */
 
 export type CapabilityStatus =
@@ -78,10 +84,18 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         status: 'available',
       },
       {
+        name: 'Where the request came from',
+        description:
+          'Every ticket carries the branch it came from and the service point inside it, both checked against real records when it is created.',
+        status: 'available',
+        note: 'A service point is a place, not a login — the till, not the cashier. An unknown branch is refused rather than stored.',
+      },
+      {
         name: 'Assignments',
-        description: 'Route each ticket to the technician who owns it.',
+        description:
+          'Give a ticket to the individual technician who owns it — distinct from routing it to a support team, which is a different, finished capability.',
         status: 'api-ready',
-        note: 'The tickets API supports assignment; the assignee picker UI is planned.',
+        note: 'The tickets API supports assigning a person; the assignee picker UI is planned.',
       },
       {
         name: 'Categories',
@@ -145,10 +159,11 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
       'Clear roles and clear ownership: everyone sees exactly what their role needs.',
     capabilities: [
       {
-        name: 'Role-based access',
+        name: 'Permission-based access',
         description:
-          'Every action is checked against a permission the role carries, on the server, in every service.',
+          'Every action is checked against a permission, on the server, in every service — one vocabulary shared by the services and the browser.',
         status: 'available',
+        note: 'The browser uses that vocabulary to decide what to render. It never decides what to allow; each service refuses on its own.',
       },
       {
         name: 'Invitations',
@@ -181,14 +196,28 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         description:
           'Register the branches you work from, their departments and their service points, and archive what closed.',
         status: 'available',
-        note: 'Archiving a branch keeps everything inside it, so reopening restores the branch exactly as it was.',
+        note: 'Archiving a branch keeps everything inside it, so reopening restores the branch exactly as it was. The organization itself is created before the product runs; nothing here renames or archives one.',
       },
       {
         name: 'Support teams',
         description:
           'Define the groups that resolve tickets — one central team, a regional one, or a team per branch — and route work to them.',
+        status: 'available',
+        note: 'A support team is the group that resolves a ticket, which is not the same as the department a requester belongs to. A team with no branches listed serves the whole organization.',
+      },
+      {
+        name: 'Bulk onboarding',
+        description:
+          'Import a spreadsheet of colleagues, check it before anything is created, then issue one invitation per row.',
+        status: 'available',
+        note: 'It creates invitations, never accounts, and sends nothing — the codes come back on screen for an administrator to hand out. A branch, department or role that does not match exactly is reported, never invented.',
+      },
+      {
+        name: 'Organization profile fields',
+        description:
+          'Define the fields your organization keeps about its people — an employee number, an internal phone — with your own labels.',
         status: 'api-ready',
-        note: 'A support team is the group that resolves a ticket, which is not the same as the department a requester belongs to. The API is complete and tested; the screen for it is planned.',
+        note: 'The API is complete, including a label per language. No screen reads or edits these yet.',
       },
       {
         name: 'Ticket ownership',
@@ -223,10 +252,24 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         status: 'available',
       },
       {
+        name: 'Tenant isolation',
+        description:
+          'One organization can never read another. The database itself refuses a row that does not say which organization it belongs to.',
+        status: 'available',
+        note: 'Enforced in the schema rather than in application code, and applied before any permission is evaluated — so a mistake in permissions can widen a read inside one organization and never across two.',
+      },
+      {
         name: 'Authorization',
         description:
-          'Role guards on every protected endpoint of every domain service — the gateway routes, the services decide.',
+          'Permission guards on every protected endpoint of every domain service — the gateway routes, the services decide.',
         status: 'available',
+      },
+      {
+        name: 'Shared-computer sessions',
+        description:
+          'A shop-floor machine can say so at sign-in: the session gets shorter and ends when the browser closes.',
+        status: 'available',
+        note: 'The form remembers the place — the branch and service point — and never the person. A service point signs nobody in.',
       },
       {
         name: 'Auditability',
@@ -274,6 +317,13 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         status: 'planned',
       },
       {
+        name: 'Projection recovery',
+        description:
+          'A service that starts long after the others rebuilds what it missed from the service that owns the data, instead of refusing work.',
+        status: 'available',
+        note: 'It runs on its own at every start. An operator can also ask for a check that changes nothing, or a repair; both are an operator procedure rather than a screen. Differences are reported and never deleted.',
+      },
+      {
         name: 'Structured logs',
         description: 'Consistent, structured logging across every service.',
         status: 'available',
@@ -296,7 +346,10 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
 /** Curated subset shown on the landing page capability grid. */
 export const LANDING_CAPABILITIES: Capability[] = [
   pick('support-operations', 'Ticket lifecycle'),
-  pick('collaboration', 'Role-based access'),
+  pick('collaboration', 'Permission-based access'),
+  pick('security-governance', 'Tenant isolation'),
+  pick('support-operations', 'Where the request came from'),
+  pick('collaboration', 'Support teams'),
   pick('support-operations', 'Internal notes'),
   pick('support-operations', 'Ticket history'),
   pick('ai-assistance', 'Summarization'),
@@ -333,9 +386,15 @@ export const PROJECT_STATUS: ProjectStatusGroup[] = [
   {
     title: 'Implemented',
     items: [
-      'Authentication with refresh token rotation',
-      'Ticket lifecycle, comments and internal notes',
-      'Event-driven platform: audit, notifications and analytics services',
+      'Authentication with refresh token rotation, and a shorter session for a shared computer',
+      'Ticket lifecycle, comments, internal notes and full history',
+      'Multi-tenancy enforced in the database: no organization can read another',
+      'Permission-based authorization end to end, with one vocabulary shared by the services and the browser',
+      'Organizations, branches, departments and service points, with tickets carrying the place they came from',
+      'Support teams and manual routing, kept distinct from the department a requester belongs to',
+      'Invitations as single-use codes, member administration, and a spreadsheet import that issues them in bulk',
+      'People directory, profiles, and organization-defined profile fields behind the API',
+      'Event-driven platform: audit, notifications and analytics services, and a projection that rebuilds itself from its owner',
       'API gateway and web BFF with an httpOnly session cookie',
       'Design system, dark mode and accessible product UI',
       'Public product experience — this site',
@@ -348,7 +407,8 @@ export const PROJECT_STATUS: ProjectStatusGroup[] = [
       'Duplicate detection, which needs embeddings and similarity search',
       'Usage ceilings, key rotation and rate limiting, which the AI provider needs before a public deployment',
       'Notifications and analytics product UI',
-      'Self-service signup and assignee picker',
+      'Assignee picker, so a ticket can be given to a person from the screen',
+      'Self-serve organization onboarding — the first administrator of a new database is still created by hand',
       'Transactional outbox for event publishing',
     ],
   },
