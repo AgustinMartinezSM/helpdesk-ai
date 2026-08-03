@@ -231,3 +231,97 @@
   color: var(--text-muted);
   line-height: 1.5;
 }
+
+/* Bulk import (Sprint 9.15). Shares the invite card's shell — it is the same
+   act at a different scale, and a second visual language would suggest
+   otherwise. */
+.importNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4375rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.importActions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.hintText {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.hintText code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  padding: 0.0625rem 0.25rem;
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+/* A file input styled as a button: the native control cannot be, and hiding
+   it inside its own label is the one way that keeps the keyboard behaviour. */
+.fileLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.importResult {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.importSummary {
+  font-size: 0.875rem;
+}
+
+.importErrors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3125rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.importCodes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.importCodes li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}

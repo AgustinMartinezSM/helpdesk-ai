@@ -29,6 +29,7 @@ import {
   type IssuedInvitation,
   type OrganizationBranch,
 } from '../../../lib/people';
+import { ImportPanel } from './import-panel';
 import { MemberAdmin, statusLabel } from './member-admin';
 import styles from './page.module.css';
 
@@ -65,6 +66,7 @@ export default function PeoplePage() {
   const canAssignRoles = can(session, PERMISSIONS.PEOPLE_ASSIGN_ROLES);
   const canSuspend = can(session, PERMISSIONS.PEOPLE_SUSPEND);
   const canManageBranches = can(session, PERMISSIONS.BRANCHES_MANAGE_MEMBERS);
+  const canImport = can(session, PERMISSIONS.PEOPLE_IMPORT);
   const canAdminister = canAssignRoles || canSuspend || canManageBranches;
 
   const [people, setPeople] = useState<DirectoryPerson[] | null>(null);
@@ -242,7 +244,9 @@ export default function PeoplePage() {
     );
   }
 
-  if (!canRead && !canInvite) {
+  // Any of the three opens the page; each section then gates itself, the
+  // pattern this screen has followed since 9.9.
+  if (!canRead && !canInvite && !canImport) {
     return (
       <EmptyState
         icon={<LockIcon size={22} />}
@@ -345,6 +349,18 @@ export default function PeoplePage() {
             </div>
           ) : null}
         </Card>
+      ) : null}
+
+      {/* Its own key, not people.invite: the matrix separates them, and the
+          two acts differ in blast radius rather than in kind (Sprint 9.15). */}
+      {canImport ? (
+        <ImportPanel
+          accessToken={session.accessToken}
+          onImported={(message) => {
+            setNote(message);
+            void loadInvitations();
+          }}
+        />
       ) : null}
 
       {canInvite ? (

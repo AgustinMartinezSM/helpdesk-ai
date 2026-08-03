@@ -362,6 +362,82 @@ describe('People endpoints (stub gateway)', () => {
     });
   });
 
+  describe('the bulk import (Sprint 9.15)', () => {
+    it('forwards the template, the preview and the apply to their own paths', async () => {
+      gateway.respond('GET /api/organizations/people-import/template', 200, {
+        filename: 'helpdesk-people-import.csv',
+        csv: 'email,role,branch,department\n',
+      });
+      gateway.respond('POST /api/organizations/people-import/preview', 200, {
+        summary: { dryRun: true, total: 1 },
+        rows: [],
+      });
+      gateway.respond('POST /api/organizations/people-import', 200, {
+        summary: { dryRun: false, total: 1 },
+        rows: [],
+      });
+
+      const token = 'Bearer jwt-access';
+      await request(app.getHttpServer())
+        .get('/people/import/template')
+        .set('authorization', token)
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/people/import/preview')
+        .set('authorization', token)
+        .send({ csv: 'email\nada@x.com\n' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/people/import')
+        .set('authorization', token)
+        .send({ csv: 'email\nada@x.com\n' })
+        .expect(200);
+
+      expect(gateway.requests.map((entry) => entry.url)).toEqual([
+        '/api/organizations/people-import/template',
+        '/api/organizations/people-import/preview',
+        '/api/organizations/people-import',
+      ]);
+      // The preview and the apply are DIFFERENT upstream paths. Forwarding
+      // both to the same one would make "check the file" write.
+      expect(gateway.requests[1].url).not.toBe(gateway.requests[2].url);
+    });
+
+    it('sends the file through unread and unshaped', async () => {
+      gateway.respond('POST /api/organizations/people-import/preview', 200, {
+        summary: {},
+        rows: [],
+      });
+      const csv = 'email,role\n"Ada, Countess"@x.com,agent\n';
+
+      await request(app.getHttpServer())
+        .post('/people/import/preview')
+        .set('authorization', 'Bearer jwt-access')
+        .send({ csv })
+        .expect(200);
+
+      // Quoting, commas and all: this layer forwards a body it does not
+      // parse, and a helpful normalization here would be a second parser to
+      // keep in step with the real one.
+      expect(gateway.requests[0].body).toEqual({ csv });
+    });
+
+    it('passes a refused FILE through with its reason intact', async () => {
+      gateway.respond('POST /api/organizations/people-import/preview', 400, {
+        statusCode: 400,
+        message: 'the import file was refused: unknown_columns',
+      });
+
+      const response = await request(app.getHttpServer())
+        .post('/people/import/preview')
+        .set('authorization', 'Bearer jwt-access')
+        .send({ csv: 'email,rol\nada@x.com,agent\n' })
+        .expect(400);
+
+      expect(response.body.message).toContain('unknown_columns');
+    });
+  });
+
   it('adds no authorization of its own: an anonymous call still reaches upstream', async () => {
     // The BFF has never decided access and must not start here — the service
     // is the one place that refuses, and a second gate would be a second

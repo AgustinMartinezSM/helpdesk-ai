@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Post,
   Req,
   UseFilters,
@@ -71,7 +72,13 @@ export class PeopleImportController {
     };
   }
 
+  // 200, not Nest's default 201 for a POST. A preview creates nothing, and a
+  // Created status on a dry run is a lie told in the protocol rather than in
+  // the copy. The apply is 200 too: it answers with a summary of a batch, not
+  // with one created resource at a location — and a run where every row was
+  // skipped creates nothing at all.
   @Post('preview')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'What the file WOULD do. Writes nothing (people.import).',
   })
@@ -86,6 +93,7 @@ export class PeopleImportController {
   }
 
   @Post()
+  @HttpCode(200)
   @ApiOperation({
     summary:
       'Apply the file. Per row, no batch rollback, safe to re-run (people.import).',

@@ -94,6 +94,9 @@ export class PeopleController {
     );
   }
 
+  // 200 rather than the framework default: neither of these creates a
+  // resource at a location, and a preview creates nothing at all.
+  @HttpCode(200)
   @Post('import/preview')
   previewImport(
     @Req() req: BrowserRequest,
@@ -107,6 +110,7 @@ export class PeopleController {
     );
   }
 
+  @HttpCode(200)
   @Post('import')
   applyImport(
     @Req() req: BrowserRequest,
