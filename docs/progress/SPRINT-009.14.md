@@ -1,7 +1,8 @@
 # Sprint 9.14 — Role template and permission scope vocabulary
 
-Status: **Open (2026-08-03).** The Definition of Ready below was written and
-checked against the repository before any code.
+Status: **Implemented and verified locally (2026-08-03).** The Definition of
+Ready below was written and checked against the repository before any code; the
+outcome record at the end says what landed against it.
 
 ## Definition of Ready
 
@@ -255,3 +256,111 @@ most expensive to answer _after_ an import wrote a thousand memberships against
 it. No data migration, one deliberate narrowing that was scheduled when it was
 made, and an invariant that stops depending on a row nobody has added yet.
 Proceeding under the standing autonomous authorization.
+
+## Outcome record (2026-08-03)
+
+Two commits: the opening (`c0e14e5`) and the implementation (`7bfe35f`), plus
+the documentation below.
+
+**The oldest open question in the repository is closed.** ADR 0015's amendment
+deferred seeded template rows on a stated blocker in Sprint 9.4 — four
+conventions for the templates, a platform-scoped ninth with nowhere to live,
+and an own-scope qualifier nothing could represent. All three are answered, and
+one of them was worse than recorded: the qualifier was on **seventeen** cells
+across twelve rows, not the twelve every document quoted, because the matrix
+grew for three sprints without the count being revisited.
+
+**Nothing was renamed and nothing migrated.** The stable keys are the
+snake_case values already in `memberships.role_template`. Matching the
+target-state document's `SCREAMING_SNAKE` instead would have been a data
+migration of every membership and invitation row, plus the backfill script's
+mapping, in exchange for a cosmetic. The documents moved to the code, because
+only one of them is load-bearing — required case 7, satisfied by not needing to
+be satisfied.
+
+**ADR 0015's platform invariant stopped being an accident.** It says no
+organization may ever produce a platform super admin, and it held because
+`GRANTABLE_ROLE_TEMPLATES` was "everything except `owner`" and nothing
+platform-scoped existed. That is absence, not an invariant: the sprint that
+finally adds a platform template is the one least likely to remember. Templates
+now declare a scope and grantability derives from it, with a test that builds a
+platform-scoped template the way a future sprint would and watches it be
+refused. No such template ships — a key with no call site is a claim nothing can
+falsify, the same rule the permission vocabulary follows.
+
+### What the implementation decided that the DoR had left open
+
+- **The answer to the desk manager's directory access was a narrower KEY, not
+  a narrower scope.** `people.read_assignable` returns active members as
+  `userId`, name and email, and nothing else — no phone, no role template, no
+  status, no profile values, no single-member read, and no People screen. Email
+  stayed because a picker needs to tell two people with the same name apart;
+  claiming otherwise would have oversold the narrowing.
+- **The narrowing could have made `service_desk_manager` ungrantable by
+  anybody, and nearly did.** The ceiling compares permission sets, so giving a
+  template a key the granter's own set does not literally contain is exactly
+  what `tickets.read_branch` did in Sprint 9.10 — after which nobody could
+  create a branch manager through any surface. `people.read` now implies
+  `people.read_assignable` in `IMPLIED_PERMISSIONS`, which is the line that
+  table's warning comment was written for. It has now been needed twice.
+- **`GET /organizations/memberships/role-templates` is per actor, and that
+  fixed a defect nobody had filed.** The browser hardcoded seven templates and
+  offered them to everyone, including people whose own template could grant
+  none of them — the refusal arrived on submit, after typing an email address.
+  The list now comes from the same two functions the write path checks, applied
+  to the same stored membership.
+- **The `○` classification did not need a new mechanism.** ADR 0015 had already
+  decided that scope lives in the key; what was missing was applying it. Each
+  cell is now marked (a) already a distinct key, (b) domain logic, or (c)
+  deferred with the feature that would check it — and a deferred cell is simply
+  a permission a seeded row would express as absence.
+
+### Verified
+
+Full workspace gate green: format, lint, typecheck, test and build across all
+15 projects. organizations-service 271 tests (25 new), users-service 71 (11
+new), web-bff 44 (3 new), apps/web 190 (9 new). All nine integration suites
+green against real PostgreSQL and RabbitMQ.
+
+**A browser smoke test over the Sprint 9.13 routing surface ran BEFORE this
+sprint opened** and passed all seven required steps, over six real processes as
+a `service_desk_manager`: a ticket opened, routed to a support team
+(`PATCH /tickets/:id/team` → 200, `assigned_team_id` set in the database, a
+`routed to support team …` history row), the team name rendered after the
+backend confirmed it, the ticket list narrowed by team, the routed ticket
+present, and the routing cleared with the interface following the backend both
+ways. It also reproduced the labelling defect this sprint fixed. The
+tickets-service projection was empty on this machine because its durable queue
+had never existed when 9.12's events were published; archiving and reopening
+the team through the product emitted the events that filled it, which is the
+cold-start path 9.12's D10 described and is now known to work.
+
+### Still true after this sprint
+
+Seeded template rows: unblocked, unbuilt, and now a mechanism task. No custom
+per-tenant roles — the architecture does not need them for correctness. No CSV
+import. The agent template keeps `tickets.read_all`, `tickets.assign_agent` and
+a flat `people.read`; those are the last three interim widenings and the
+`people.read` one is now the last of its shape. `queues.manage` stays
+unimplemented on purpose. Twelve `○` cells remain in class (c) — deferred, each
+named with the feature that would check it, and none of them blocking anything.
+
+## Documentation
+
+Meaningfully changed this sprint: `tenancy-target-state.md` — the role-template
+table rewritten to the stable keys with a scope column that means grant
+authority rather than reach, its "eight templates above nine rows"
+contradiction resolved, the `○` notation classified cell by cell, and the
+document's own intro corrected where it still named the vocabulary as blocking
+seeded rows; ADR 0015, which gains an amendment closing the blocker its
+previous amendment opened and corrects the twelve-cell count to seventeen; the
+permission vocabulary's own comments, where the new key explains what it does
+not answer; and this document.
+
+Historical sprint documents were left alone. ADR 0015's original amendment
+keeps its wrong count in place with the correction directly beneath it, for the
+reason ADR 0022 keeps its misleading filename: a decision record that edits
+away what it used to believe is worth less than one that shows the change.
+
+No fictional experience, customer, incident, deployment or approval was
+introduced.

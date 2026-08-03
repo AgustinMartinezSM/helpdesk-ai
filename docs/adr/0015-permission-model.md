@@ -177,8 +177,56 @@ analytics summary. The matrix gives `analytics.read` to owners, admins and
 auditors only, the product ships no analytics UI, and a test pins the change
 so it reads as a decision rather than an accident.
 
+## Amendment — Sprint 9.14: the vocabulary question is settled
+
+The amendment above deferred seeded rows on one stated ground: an unresolved
+vocabulary question, where "this ADR names eight templates in lowercase prose,
+the target-state document names nine in another convention including a
+platform-scoped one, and the approved matrix uses an own-scope qualifier on
+twelve cells that a flat string set cannot represent." All three parts are now
+answered, and the count was wrong — it was seventeen cells, across twelve rows.
+
+**One spelling.** The stable keys are the snake_case values already stored in
+`memberships.role_template`, and they live in `libs/security`
+(`ROLE_TEMPLATE_SCOPES`) beside the permission keys, imported by
+organizations-service and by the browser. The alternative — renaming to match
+the target-state document — was a data migration of every membership and
+invitation row in exchange for a cosmetic. The documents moved instead. This
+ADR's own prose spellings are shorthand for those keys, not a second
+convention.
+
+**The ninth template was a scope with nowhere to live.** Every template now
+declares `organization` or `platform`, and grantability is derived from it.
+Invariant 1 above — no organization-scoped role may grant a platform-level
+permission — used to hold because the grantable list was "everything except
+`owner`" and nothing platform-scoped happened to exist. Absence is not an
+invariant. A test now constructs a platform-scoped template the way a future
+sprint would add one and asserts the derivation refuses it. No such template
+ships, because a key with no call site is a claim nothing can falsify.
+
+**`○` was never going to be represented, and this ADR already said why.**
+"Scope is part of the permission, not a separate parameter" settles it: an `○`
+cell is either a distinct key, or domain logic, or deferred. The matrix now
+classifies all seventeen. A deferred cell is a permission the template does not
+hold, which a seeded row expresses as absence perfectly well.
+
+**So seeded rows are unblocked, and are not this sprint's work.** Turning the
+code map into rows is a migration, a repository and an evaluator change — a
+mechanism sprint, where 9.14 was a vocabulary one. What changed is that nobody
+is waiting on an open question any more; whoever picks it up is doing
+engineering, not adjudication. The two boundaries in the amendment above hold
+unchanged.
+
+**One of the three interim widenings is gone.** The agent template still
+carries `tickets.read_all` and `tickets.assign_agent`. The flat `people.read`
+that Sprint 9.13 gave `service_desk_manager` was retired in 9.14 by
+`people.read_assignable`, which is what a member picker actually needs: it
+narrowed the key rather than the scope, because a picker exists to add somebody
+who is not in the team yet. The agent's own flat `people.read` remains, and is
+now the last of that shape.
+
 ## Related
 
 ADR 0014 carries `perms` in the token. ADR 0013 puts the evaluator in
-organizations-service. The approved matrix lives in
-`docs/architecture/tenancy-target-state.md`.
+organizations-service. ADR 0021 bounds who may grant what. The approved matrix
+lives in `docs/architecture/tenancy-target-state.md`.

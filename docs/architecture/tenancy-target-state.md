@@ -7,16 +7,25 @@ describes where the domain is going and why; the current system is described in
 Every structural decision below is recorded in an ADR (0012–0017), all now
 Accepted. As of Sprint 9.4 the core of this picture is real: the `org` and
 `perms` claims are load-bearing (permissions resolve from the role template
-through the code map ADR 0015's amendment describes — seeded rows still
-pending on the template-vocabulary question), every organization-owned table
-carries `organization_id`, reads require the tenant and writes take it from
-the token, the consumers read the tenant-carrying event stream, and the
-membership lifecycle exists with its events. Still a target: the rest of the
-organizational graph (branches, departments, stations, service desks, teams,
-queues), seeded role-template rows, the scoped ticket reads below
-(`read_branch`/`read_team` — `read_all` stands in for agents until teams
-exist), and `NOT NULL` enforcement (phase 7, prepared and unapproved).
-`tenancy-migration-plan.md` records exactly which phases have run.
+through the code map ADR 0015's amendment describes), every organization-owned
+table carries `organization_id`, reads require the tenant and writes take it
+from the token, the consumers read the tenant-carrying event stream, and the
+membership lifecycle exists with its events. Branches, departments and
+operational stations arrived in 9.5 and 9.11, support teams in 9.12, and the
+scoped ticket reads below are all implemented — `read_branch` since 9.5 and
+`read_team` since 9.12, with `read_all` still granted to agents by a deliberate
+interim widening.
+
+**Seeded role-template rows are unblocked as of Sprint 9.14** and remain
+unbuilt. They were deferred on the template-vocabulary question, which that
+sprint settled: one spelling, a declared scope per template, and every `○` cell
+classified. What is left is mechanism — a migration, a repository and an
+evaluator read — not a decision.
+
+Still a target: service desks and queues (`queues.manage` deliberately
+unimplemented, see below), custom per-tenant roles, and seeded rows.
+`NOT NULL` enforcement ran in phase 7. `tenancy-migration-plan.md` records
+exactly which phases have run.
 
 ## The shape
 
@@ -106,20 +115,49 @@ has exactly one layer deciding access. ADR 0014 works through that analysis.
 
 ## Role templates
 
-Eight templates, mapping to permissions. Templates are seeded rows, not
-hard-coded names, so custom roles later reuse the same evaluator.
+**The stable keys are the ones below, and they are the values stored in
+`memberships.role_template`** (Sprint 9.14). This document previously wrote
+them in `SCREAMING_SNAKE` while the matrix below abbreviated them, ADR 0015
+spelled them as lowercase prose, and the code used snake_case — four
+conventions for eight things. The code's spelling won because it is the only
+one that is load-bearing: changing it is a data migration. The vocabulary now
+lives in `libs/security` (`ROLE_TEMPLATE_SCOPES`), imported by
+organizations-service and by the browser, so there is one list rather than
+several that agree by coincidence.
 
-| Template               | Scope        | In one line                                                    |
-| ---------------------- | ------------ | -------------------------------------------------------------- |
-| `PLATFORM_SUPER_ADMIN` | platform     | Operates the platform. **Never grantable by an organization.** |
-| `ORGANIZATION_OWNER`   | organization | Owns the workspace, including billing and deletion             |
-| `ORGANIZATION_ADMIN`   | organization | Configures people, structure and integrations                  |
-| `BRANCH_MANAGER`       | branch set   | Runs one or more locations                                     |
-| `SERVICE_DESK_MANAGER` | service desk | Runs a desk and its queues                                     |
-| `TEAM_MANAGER`         | team         | Runs one team's workload                                       |
-| `AGENT`                | team / queue | Resolves requests                                              |
-| `REQUESTER`            | self         | Asks for help, follows their own requests                      |
-| `AUDITOR`              | organization | Reads the trail and analytics; changes nothing                 |
+**This table used to say "Eight templates" above nine rows.** The ninth was
+`PLATFORM_SUPER_ADMIN`, and the contradiction was the platform/organization
+distinction having nowhere to live. It has one now: every template declares a
+scope, and `ORGANIZATION_GRANTABLE_TEMPLATES` is derived from it, so no
+organization can grant a platform-scoped template — ADR 0015's first invariant
+is a rule with a test instead of a property of an empty set.
+
+Eight templates ship. Templates still map to permissions through a code map,
+not seeded rows; see ADR 0015's amendment for why, and what changed about it.
+
+| Key                    | Scope        | In one line                                        |
+| ---------------------- | ------------ | -------------------------------------------------- |
+| `owner`                | organization | Owns the workspace, including billing and deletion |
+| `organization_admin`   | organization | Configures people, structure and integrations      |
+| `branch_manager`       | organization | Runs one or more locations                         |
+| `service_desk_manager` | organization | Runs the support teams and routes work             |
+| `team_manager`         | organization | Runs one team's workload                           |
+| `agent`                | organization | Resolves requests                                  |
+| `requester`            | organization | Asks for help, follows their own requests          |
+| `auditor`              | organization | Reads the trail and analytics; changes nothing     |
+
+The **Scope** column is the template's own scope — where its authority comes
+from — and is `organization` for all eight because an organization grants
+them. It is deliberately NOT the reach of what they can see: a branch manager
+is organization-scoped and sees a branch set, and that reach lives in the
+permission keys (`tickets.read_branch`) and the token claims (`br`, `tm`).
+Conflating the two is what produced the old "branch set" and "team / queue"
+entries, which described reach in a column about grant authority.
+
+**A platform-scoped template would be written `platform` here and would be
+refused by every grant path automatically.** None ships, because a key with no
+call site is a claim nothing can falsify — the same rule the permission
+vocabulary follows.
 
 ## Permission matrix
 
@@ -130,6 +168,44 @@ revision once real organizations use it — a permission that turns out wrong
 is a row edit plus a test, not a redesign.
 
 `●` granted · `○` granted for own scope only · blank not granted
+
+**`○` is a notation for readers of this table, never something the evaluator
+represents** (Sprint 9.14). ADR 0015 settled the underlying rule — "scope is
+part of the permission, not a separate parameter", because a scope argument is
+a thing a call site can forget to pass and a permission key is not — so an `○`
+cell is never a qualifier on a grant. It is one of three things, and the
+classification below says which, because seventeen cells that all looked
+"pending" were what kept ADR 0015's seeded template rows blocked through four
+sprints.
+
+- **(a) Already a distinct key.** The own scope has its own permission and the
+  cell is implemented. `tickets.read_own` beside `read_branch`, `read_team`
+  and `read_all` is the pattern.
+- **(b) Domain logic, not a grantable key.** The rule is about the actor's
+  relationship to one row rather than about a capability. A requester closing
+  their own resolved ticket is decided in the ticket domain, and inventing
+  `tickets.change_status_own` would move a business rule into a token.
+- **(c) Deferred, with the feature that would check it.** No call site exists,
+  so no key exists. Named here rather than left as an open question.
+
+| Cell                                   | Class | Note                                                                             |
+| -------------------------------------- | :---: | -------------------------------------------------------------------------------- |
+| `people.read` — BRANCH/DESK/TEAM/AGENT |  (c)  | DESK_MGR resolved in 9.14 as `people.read_assignable`; the other three hold none |
+| `people.invite` — BRANCH_MGR           |  (c)  | Needs a branch set on the invitation itself                                      |
+| `people.update` — BRANCH_MGR           |  (c)  | Needs branch-scoped editing to mean something                                    |
+| `branches.read` — BRANCH_MGR           |  (c)  | The `br` claim already narrows what they see; no separate key yet                |
+| `branches.update` — BRANCH_MGR         |  (c)  | Editing only their own branches; no call site                                    |
+| `branches.manage_members` — BRANCH_MGR |  (c)  | Same shape as the row above                                                      |
+| `tickets.read_branch` — BRANCH_MGR     |  (a)  | The key IS the own scope; the `br` claim carries which branches                  |
+| `tickets.assign_agent` — BRANCH_MGR    |  (c)  | Would mean "within my branches"; nothing enforces that yet                       |
+| `tickets.reply_public` — REQUESTER     |  (b)  | Replying on your own ticket; decided in the ticket domain                        |
+| `tickets.change_status` — REQUESTER    |  (b)  | Closing your own resolved ticket; decided in the ticket domain                   |
+| `teams.manage` — TEAM_MGR              |  (c)  | Their own team only; the surface administers teams organization-wide             |
+| `analytics.read` — BRANCH/DESK/TEAM    |  (c)  | No analytics UI ships, so no scoped read has a caller                            |
+
+Twelve rows, seventeen cells. **Nothing in class (c) blocks seeded template
+rows any more**: a deferred cell is simply a permission the template does not
+hold, which a row can express perfectly well as its absence.
 
 | Permission                         | OWNER | ORG_ADMIN | BRANCH_MGR | DESK_MGR | TEAM_MGR | AGENT | REQUESTER | AUDITOR |
 | ---------------------------------- | :---: | :-------: | :--------: | :------: | :------: | :---: | :-------: | :-----: |
@@ -179,17 +255,24 @@ support-team membership and from nothing else — belonging to a department
 grants no support visibility. `queues.manage` stays unimplemented on purpose:
 a queue would have to say what it is that a team is not.
 
-**Sprint 9.13 gave `service_desk_manager` two more keys, and only one of them
-is a cell in this table.** `branches.read` is theirs by the matrix and finally
-had a call site: a team's reach is a set of branches, and the coverage editor
-cannot name a branch it may not read. `people.read` is a **widening** — the
-matrix grants it ○, own scope only — and it is the third one in the code map
-after the agent's `read_all`, `assign_agent` and flat `people.read`. The
-reason is structural rather than convenient: a member picker exists to add
-somebody who is NOT in the team yet, so own scope cannot serve it, and own
-scope still has no representation in a flat set of strings. It shrinks when the
-scope-qualifier vocabulary lands. Reading is as far as it goes — that template
-still cannot invite, suspend, assign roles, or create or edit a branch.
+**Sprint 9.13 gave `service_desk_manager` two more keys; Sprint 9.14 narrowed
+one of them.** `branches.read` is theirs by this matrix and finally had a call
+site: a team's reach is a set of branches, and the coverage editor cannot name
+a branch it may not read. The other was flat `people.read`, granted as an
+interim widening of their `○` cell so the team member picker would have names
+in it — and it lasted exactly one sprint. The scope qualifier turned out not to
+be the answer, because a picker exists to add somebody who is NOT in the team
+yet and so cannot work from own scope at all. **`people.read_assignable`** is
+the answer: active members as an identifier, a name and an email, and nothing
+else. That template now names candidates and reaches neither the directory, nor
+`GET /users/:userId`, nor the People screen, nor anybody's role, status or
+phone — and it still cannot invite, suspend, assign roles, or create or edit a
+branch.
+
+The new key is not in the table above because it is not in the approved matrix:
+it is narrower than every cell there, and it exists so that a `○` cell could be
+honoured rather than widened. When this matrix is next revised it should gain a
+`people.read_assignable` row with `●` for DESK_MGR.
 
 Four things in that table are deliberate and worth challenging:
 
