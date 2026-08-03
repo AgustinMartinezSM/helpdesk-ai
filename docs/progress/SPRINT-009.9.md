@@ -324,7 +324,9 @@ including a new controller spec asserting both hops and that the BFF adds no
 authorization of its own. users-service 53, organizations-service 181.
 
 The full gate — format, lint, typecheck, test, build — ran green across all 15
-projects. In a real browser against the dev server: `/register` renders
+projects, and remotely GitHub Actions run `30776256636` on `a235c4c` was green
+on its first attempt, integration job included. In a real browser against the
+dev server: `/register` renders
 complete, the authenticated shell shows the new skip link, and the nav shows
 only Tickets for a caller with no session — the permission gate doing its job.
 

@@ -296,8 +296,8 @@ index and make re-invitation impossible).
 Every sprint closed with the full gate (format, lint, typecheck, test,
 build) plus all nine integration suites against real PostgreSQL and
 RabbitMQ, and a green remote CI run recorded in its sprint document: the
-tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8 and —
-locally, remote CI still to be recorded — 9.9. The
+tenancy migration twice (phases 5-6, then 7-8), 9.5, 9.6, 9.7, 9.8 and 9.9.
+The
 backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
 
@@ -320,8 +320,7 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-Record 9.9's remote CI result. Then the next sprint is a product choice, and
-9.9 changed which candidates matter:
+The next sprint is a product choice, and 9.9 changed which candidates matter:
 
 1. **Member administration.** The one gap the people surface makes obvious the
    moment somebody uses it: an admin can invite with a role but cannot change
