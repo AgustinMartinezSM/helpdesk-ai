@@ -106,6 +106,68 @@ export function createOrganization(
   return call(accessToken, 'POST', '/organization', input);
 }
 
+export interface OrganizationSettings {
+  organizationId: string;
+  /** Stable. Nothing in the product changes it — see ADR 0024. */
+  slug: string;
+  name: string;
+  /**
+   * Whether the signed-in person owns this organization, answered by the
+   * server from the stored membership at request time.
+   *
+   * Deliberately NOT derived from `session.permissions`: `owner` and
+   * `organization_admin` resolve to the same permission set, so the session
+   * snapshot cannot tell them apart — and it would be up to fifteen minutes
+   * stale besides, which on this one control means offering somebody a button
+   * that takes back an organization they have already handed over.
+   */
+  viewerIsOwner: boolean;
+}
+
+export function getOrganization(
+  accessToken: string,
+): Promise<OrganizationSettings> {
+  return call(accessToken, 'GET', '/organization/current');
+}
+
+/**
+ * Changes the display name. The slug is not a parameter because the server
+ * does not accept one: it is what URLs, references and provisioning key on.
+ */
+export function renameOrganization(
+  accessToken: string,
+  name: string,
+): Promise<Omit<OrganizationSettings, 'viewerIsOwner'>> {
+  return call(accessToken, 'PATCH', '/organization/current', { name });
+}
+
+export interface OwnershipTransferResult {
+  organizationId: string;
+  previousOwnerUserId: string;
+  newOwnerUserId: string;
+  /**
+   * Always true, and the screen must act on it: the caller has just demoted
+   * themselves, and their current token still says otherwise. Without a
+   * session refresh they keep seeing controls the server will now refuse —
+   * the trap `/join` fell into before Sprint 9.9 made it refresh.
+   */
+  sessionRefreshRequired: boolean;
+}
+
+/**
+ * Hands the organization to another active member. Irreversible from the
+ * caller's side: afterwards they are an administrator, and only the new owner
+ * can transfer it again.
+ */
+export function transferOwnership(
+  accessToken: string,
+  userId: string,
+): Promise<OwnershipTransferResult> {
+  return call(accessToken, 'POST', '/organization/ownership/transfer', {
+    userId,
+  });
+}
+
 export function listBranches(accessToken: string): Promise<Branch[]> {
   return call(accessToken, 'GET', '/organization/branches');
 }

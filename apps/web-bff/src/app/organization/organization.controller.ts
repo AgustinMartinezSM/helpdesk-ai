@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpException,
   Inject,
   Param,
@@ -53,6 +54,46 @@ export class OrganizationController {
   @Post()
   create(@Req() req: BrowserRequest, @Body() body: unknown): Promise<unknown> {
     return this.forward(req, 'POST', '/api/organizations', body);
+  }
+
+  /*
+   * The organization itself (Sprint 10.5). Before ':branchId' and every other
+   * parameterised path below, though nothing here is parameterised today —
+   * `current` is a literal segment and keeping the literal routes first is the
+   * habit that stopped `teams/mine` being read as a team id.
+   */
+
+  @Get('current')
+  current(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(req, 'GET', '/api/organizations/current');
+  }
+
+  @Patch('current')
+  rename(@Req() req: BrowserRequest, @Body() body: unknown): Promise<unknown> {
+    return this.forward(req, 'PATCH', '/api/organizations/current', body);
+  }
+
+  /**
+   * Handing the organization on. Upstream decides who may — from the caller's
+   * stored membership, which this layer could not read and must not try to
+   * approximate from the token it is forwarding.
+   */
+  @Post('ownership/transfer')
+  // 200, not the framework's 201: nothing is created — two memberships change
+  // template. The upstream route says the same thing, and a BFF answering 201
+  // would be the protocol lying where the copy does not, which is the mistake
+  // the import preview made and Sprint 9.15 corrected.
+  @HttpCode(200)
+  transferOwnership(
+    @Req() req: BrowserRequest,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'POST',
+      '/api/organizations/ownership/transfer',
+      body,
+    );
   }
 
   @Get('branches')

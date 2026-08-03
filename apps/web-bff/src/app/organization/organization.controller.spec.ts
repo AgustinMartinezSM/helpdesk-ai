@@ -273,6 +273,69 @@ describe('Organization setup endpoints (stub gateway)', () => {
     expect(gateway.requests[6].body).toEqual({ branchIds: [] });
   });
 
+  it('forwards the organization itself: reading it, renaming it, handing it on', async () => {
+    gateway.respond('GET /api/organizations/current', 200, {
+      organizationId: 'org-1',
+      slug: 'ferreteria-sur',
+      name: 'Ferretería Sur',
+      viewerIsOwner: true,
+    });
+    gateway.respond('PATCH /api/organizations/current', 200, {
+      organizationId: 'org-1',
+      slug: 'ferreteria-sur',
+      name: 'Ferretería Sur S.R.L.',
+    });
+    gateway.respond('POST /api/organizations/ownership/transfer', 200, {
+      organizationId: 'org-1',
+    });
+
+    const token = 'Bearer jwt-access';
+    const read = await request(app.getHttpServer())
+      .get('/organization/current')
+      .set('authorization', token)
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch('/organization/current')
+      .set('authorization', token)
+      .send({ name: 'Ferretería Sur S.R.L.' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/organization/ownership/transfer')
+      .set('authorization', token)
+      .send({ userId: 'u2' })
+      .expect(200);
+
+    expect(gateway.requests.map((entry) => entry.url)).toEqual([
+      '/api/organizations/current',
+      '/api/organizations/current',
+      '/api/organizations/ownership/transfer',
+    ]);
+    // viewerIsOwner arrives from upstream untouched. This layer has no way to
+    // work it out and must not try: it would be guessing from a token whose
+    // permissions are identical for an owner and an administrator.
+    expect(read.body.viewerIsOwner).toBe(true);
+    expect(gateway.requests[2].body).toEqual({ userId: 'u2' });
+  });
+
+  it('forwards an ownership refusal with its status and message intact', async () => {
+    // A 403 here means "you are not the owner" and a 409 means the state
+    // refuses the move. Rewriting either into a friendlier one would hide the
+    // difference between a permission problem and a stale screen.
+    gateway.respond('POST /api/organizations/ownership/transfer', 403, {
+      statusCode: 403,
+      error: 'Forbidden',
+      message: "only this organization's owner can transfer ownership",
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/organization/ownership/transfer')
+      .set('authorization', 'Bearer jwt-access')
+      .send({ userId: 'u2' })
+      .expect(403);
+
+    expect(response.body.message).toMatch(/owner/i);
+  });
+
   it('adds no authorization of its own', async () => {
     gateway.respond('POST /api/organizations/branches', 401, {
       statusCode: 401,

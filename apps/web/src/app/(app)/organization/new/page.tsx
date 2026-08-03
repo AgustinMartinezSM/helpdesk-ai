@@ -108,14 +108,17 @@ export default function NewOrganizationPage() {
             maxLength={80}
             autoFocus
           />
-          {/* Consequence before the action, and the consequence here is that
-              there is no undo. Renaming an organization is not built — the
-              slug derived from this name is what other things key on — so
-              saying "you can change it later" would be a comfortable lie of
-              exactly the kind the branch-code warning refuses to tell. */}
+          {/* Sprint 10.4 wrote "this name cannot be changed later" here, which
+              was true then and is not now. What survives is the smaller,
+              accurate half: an internal key is derived from this name at
+              creation and stays fixed, so the name people see can move and the
+              thing other systems point at cannot. Naming the consequence
+              before the choice is the same discipline the branch-code hint
+              follows. */}
           <p className={styles.hint}>
-            This name cannot be changed later. Nobody else can see the
-            organization until you invite them.
+            An administrator can change this name later. The internal key
+            derived from it now cannot change, so pick something you recognise.
+            Nobody else can see the organization until you invite them.
           </p>
           {error ? <FormError>{error}</FormError> : null}
           <div className={styles.actions}>

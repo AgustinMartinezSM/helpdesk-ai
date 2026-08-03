@@ -89,12 +89,14 @@ const HINTS: Record<string, HelpiHint> = {
     message: 'Tus permisos deciden qué podés hacer en la plataforma.',
   },
   '/organization/new': {
-    message:
-      'Ponele un nombre: no se puede cambiar después. Quedás como titular.',
+    // Said the name could not be changed until Sprint 10.5 built the rename.
+    // What stays fixed is the internal key derived from it, which is a
+    // different promise and a smaller one.
+    message: 'Ponele un nombre: después lo podés cambiar. Quedás como titular.',
   },
   '/organization': {
     // The route that used to fall through to the public intro. See hintFor.
-    message: 'Acá definís sucursales, áreas y equipos de soporte.',
+    message: 'Acá definís el nombre, las sucursales y los equipos de soporte.',
   },
   '/people': {
     message:

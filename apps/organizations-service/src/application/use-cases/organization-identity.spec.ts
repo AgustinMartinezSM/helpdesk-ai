@@ -24,6 +24,10 @@ import {
 } from '../../domain/organization';
 import { permissionsForTemplate } from '../../domain/permissions';
 import {
+  GRANTABLE_ROLE_TEMPLATES,
+  isGrantableRoleTemplate,
+} from '../../domain/role-grants';
+import {
   FakeOrganizationEventPublisher,
   FixedClock,
   InMemoryMembershipRepository,
@@ -631,8 +635,6 @@ describe('what a transfer must NOT change (ADR 0021)', () => {
     // The rule that makes owner untouchable follows the row, not the person.
     // After a transfer the receiver is the one nobody can demote or suspend,
     // and the former owner becomes ordinarily administrable again.
-    const { isGrantableRoleTemplate } =
-      await import('../../domain/role-grants');
     const ctx = build();
     seedOwnedOrganization(ctx);
 
@@ -649,9 +651,7 @@ describe('what a transfer must NOT change (ADR 0021)', () => {
     ).toBe(true);
   });
 
-  it('keeps owner out of the grantable set', async () => {
-    const { GRANTABLE_ROLE_TEMPLATES } =
-      await import('../../domain/role-grants');
+  it('keeps owner out of the grantable set', () => {
     // Nothing this sprint added may widen it: a transfer moves an existing
     // owner, it does not make one grantable.
     expect(GRANTABLE_ROLE_TEMPLATES).not.toContain('owner');

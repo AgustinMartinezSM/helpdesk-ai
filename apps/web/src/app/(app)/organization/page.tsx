@@ -11,13 +11,17 @@ import { Skeleton } from '../../../components/ui/skeleton';
 import { can, PERMISSIONS } from '../../../lib/permissions';
 import {
   createBranch,
+  getOrganization,
   listBranches,
   updateBranch,
   type Branch,
+  type OrganizationSettings,
 } from '../../../lib/organization';
 import {
   listAssignableCandidates,
+  listPeople,
   type AssignableCandidate,
+  type DirectoryPerson,
 } from '../../../lib/people';
 import {
   createTeam,
@@ -26,11 +30,13 @@ import {
   type SupportTeam,
 } from '../../../lib/teams';
 import { BranchPanel } from './branch-panel';
+import { IdentityPanel } from './identity-panel';
+import { OwnershipPanel } from './ownership-panel';
 import { TeamPanel } from './team-panel';
 import styles from './page.module.css';
 
 export default function OrganizationPage() {
-  const { status, session } = useAuth();
+  const { status, session, refresh } = useAuth();
   const canRead = can(session, PERMISSIONS.BRANCHES_READ);
   const canCreate = can(session, PERMISSIONS.BRANCHES_CREATE);
   const canUpdate = can(session, PERMISSIONS.BRANCHES_UPDATE);
@@ -38,7 +44,17 @@ export default function OrganizationPage() {
   // boolean: the matrix separates them, and a service desk manager runs the
   // teams without touching the branches (People screen's pattern since 9.9).
   const canManageTeams = can(session, PERMISSIONS.TEAMS_MANAGE);
+  const canRename = can(session, PERMISSIONS.ORGANIZATION_UPDATE);
+  // Ownership is deliberately NOT a permission check. owner and
+  // organization_admin resolve to the same permission set, so the session
+  // could not tell them apart; `viewerIsOwner` comes from the server, read
+  // from the stored row (ADR 0024).
+  const canReadDirectory = can(session, PERMISSIONS.PEOPLE_READ);
 
+  const [organization, setOrganization] = useState<OrganizationSettings | null>(
+    null,
+  );
+  const [directory, setDirectory] = useState<DirectoryPerson[] | null>(null);
   const [branches, setBranches] = useState<Branch[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -59,6 +75,40 @@ export default function OrganizationPage() {
   const [creatingTeam, setCreatingTeam] = useState(false);
 
   const accessToken = session?.accessToken;
+
+  /**
+   * The organization itself. Read for everybody who reaches this screen —
+   * `organization.read` is in every template — because both the name card and
+   * the ownership card depend on it, and `viewerIsOwner` is the only way the
+   * browser can know which of the two people holding identical permissions is
+   * actually the owner.
+   */
+  const loadOrganization = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+    try {
+      setOrganization(await getOrganization(accessToken));
+    } catch {
+      // Not fatal to the rest of the screen: branches and support teams have
+      // nothing to do with the organization's own name.
+      setOrganization(null);
+    }
+  }, [accessToken]);
+
+  const loadDirectory = useCallback(async () => {
+    if (!accessToken || !canReadDirectory) {
+      return;
+    }
+    try {
+      // Active members only, which is the default and exactly the eligible
+      // set: the server refuses an invited, suspended or removed target.
+      setDirectory(await listPeople(accessToken));
+    } catch {
+      // The ownership panel says so rather than showing an empty picker.
+      setDirectory(null);
+    }
+  }, [accessToken, canReadDirectory]);
 
   const load = useCallback(async () => {
     if (!accessToken || !canRead) {
@@ -107,10 +157,12 @@ export default function OrganizationPage() {
     if (status !== 'authenticated') {
       return;
     }
+    void loadOrganization();
+    void loadDirectory();
     void load();
     void loadTeams();
     void loadPeople();
-  }, [status, load, loadTeams, loadPeople]);
+  }, [status, loadOrganization, loadDirectory, load, loadTeams, loadPeople]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -245,9 +297,11 @@ export default function OrganizationPage() {
     );
   }
 
-  // Either key opens the page, and each section then gates itself: a service
-  // desk manager runs the support teams without administering branches.
-  if (!canRead && !canManageTeams) {
+  // Any of these keys opens the page, and each section then gates itself: a
+  // service desk manager runs the support teams without administering
+  // branches. `canRename` is in the list because an administrator whose only
+  // organization key is `organization.update` still has something to do here.
+  if (!canRead && !canManageTeams && !canRename) {
     return (
       <EmptyState
         icon={<LockIcon size={22} />}
@@ -264,13 +318,43 @@ export default function OrganizationPage() {
       </p>
 
       <header className={styles.header}>
-        <h1 className={styles.title}>Organization</h1>
+        <h1 className={styles.title}>{organization?.name ?? 'Organization'}</h1>
         {branches ? (
           <span className={styles.count}>
             {branches.length} {branches.length === 1 ? 'branch' : 'branches'}
           </span>
         ) : null}
       </header>
+
+      {canRename && organization ? (
+        <IdentityPanel
+          accessToken={session.accessToken}
+          organization={organization}
+          onRenamed={(message) => {
+            setNote(message);
+            void loadOrganization();
+          }}
+        />
+      ) : null}
+
+      {organization?.viewerIsOwner ? (
+        <OwnershipPanel
+          accessToken={session.accessToken}
+          organizationName={organization.name}
+          people={directory}
+          viewerUserId={session.user.id}
+          onTransferred={async (message) => {
+            setNote(message);
+            // Order matters. The session is re-minted first, because the
+            // person who just confirmed is no longer the owner and their
+            // token still says they are; then the organization is re-read,
+            // which is what removes this panel from the screen.
+            await refresh();
+            await loadOrganization();
+            await loadDirectory();
+          }}
+        />
+      ) : null}
 
       {canCreate ? (
         <Card className={styles.createCard}>

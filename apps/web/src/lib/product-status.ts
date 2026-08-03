@@ -196,14 +196,28 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         description:
           'Register, name your organization, and be its owner — no database access and nobody else required.',
         status: 'available',
-        note: 'Available to somebody who does not belong to an organization yet. Anyone already in one is refused, because the product cannot yet move a person between organizations. The name cannot be changed afterwards.',
+        note: 'Available to somebody who does not belong to an organization yet. Anyone already in one is refused, because the product cannot yet move a person between organizations.',
+      },
+      {
+        name: 'Renaming your organization',
+        description:
+          'Change the name people see, from the organization screen, without anybody touching a database.',
+        status: 'available',
+        note: 'The internal key derived from the original name does not change, so URLs, references and provisioning keep working. Editing that key by hand is not offered.',
+      },
+      {
+        name: 'Transferring ownership',
+        description:
+          'Hand your organization to another active member. They become the owner and you stay on as an administrator.',
+        status: 'available',
+        note: 'Only the current owner can start it, and only an active member of the same organization can receive it. An organization always has exactly one owner — the database enforces that, not only the code.',
       },
       {
         name: 'Organization setup',
         description:
           'Register the branches you work from, their departments and their service points, and archive what closed.',
         status: 'available',
-        note: 'Archiving a branch keeps everything inside it, so reopening restores the branch exactly as it was. Nothing here renames or archives the organization itself.',
+        note: 'Archiving a branch keeps everything inside it, so reopening restores the branch exactly as it was. Nothing here archives or deletes the organization itself.',
       },
       {
         name: 'Support teams',
