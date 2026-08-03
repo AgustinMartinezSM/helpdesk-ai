@@ -1,10 +1,23 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** 9.16 complete — projection bootstrap and reconciliation; 9.4-9.15 complete
+**Sprint:** **10.0 complete — brand strategy. BLOCK A IS CLOSED; BLOCK B IS OPEN.**
+9.4-9.16 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
+
+**Block A is formally complete and is not reopened.** Everything it deferred —
+email delivery, seeded role-template rows, the four projections without
+reconciliation, scheduled integrity checks, projection-health alerts, keyset
+pagination tests at the database, load and concurrency testing, backup and
+restore, a second security review, broader browser coverage, deployment and
+recovery exercises, `INTERNAL_SERVICE_TOKEN` rotation and audit, retention and
+export policies, automatic routing, queues, `requesterDepartmentId`, custom
+roles — stays recorded in `docs/architecture/pilot-readiness.md` and in "Work
+incomplete / deliberately deferred" below. **The "Exact next action" list near
+the end of this file is Block A's and is no longer the next action.** Block B's
+is at the bottom of the 10.0 entry.
 
 Read `docs/progress/SPRINT-009.13.md` and `SPRINT-009.12.md` and **ADR 0022**
 first — a support team and a department are DIFFERENT CONCEPTS, and the first
@@ -562,6 +575,82 @@ reconciliation delete a row; never let the snapshot endpoints become a general
 cross-service data layer — they are three specific reads for four specific
 projections.
 
+## Sprint 10.0 in one breath — the first Block B sprint
+
+**Nothing shipped and nothing changed in the product. That is the sprint.** It
+is strategy and product definition, and its whole output is
+`docs/architecture/brand-strategy.md` plus three factual corrections. Read the
+strategy before touching any surface in Block B; it is authoritative for **how
+things are said**, and `apps/web/src/lib/product-status.ts` stays authoritative
+for **what is true** (ADR 0009). That split is the one rule to carry.
+
+**The audit's finding was the opposite of what anyone expected: the site does
+not overstate, it understates.** `product-status.ts` was last touched in the
+9.12 documentation commit, so the public site tells visitors the support-teams
+screen "is planned" while an administrator has been using it since 9.13, and
+CSV import, org-defined profile fields, shared-terminal sessions and projection
+reconciliation appear nowhere at all. Ten truth defects are listed with
+evidence at the end of the strategy document. **They are 10.1's first task, not
+10.0's** — every one changes a rendered page or a public claim, and this sprint
+wrote no UI.
+
+**Three brand decisions were made, and one of them is the material one.** The
+visual thesis is **ink acts, yellow marks, chroma states**: the action colour
+becomes achromatic (near-black on warm paper, inverted in dark), `#FFEE8C`
+becomes the signature that marks where you are, and blue/amber/green/red stay
+reserved for status and priority. **Indigo leaves.** The argument is structural
+rather than aesthetic — the status palette already spends every chromatic slot,
+so an achromatic action colour is the one that collides with nothing — but it
+is a conclusion drawn from a constraint, not the only one available, and the
+document says so. **It is cheap to redirect at 10.1's Definition of Ready and
+expensive after the token layer ships.** The other two: Helpi keeps its
+behaviour exactly and changes its language to es-AR with voseo, and
+"From signal to resolution" is adopted with a Spanish interpretation rather
+than a translation — _"De un aviso suelto a un problema resuelto."_
+
+**Every ratio in that document was computed in this sprint, not copied.** The
+existing figures were re-verified and are correct (indigo 6.02:1 / 6.67:1,
+yellow 1.13:1 as text, 15.07:1 with `--brand-on`). Two of my own first-pass
+candidates **failed** WCAG 1.4.11 at 2.35:1 and were replaced before anything
+was written down. The focus ring now inverts with its surface, which turns the
+dark CTA panel's hand-rebinding into the rule instead of an exception, and the
+section bands must be re-tuned because warming the base neutral costs the
+tinted band its separation (1.1 L\*, below the 1.7 the design system already
+found imperceptible).
+
+**The request/ticket split is now a rule, not the accident it was.** A
+requester opens a **request**; staff work a **ticket**; same row. Spanish:
+**pedido** and **ticket**. And the vocabulary table binds in both languages —
+a department is an **área** (where a requester works, one branch), a support
+team is an **equipo de soporte** (who resolves, organization-owned). Role
+LABELS get Spanish; **role KEYS are stored values and are never translated and
+never renamed** (9.14).
+
+**Bilingual scope is deliberately unanswered.** There is no i18n anywhere
+today — `lang="en"` is hard-coded, every string is a literal, and `ROLE_LABELS`
+is the only translation-ready seam in the codebase. Whether Spanish is Helpi's
+voice only, the product's second language, or its first is the one decision
+with a large cost and nothing in the repository to settle it. **10.1's
+Definition of Ready must answer it before any i18n work starts.**
+
+Three things NOT to do: never let the brand document decide what may be
+claimed — it decides phrasing, and `product-status.ts` decides truth; never
+give the brand yellow a job that carries text or information (1.12:1 on the
+proposed paper, and the measurement is why the rule exists rather than a
+preference); never let Helpi become an assistant, a copilot or a chatbot in
+either language — the spec blacklist is English-bound today and needs Spanish
+equivalents in the same commit as the copy, or the suite will pass while
+asserting nothing.
+
+**The next action is Sprint 10.1 — the design system.** In this order: refresh
+`product-status.ts` first (every other claim depends on it), then the token
+layer with every ratio re-measured rather than trusted, then the mark and the
+wordmark (and delete `apps/web/public/favicon.ico`, which is Nx-scaffold
+artwork unrelated to the indigo mark it competes with), then underlined inline
+links, then the five-slot tagline architecture replacing today's four
+competing lines. Open it with its own Definition of Ready, and settle the
+bilingual scope there.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -720,7 +809,7 @@ do NOT "simplify" the Prisma model to @@unique, it would generate a total
 index and make re-invitation impossible). Sprint 9.15: organizations
 invitation_placement (`branch_id` + `department_id` on invitations, additive,
 nullable, real foreign keys with ON DELETE SET NULL — applied to dev and
-`_test`). Sprints 9.9, 9.10, 9.11, 9.13 and 9.14: none.
+`_test`). Sprints 9.9, 9.10, 9.11, 9.13, 9.14 and **10.0**: none.
 
 ## Tests executed (through 2026-08-03, local)
 
@@ -742,6 +831,17 @@ users 3, audit 5, notification 2, analytics 4, ai 7, organizations 23) plus 325
 unit tests.
 The backfill sequence ran once, verified clean, and is recorded in
 tenancy-phase-7-readiness.md.
+
+**Sprint 10.0 changed no code**, so its gate is documentation-shaped: Prettier
+over every touched file, and the full local gate plus remote CI on the closing
+HEAD to prove the repository is unchanged in every way that runs. Its real
+verification was different in kind — every contrast ratio and L\* value in the
+brand document was computed in the sprint rather than carried over, two
+first-pass candidates failed WCAG 1.4.11 and were replaced before being written
+down, and the existing documented figures (6.02:1, 6.67:1, 1.13:1, 15.07:1)
+were re-derived and confirmed. Its claims were then verified against the
+repository by an adversarial pass whose findings are recorded in
+`SPRINT-010.0.md`.
 
 9.10 also ran a manual end-to-end walk across six real processes (browser
 client → web-bff → api-gateway → auth / users / organizations) covering the
@@ -771,8 +871,14 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-The next sprint is a product choice. 9.15 took bulk import and 9.16 took
-projection reconciliation, which were the top two of this list:
+**The next action is Sprint 10.1 — the design system**, as described in the
+Sprint 10.0 entry above. The list below is **Block A's** candidate list, kept
+because it is still the right list for whenever Block A resumes. Nothing on it
+is the next thing to do, and email in particular still requires the project
+owner's approval under ADR 0008.
+
+9.15 took bulk import and 9.16 took projection reconciliation, which were the
+top two of this list:
 
 1. **Email delivery.** It moves to the top by consequence rather than by
    preference: an import of two hundred people now produces two hundred codes
@@ -823,7 +929,17 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
 ## Suggested continuation prompt
 
-> Continue HelpDesk AI. Complete and green on main: the tenancy migration
+> Continue HelpDesk AI. **Block A is formally closed and Block B is open;
+> Sprint 10.0 (brand strategy) is complete and the next action is Sprint 10.1,
+> the design system.** Read `docs/architecture/brand-strategy.md` before
+> touching any product surface — it is authoritative for how things are said,
+> while `apps/web/src/lib/product-status.ts` stays authoritative for what is
+> true (ADR 0009). Its "Truth defects" section is 10.1's first task, and
+> refreshing `product-status.ts` comes before every other claim change.
+> Do not start email, WhatsApp, billing, SSO, SCIM or production-readiness work,
+> and do not reopen Block A.
+>
+> Complete and green on main: the tenancy migration
 > (phases 0-8), Sprint 9.5 (branches/departments/stations with branch-scoped
 > visibility), 9.6 (profiles and org-defined fields, ADR 0018), 9.7
 > (shared-terminal sessions), 9.8 (invitations, and organizations-service
@@ -886,13 +1002,22 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > after three sprints in which it guarded none; unlearn the old sentence rather
 > than half-remembering it.
 >
-> Pick the next sprint — the handoff's "Exact next action" lays out the
-> candidates. **Email delivery is top by consequence**: an import of two
-> hundred people now produces two hundred codes distributed by hand, which is
-> where the out-of-band model stops being a small awkwardness. It remains the
-> project owner's decision under ADR 0008 and must not be started without one.
-> Open whichever you choose with its own Definition of Ready, the pattern the
-> last eleven sprints set.
+> **What 10.0 makes true**: the brand's visual thesis is _ink acts, yellow
+> marks, chroma states_ — indigo leaves, the action colour becomes achromatic,
+> and `#FFEE8C` never carries text or information because it measures 1.12:1 on
+> the proposed paper. Helpi keeps every behaviour and changes language to es-AR
+> with voseo, and its English-bound spec regexes must be rewritten in the same
+> commit as its copy or the suite will pass while asserting nothing. A requester
+> opens a **request** (_pedido_), staff work a **ticket**; role LABELS may be
+> translated and role KEYS never. The accent-colour direction is the one call a
+> different person could reasonably make differently, and 10.1's Definition of
+> Ready is where to disagree with it — after the token layer it gets expensive.
+> The bilingual SCOPE is deliberately unanswered and 10.1 must settle it.
+>
+> Open 10.1 with its own Definition of Ready, the pattern the last twelve
+> sprints set. Block A's candidate list (email delivery top by consequence, and
+> still the project owner's decision under ADR 0008) is kept in "Exact next
+> action" for whenever Block A resumes — it is not the next thing to do.
 >
 > Standing rules: never a permanent shared password or unattributable request
 > path (ADR 0016); profile fields never become credentials (ADR 0017); an
