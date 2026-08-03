@@ -287,7 +287,7 @@ describe('PeoplePage member administration', () => {
     return [
       [/\/session\/refresh$/, { status: 200, body: ADMIN }],
       ...extra,
-      [/\/people\/branches$/, { status: 200, body: [] }, 'GET'],
+      [/\/organization\/branches$/, { status: 200, body: [] }, 'GET'],
       [/\/people\/invitations$/, { status: 200, body: [] }, 'GET'],
       [/\/people(\?|$)/, { status: 200, body: people }, 'GET'],
     ];
@@ -471,7 +471,7 @@ describe('PeoplePage member administration', () => {
         [{ ...ADA, roleTemplate: 'branch_manager', status: 'active' }],
         [
           [
-            /\/people\/branches$/,
+            /\/organization\/branches$/,
             {
               status: 200,
               body: [

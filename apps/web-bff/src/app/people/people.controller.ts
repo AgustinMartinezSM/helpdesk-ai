@@ -135,15 +135,8 @@ export class PeopleController {
     );
   }
 
-  /**
-   * The branch picker's source. Declared before ':userId/branches' below —
-   * they do not collide today (different depths), but the ordering is the
-   * habit this controller already keeps for the invitation literals.
-   */
-  @Get('branches')
-  branches(@Req() req: BrowserRequest): Promise<unknown> {
-    return this.forward(req, 'GET', '/api/organizations/branches');
-  }
+  // The branch picker's source lived here in Sprint 9.10; it moved to the
+  // organization controller in 9.11, next to the writes for the same noun.
 
   // Member administration (Sprint 9.10). Still no policy here: which of these
   // a caller may perform is three separate permission keys, all checked in

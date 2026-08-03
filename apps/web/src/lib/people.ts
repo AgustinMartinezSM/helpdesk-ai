@@ -163,10 +163,15 @@ export function changeMemberStatus(
   );
 }
 
+/**
+ * The branch picker's source. It lives under /organization because that is
+ * where the branches themselves are managed (Sprint 9.11) — one door per
+ * resource, whichever screen happens to be asking.
+ */
 export function listBranches(
   accessToken: string,
 ): Promise<OrganizationBranch[]> {
-  return call(accessToken, 'GET', '/people/branches');
+  return call(accessToken, 'GET', '/organization/branches');
 }
 
 export function listMemberBranches(

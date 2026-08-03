@@ -271,25 +271,20 @@ describe('People endpoints (stub gateway)', () => {
       expect(gateway.requests[2].body).toEqual({ branchIds: ['b1'] });
     });
 
-    it('matches the branch listing before the member branch route', async () => {
-      gateway.respond('GET /api/organizations/branches', 200, []);
+    it('reads one member covered branches', async () => {
+      // The branch LISTING moved to /organization in Sprint 9.11; what is
+      // left under this prefix is the per-member edge.
       gateway.respond('GET /api/organizations/memberships/u1/branches', 200, {
         userId: 'u1',
         branchIds: [],
       });
 
       await request(app.getHttpServer())
-        .get('/people/branches')
-        .set('authorization', 'Bearer jwt-access')
-        .expect(200);
-      await request(app.getHttpServer())
         .get('/people/u1/branches')
         .set('authorization', 'Bearer jwt-access')
         .expect(200);
 
-      // 'branches' must not be read as a userId.
-      expect(gateway.requests[0].url).toBe('/api/organizations/branches');
-      expect(gateway.requests[1].url).toBe(
+      expect(gateway.requests[0].url).toBe(
         '/api/organizations/memberships/u1/branches',
       );
     });

@@ -88,20 +88,33 @@ function SessionArea() {
  */
 function AppNav() {
   const { session } = useAuth();
-  const showPeople =
-    can(session, PERMISSIONS.PEOPLE_READ) ||
-    can(session, PERMISSIONS.PEOPLE_INVITE);
+  // An array from the third entry on: two hardcoded links were fine, three
+  // is the point where adding a fourth should not mean editing markup.
+  const entries = [
+    { href: '/tickets', label: 'Tickets', visible: true },
+    {
+      href: '/people',
+      label: 'People',
+      visible:
+        can(session, PERMISSIONS.PEOPLE_READ) ||
+        can(session, PERMISSIONS.PEOPLE_INVITE),
+    },
+    {
+      href: '/organization',
+      label: 'Organization',
+      visible: can(session, PERMISSIONS.BRANCHES_READ),
+    },
+  ];
 
   return (
     <nav className={styles.nav} aria-label="Main">
-      <Link href="/tickets" className={styles.navLink}>
-        Tickets
-      </Link>
-      {showPeople ? (
-        <Link href="/people" className={styles.navLink}>
-          People
-        </Link>
-      ) : null}
+      {entries
+        .filter((entry) => entry.visible)
+        .map((entry) => (
+          <Link key={entry.href} href={entry.href} className={styles.navLink}>
+            {entry.label}
+          </Link>
+        ))}
     </nav>
   );
 }
