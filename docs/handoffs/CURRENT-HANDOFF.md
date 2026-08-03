@@ -852,6 +852,11 @@ Definition of Ready.
 
 ## Sprint 10.4 in one breath — the first domain sprint of Block B
 
+Remote CI green on the closing HEAD: run `30860100314` on `9c1694f`, first
+attempt, and the run in which the new integration suite executed for the
+first time. Full local gate green: 376 unit tests, typecheck across 15
+projects, build.
+
 **The first administrator of a fresh database no longer has to be made in
 SQL.** `POST /organizations` creates an organization and makes its creator
 the owner in one transaction, over an attributable route. The decision, the

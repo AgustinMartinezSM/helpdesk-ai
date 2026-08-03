@@ -1,6 +1,10 @@
 # Sprint 10.4 — An organization can be created from the product
 
-Status: **CLOSED (2026-08-03).** The Definition of Ready below was written and
+Status: **CLOSED (2026-08-03).** Remote CI green on the final HEAD: run
+[`30860100314`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30860100314)
+on `9c1694f`, green on its first attempt — **and this is the run in which the
+new integration suite executed for the first time**, since Docker was not
+available locally. The Definition of Ready below was written and
 checked against the repository before any code.
 
 ## Definition of Ready
