@@ -1,0 +1,66 @@
+/*
+ * The other half of onboarding, styled like `/join` on purpose: somebody
+ * arriving at either has just registered and belongs nowhere, and the two
+ * should not feel like different products.
+ */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8) 0;
+}
+
+.title {
+  font-size: var(--display-md);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.lead {
+  max-width: 32rem;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.card {
+  width: 100%;
+  max-width: 27.5rem;
+  padding: var(--space-8);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.hint {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  margin-top: var(--space-1);
+}
+
+.alternative {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* Inline link: ink plus an underline, because the action colour is
+   achromatic and colour alone can no longer say "this is a link". */
+.alternative a {
+  color: var(--action);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: from-font;
+}

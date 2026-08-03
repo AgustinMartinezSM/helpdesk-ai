@@ -88,6 +88,10 @@ const HINTS: Record<string, HelpiHint> = {
   '/account': {
     message: 'Tus permisos deciden qué podés hacer en la plataforma.',
   },
+  '/organization/new': {
+    message:
+      'Ponele un nombre: no se puede cambiar después. Quedás como titular.',
+  },
   '/organization': {
     // The route that used to fall through to the public intro. See hintFor.
     message: 'Acá definís sucursales, áreas y equipos de soporte.',

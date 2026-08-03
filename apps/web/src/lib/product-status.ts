@@ -192,11 +192,18 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         status: 'available',
       },
       {
+        name: 'Creating your organization',
+        description:
+          'Register, name your organization, and be its owner — no database access and nobody else required.',
+        status: 'available',
+        note: 'Available to somebody who does not belong to an organization yet. Anyone already in one is refused, because the product cannot yet move a person between organizations. The name cannot be changed afterwards.',
+      },
+      {
         name: 'Organization setup',
         description:
           'Register the branches you work from, their departments and their service points, and archive what closed.',
         status: 'available',
-        note: 'Archiving a branch keeps everything inside it, so reopening restores the branch exactly as it was. The organization itself is created before the product runs; nothing here renames or archives one.',
+        note: 'Archiving a branch keeps everything inside it, so reopening restores the branch exactly as it was. Nothing here renames or archives the organization itself.',
       },
       {
         name: 'Support teams',
@@ -421,7 +428,6 @@ export const PROJECT_STATUS: ProjectStatusGroup[] = [
       'Usage ceilings, key rotation and rate limiting, which the AI provider needs before a public deployment',
       'Notifications and analytics product UI',
       'Assignee picker, so a ticket can be given to a person from the screen',
-      'Self-serve organization onboarding — the first administrator of a new database is still created by hand',
       'Transactional outbox for event publishing',
     ],
   },

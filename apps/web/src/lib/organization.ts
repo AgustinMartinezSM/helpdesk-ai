@@ -78,6 +78,34 @@ async function call<T>(
   return (await response.json()) as T;
 }
 
+export interface CreatedOrganization {
+  organizationId: string;
+  /** Derived from the name upstream; never chosen here. */
+  slug: string;
+  name: string;
+  /**
+   * Always true, and the screen must act on it: the token that created the
+   * organization does not carry it. Without a session refresh the person
+   * owns something they are not yet inside — the same trap /join fell into
+   * before Sprint 9.9 made it refresh.
+   */
+  sessionRefreshRequired: boolean;
+}
+
+/**
+ * Creates an organization and makes the caller its owner.
+ *
+ * The name is the only input. A slug is not offered because upstream does
+ * not accept one: a caller-chosen slug that could be refused for being taken
+ * would answer "does an organization by this name exist?" across tenants.
+ */
+export function createOrganization(
+  accessToken: string,
+  input: { name: string },
+): Promise<CreatedOrganization> {
+  return call(accessToken, 'POST', '/organization', input);
+}
+
 export function listBranches(accessToken: string): Promise<Branch[]> {
   return call(accessToken, 'GET', '/organization/branches');
 }

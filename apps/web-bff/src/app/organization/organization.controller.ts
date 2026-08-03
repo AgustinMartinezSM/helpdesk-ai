@@ -45,6 +45,16 @@ export class OrganizationController {
     @Inject(GATEWAY_CLIENT) private readonly gateway: GatewayClient,
   ) {}
 
+  /**
+   * Creating the organization itself. Sprint 10.4, and the only route here
+   * whose caller does NOT yet belong to an organization — which changes
+   * nothing at this layer, because this layer has never decided access.
+   */
+  @Post()
+  create(@Req() req: BrowserRequest, @Body() body: unknown): Promise<unknown> {
+    return this.forward(req, 'POST', '/api/organizations', body);
+  }
+
   @Get('branches')
   branches(@Req() req: BrowserRequest): Promise<unknown> {
     return this.forward(req, 'GET', '/api/organizations/branches');
