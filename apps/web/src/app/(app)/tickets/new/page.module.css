@@ -57,14 +57,18 @@
 }
 
 .priorityPill:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
+/* Chosen, not actioned — the same treatment as a chosen ticket filter, so
+   the two stop disagreeing about what "this one" looks like. */
 .priorityActive,
 .priorityActive:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+  background: var(--surface-2);
+  border-color: var(--brand-strong);
+  box-shadow: inset 3px 0 0 var(--brand);
+  font-weight: 600;
 }
 
 .submit {

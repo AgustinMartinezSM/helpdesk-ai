@@ -58,11 +58,38 @@
   color: var(--text);
 }
 
+/*
+ * A chosen filter is not an action. Filling it with the action colour made
+ * it identical in weight to the "New ticket" button sitting a few pixels
+ * away — two very different things reading as one, which is the collision
+ * an achromatic action colour is otherwise free of.
+ *
+ * Selection is the yellow's job. The marker is a left rule rather than a
+ * fill, so the label keeps full ink contrast, and the weight change means
+ * the colour is never the only signal.
+ */
 .filterActive,
 .filterActive:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast);
+  position: relative;
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.filterActive {
+  padding-left: 1.25rem;
+}
+
+.filterActive::before {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  top: 0.4375rem;
+  bottom: 0.4375rem;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
 }
 
 .list {

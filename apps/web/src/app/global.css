@@ -265,16 +265,30 @@ svg {
    * on --surface-sunken and the landing orders its sections
    * raised → sunken → raised → technical → tinted.
    *
-   *   base 97.9 · raised 100 · sunken 95.8 · tinted 92.4
-   *   rendered adjacencies: raised↔sunken 4.2 · sunken↔tinted 3.4
+   *   base 97.9 · raised 100 · sunken 92.6 · tinted 95.8
    *
-   * base↔raised is 2.1 and cannot be more while both sit near white, so the
-   * page order is part of the system: a new page that puts those two next
-   * to each other has to be re-measured, not assumed.
+   * MEASURE EVERY ADJACENCY THE PAGE PRODUCES, not the ones you expected.
+   * A first version of this set checked raised↔sunken and sunken↔tinted,
+   * passed, and shipped a sunken↔base pair 2.1 apart — because the landing
+   * puts a default-tone section between the sunken one and the next raised
+   * one, and "default" is the page background. The browser found it; the
+   * unit test did not, because the unit test tested my assumption about the
+   * order rather than the order.
+   *
+   *   raised↔sunken 7.4 · sunken↔base 5.3 · sunken↔tinted 3.1
+   *
+   * ONE boundary per theme is carried by the --section-border hairline
+   * rather than by lightness, and it is worth naming rather than hiding:
+   * base↔raised in light (2.1, and it cannot be more while both sit near
+   * white), and base↔sunken in dark (2.0, at the floor of the scale). The
+   * hairline is doing real work at exactly those two joins.
+   *
+   * Note that tinted sits ABOVE sunken rather than below it. Below, it ran
+   * out of room before muted text ran out of contrast.
    */
   --surface-raised: #ffffff;
-  --surface-sunken: #f5f3ec;
-  --surface-tinted: #f2e9cd;
+  --surface-sunken: #eceae1;
+  --surface-tinted: #f8f3e0;
   --section-border: color-mix(in srgb, #1a1a17 12%, transparent);
   --grid-line: color-mix(in srgb, #1a1a17 5%, transparent);
 
@@ -398,11 +412,13 @@ svg {
    * --surface-tinted are lifted well clear of it rather than kept inside:
    *
    *   base 3.3 · raised 8.3 · sunken 1.4 · tinted 11.4
-   *   rendered adjacencies: base↔raised 5.0 · raised↔sunken 7.0 ·
-   *   sunken↔tinted 10.0 — the largest separations in the whole system.
+   *   base↔raised 5.0 · raised↔sunken 7.0 · sunken↔tinted 10.0 — the
+   *   largest separations in the system.
    *
-   * The --section-border hairline reinforces those deltas; it does not
-   * carry them.
+   * The one exception is base↔sunken at 2.0: both live at the floor, where
+   * the scale has nothing left to give. The hairline carries that join, and
+   * the light theme has exactly one of its own (base↔raised). Everywhere
+   * else the hairline reinforces a delta rather than replacing it.
    */
   --surface-raised: #1a1814;
   --surface-sunken: #050505;

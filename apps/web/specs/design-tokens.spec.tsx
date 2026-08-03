@@ -398,28 +398,83 @@ describe('neutral content stays readable on the surface it lands on', () => {
 
 describe('section bands are separable where they actually meet', () => {
   /**
-   * The landing page orders its sections raised → sunken → raised →
-   * technical → tinted, and `.technical` renders on --surface-sunken. So the
-   * adjacencies that exist are raised↔sunken and sunken↔tinted. base↔raised
-   * is 2.1 L* apart and cannot be more while both sit near white, which is
-   * why the page ORDER is part of the system rather than an accident.
+   * The landing page's tone SEQUENCE, which is what actually produces the
+   * boundaries. `.technical` renders on --surface-sunken and `default`
+   * renders the page background, so the pairs are not the ones a reading of
+   * the token file suggests.
+   *
+   * The first version of this test listed the two pairs I EXPECTED and
+   * passed while the rendered page carried a 1.9 L* join — the landing puts
+   * a default-tone section between the sunken one and the next raised one,
+   * and I had not counted it. The browser found it. The list is now derived
+   * from the sequence, which is the difference between testing the system
+   * and testing my memory of it.
    */
-  const ADJACENCIES: Array<[string, string]> = [
-    ['--surface-raised', '--surface-sunken'],
-    ['--surface-sunken', '--surface-tinted'],
+  const LANDING_TONES = [
+    'raised',
+    'sunken',
+    'default',
+    'raised',
+    'technical',
+    'tinted',
   ];
 
+  const TONE_TOKEN: Record<string, string> = {
+    default: '--bg',
+    raised: '--surface-raised',
+    sunken: '--surface-sunken',
+    technical: '--surface-sunken', // .technical renders on the sunken level
+    tinted: '--surface-tinted',
+  };
+
+  /**
+   * The joins where lightness cannot do the work, and the --section-border
+   * hairline carries the boundary instead. One per theme, both structural:
+   * in light, base and raised both sit near white; in dark, base and sunken
+   * both sit at the floor of the scale. Naming them is the point — an
+   * exception that has to be listed is an exception somebody has to defend.
+   */
+  const HAIRLINE_CARRIED: Record<string, Array<[string, string]>> = {
+    light: [['--bg', '--surface-raised']],
+    dark: [['--bg', '--surface-sunken']],
+  };
+
+  const key = (a: string, b: string) => [a, b].sort().join('|');
+
   it.each(THEMES)(
-    '$name: adjacent bands are at least 3 L* apart',
-    ({ tokens }) => {
+    '$name: every adjacency the landing renders clears 3 L*, or is a named hairline join',
+    ({ name, tokens }) => {
       const page = parseHex(tokens['--bg']);
-      for (const [a, b] of ADJACENCIES) {
+      const exempt = HAIRLINE_CARRIED[name].map(([a, b]) => key(a, b));
+
+      const failures: string[] = [];
+      for (let i = 1; i < LANDING_TONES.length; i += 1) {
+        const a = TONE_TOKEN[LANDING_TONES[i - 1]];
+        const b = TONE_TOKEN[LANDING_TONES[i]];
+        if (a === b) continue;
         const delta = Math.abs(
           lstar(resolve(tokens, a, page)) - lstar(resolve(tokens, b, page)),
         );
-        expect({ pair: `${a}↔${b}`, ok: delta >= 3 }).toEqual({
+        if (delta >= 3 || exempt.includes(key(a, b))) continue;
+        failures.push(`${a}↔${b} = ${delta.toFixed(1)} L*`);
+      }
+      expect(failures).toEqual([]);
+    },
+  );
+
+  it.each(THEMES)(
+    '$name: the hairline joins are still as close as their exemption claims',
+    ({ name, tokens }) => {
+      // If a palette change separated them properly, the exemption should be
+      // deleted rather than left standing as folklore.
+      const page = parseHex(tokens['--bg']);
+      for (const [a, b] of HAIRLINE_CARRIED[name]) {
+        const delta = Math.abs(
+          lstar(resolve(tokens, a, page)) - lstar(resolve(tokens, b, page)),
+        );
+        expect({ pair: `${a}↔${b}`, needsTheHairline: delta < 3 }).toEqual({
           pair: `${a}↔${b}`,
-          ok: true,
+          needsTheHairline: true,
         });
       }
     },
