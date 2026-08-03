@@ -1,7 +1,7 @@
 # Current handoff
 
 **Date:** 2026-08-03
-**Sprint:** 9.15 — bulk CSV onboarding, implemented; 9.4-9.14 complete
+**Sprint:** 9.16 — projection bootstrap/reconciliation, IMPLEMENTED BUT NOT CLOSED; 9.4-9.15 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -495,6 +495,53 @@ Three things NOT to do: never let the import create structure or a template;
 never put an address or a code in the batch event; never merge the preview and
 the apply.
 
+## Sprint 9.16 in one breath — IMPLEMENTED, NOT CLOSED
+
+**Read this before touching anything: the sprint is committed and green
+locally, but it was NOT pushed and remote CI has NOT run.** The tip of `main`
+is ahead of `origin/main`. `docs/progress/SPRINT-009.16.md` lists what is owed
+at the end; the short version is the runbook, the ADR and pilot-readiness
+updates, the other eight integration suites, a controller spec for the three
+new snapshot endpoints, push and CI.
+
+**A cold tickets-service now repairs itself.** organizations-service offers
+three read-only keyset-paginated snapshots under `/internal/structure/*`
+(branches, stations, teams-with-scope), behind the same guard and credential
+Sprint 9.11 left holding two read-only lookups. tickets-service pulls them at
+boot and on demand.
+
+**The ordering IS the safety argument, and it lives in one place.**
+`StructureEventsConsumer.onApplicationBootstrap` subscribes and THEN
+reconciles. `subscribe()` resolves only after the queue is bound, so from that
+moment nothing published can be discarded; the snapshot is applied through the
+same last-write-wins guard the events use, so an update landing mid-walk wins
+on its newer timestamp. **Never reverse those two calls** — snapshot-then-
+subscribe reopens exactly the window this closes.
+
+**Drift is reported, never repaired.** The domain archives rather than deletes,
+so a local row the snapshot did not offer is a fact nothing explains. It is
+counted as `orphaned` and logged; removing it stays a human decision.
+
+**There is no `department_refs` and none was created.** The plan named one;
+departments publish no contract by design (ADR 0022 — "no consumer, no
+promise"). `station_refs` WAS added to scope although the plan did not name it.
+
+**tickets-service now accepts the service credential**, so it has its own
+`InternalServiceGuard` — a deliberate copy, because a shared one would have to
+depend on each service's validated env type. It also gained
+`INTERNAL_SERVICE_TOKEN_PREVIOUS` for rotation and `amqplib` as a dependency
+(the cold-start spec deletes the durable queue so the start is genuine).
+
+**The on-demand reconcile is a write path behind the credential**, which 9.10
+and 9.11 deleted for memberships and structure. The justification is written in
+the controller rather than assumed: those changed DOMAIN state with no person
+attached, this converges a cache toward its owner and expresses no decision.
+
+Three things NOT to do: never reverse subscribe-then-reconcile; never make
+reconciliation delete a row; never let the snapshot endpoints become a general
+cross-service data layer — they are three specific reads for four specific
+projections.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -544,6 +591,14 @@ the apply.
   walk and were never seen in a browser. The `.claude/launch.json` entries that
   define them are **git-ignored**, so they are on that machine only and have to
   be written again elsewhere; only `web` was ever in a fresh checkout.
+- **A jest suite that PASSES and then hangs is a teardown bug, not a slow
+  test.** Sprint 9.16's integration run was killed at eight minutes with no
+  output; run alone with `--detectOpenHandles` the same spec finished in under
+  four seconds. The cause was a helper creating a `MessagingClient` per test
+  while `afterAll` closed only the last one, leaving AMQP connections jest then
+  waited on forever. Track every client, publisher, consumer and Prisma
+  instance a spec creates and close all of them. Diagnose with the single spec
+  and `--detectOpenHandles` before suspecting the broker or the database.
 - **A literal byte-order mark in source is a lint error.** The CSV parser has
   to strip one — Excel writes it, and left in place the first header parses as
   U+FEFF + "email" so the file is refused for a column nobody can see — but

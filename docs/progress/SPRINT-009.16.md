@@ -1,6 +1,6 @@
 # Sprint 9.16 — Projection bootstrap and reconciliation
 
-Status: **Open (2026-08-03).** The Definition of Ready below was written and
+Status: **Implemented, closure incomplete (2026-08-03).** The Definition of Ready below was written and
 checked against the repository before any code.
 
 ## Definition of Ready
@@ -207,3 +207,76 @@ The mechanism is the smallest one that preserves ownership, and the hardest
 requirement — losing no update across the handover — is solved by composing two
 properties the repository already has rather than by adding a third. No
 migration. Proceeding under the standing autonomous authorization.
+
+## Outcome record (2026-08-03)
+
+Two commits: the opening (`6dea4fb`) and the implementation (`cb01c33`).
+
+**A cold tickets-service repairs itself.** organizations-service offers three
+read-only, keyset-paginated snapshot endpoints under `/internal/structure/*`;
+tickets-service pulls them at boot after its subscription is live, and an
+operator can run the same walk on demand or as a read-only drift check.
+
+### What the implementation confirmed or decided
+
+- **The race needed no new mechanism, and the code says why in one place.**
+  The ordering lives inside `StructureEventsConsumer.onApplicationBootstrap`
+  rather than in two coordinated call sites, because separating subscribe from
+  reconcile is exactly how somebody reorders them later.
+- **`department_refs` was not created.** The brief named it; the repository has
+  no such projection and departments publish no contract at all (ADR 0022).
+  Building one would have invented a promise to satisfy a name.
+- **`station_refs` was added to scope** though the brief did not name it: same
+  cold-start failure, and it gates station-located tickets.
+- **tickets-service now ACCEPTS the service credential as well as presenting
+  it**, so it grew its own `InternalServiceGuard` — a deliberate copy of
+  organizations-service's rather than a shared one, because a library version
+  would have to depend on each service's validated env type. Both rules it
+  encodes (rotation accepted, no early return on the first comparison) are
+  restated where they live rather than assumed from the other copy.
+- **The on-demand endpoint is a write path behind the credential**, which 9.10
+  and 9.11 deleted for memberships and structure. Justified explicitly rather
+  than by silence: those changed DOMAIN state on behalf of a person with no
+  person attached, so "who decided this" had a subject and no answer. This
+  converges a cache toward its owner, can only write rows the event stream
+  would have written anyway, and expresses no human decision.
+
+### The test hang, and what caused it
+
+The first full run of the tickets integration suite never finished and was
+killed at eight minutes. **The tests were not slow — the process would not
+exit.** Run alone with `--detectOpenHandles`, the new spec passed in under four
+seconds; the fault was in the spec's own teardown: a helper created a
+`MessagingClient` per test and `afterAll` closed only the most recently
+assigned one, leaking two AMQP connections that jest then waited on forever.
+Every consumer is now tracked and closed. The complete suite runs in 4.6s.
+
+Worth keeping: a suite that passes and hangs is a teardown bug, not a slow
+test, and `--detectOpenHandles` on the single spec is the fastest way to tell
+the two apart.
+
+### Verified
+
+Full workspace gate green: format, lint, typecheck, test and build across all
+15 projects. tickets-service 110 unit tests (13 new for the reconciliation) and
+19 integration tests across 3 suites (4 new).
+
+**The cold start is proven end to end against real RabbitMQ and PostgreSQL**,
+not through mocks. The spec deletes the durable queue so the start is genuine,
+publishes branch and team events with nothing bound, **asserts the projection
+is still empty** — which is what proves the events were discarded rather than
+merely delayed — shows a located ticket being refused, then reconciles and
+shows the same ticket accepted, routed to an organization-wide team and to a
+branch-scoped one. It also covers incremental events after the rebuild, an
+older snapshot failing to overwrite a newer event, and a dry run writing
+nothing.
+
+No migration. No schema change.
+
+### Not done in this sprint
+
+The runbook and the ADR/pilot-readiness updates are owed. The remaining eight
+integration suites were not re-run after the final change, and remote CI has
+not run. The snapshot endpoints have no controller-level spec of their own yet
+— the reconciliation covers everything downstream of "the snapshot answered",
+and the guard refusal on those three routes is untested.
