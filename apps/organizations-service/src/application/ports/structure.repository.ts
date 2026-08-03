@@ -70,6 +70,13 @@ export interface DepartmentRepository {
     departmentId: string,
   ): Promise<Department | null>;
   /**
+   * Departments of one branch, ordered by name, archived ones INCLUDED —
+   * the same rule the branch listing follows (Sprint 9.10, D8): a management
+   * screen that cannot see what it archived cannot un-archive it. Scoped by
+   * organization as well as branch so a foreign branch id lists nothing.
+   */
+  list(organizationId: string, branchId: string): Promise<Department[]>;
+  /**
    * The pre-rename duplicate check. The unique index stays the backstop for
    * the write itself; this exists so an ordinary collision surfaces as a
    * domain error rather than a driver exception.
@@ -102,6 +109,8 @@ export interface OperationalStationRepository {
     organizationId: string,
     stationId: string,
   ): Promise<OperationalStation | null>;
+  /** Stations of one branch, ordered by code, archived ones included. */
+  list(organizationId: string, branchId: string): Promise<OperationalStation[]>;
   update(
     stationId: string,
     changes: UpdateStationChanges,

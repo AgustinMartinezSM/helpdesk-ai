@@ -19,7 +19,6 @@ import { ChangeMembershipRoleUseCase } from '../../application/use-cases/change-
 import { ChangeMembershipStatusUseCase } from '../../application/use-cases/change-membership-status';
 import {
   GetMembershipBranchesUseCase,
-  ListBranchesUseCase,
   SetMembershipBranchesUseCase,
 } from '../../application/use-cases/membership-branches';
 import { OrganizationDomainErrorFilter } from '../organization-domain-error.filter';
@@ -56,13 +55,6 @@ interface MembershipRoleResponse {
 interface MembershipBranchesResponse {
   userId: string;
   branchIds: string[];
-}
-
-interface BranchResponse {
-  id: string;
-  code: string;
-  name: string;
-  status: string;
 }
 
 /**
@@ -163,31 +155,7 @@ export class MembershipsController {
   }
 }
 
-/**
- * The branch listing the editor above draws from. It lives beside that editor
- * because it is the only thing that reads it: creating, renaming and
- * archiving branches is still operator work on the internal surface, and this
- * sprint's claim is only that no ONBOARDING step is unattributable.
- */
-@ApiTags('memberships')
-@ApiBearerAuth()
-@Controller('organizations/branches')
-@UseGuards(JwtAccessGuard)
-@UseFilters(OrganizationDomainErrorFilter)
-export class OrganizationBranchesController {
-  constructor(private readonly listBranches: ListBranchesUseCase) {}
-
-  @Get()
-  @ApiOperation({
-    summary: 'Branches of the caller organization, archived ones included.',
-  })
-  async list(@Req() req: AuthenticatedRequest): Promise<BranchResponse[]> {
-    const branches = await this.listBranches.execute(actorOf(req));
-    return branches.map((branch) => ({
-      id: branch.id,
-      code: branch.code,
-      name: branch.name,
-      status: branch.status,
-    }));
-  }
-}
+// The branch listing this editor draws from lived here in Sprint 9.10, when
+// the only thing that read it was the editor. Sprint 9.11 gave branches a
+// setup surface of their own, so `GET /organizations/branches` moved to
+// `app/structure` next to the writes that own the noun.

@@ -40,6 +40,7 @@ import { CreateStationUseCase } from '../application/use-cases/create-station';
 import { EnsureMembershipUseCase } from '../application/use-cases/ensure-membership';
 import { GetMembershipUseCase } from '../application/use-cases/get-membership';
 import { IssueInvitationUseCase } from '../application/use-cases/issue-invitation';
+import { ListBranchStructureUseCase } from '../application/use-cases/list-branch-structure';
 import { ListInvitationsUseCase } from '../application/use-cases/list-invitations';
 import {
   GetMembershipBranchesUseCase,
@@ -69,13 +70,13 @@ import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { UuidGenerator } from '../infrastructure/uuid-generator';
 import { HealthController } from './health/health.controller';
 import { InvitationsController } from './invitations/invitations.controller';
+import { MembershipsController } from './memberships/memberships.controller';
 import {
-  MembershipsController,
-  OrganizationBranchesController,
-} from './memberships/memberships.controller';
+  OrganizationStructureController,
+  OrganizationStructureItemsController,
+} from './structure/structure.controller';
 import { InternalMembershipsController } from './internal/internal-memberships.controller';
 import { InternalOrganizationMembershipsController } from './internal/internal-organization-memberships.controller';
-import { InternalOrganizationStructureController } from './internal/internal-organization-structure.controller';
 import { InternalServiceGuard } from './internal/internal-service.guard';
 import { RegistrationConsumer } from './messaging/registration.consumer';
 
@@ -110,10 +111,10 @@ export class AppModule {
         HealthController,
         InvitationsController,
         MembershipsController,
-        OrganizationBranchesController,
+        OrganizationStructureController,
+        OrganizationStructureItemsController,
         InternalMembershipsController,
         InternalOrganizationMembershipsController,
-        InternalOrganizationStructureController,
       ],
       providers: [
         { provide: APP_ENV, useValue: env },
@@ -363,6 +364,27 @@ export class AppModule {
           useFactory: (branches: BranchRepository) =>
             new ListBranchesUseCase(branches),
           inject: [BRANCH_REPOSITORY],
+        },
+        {
+          provide: ListBranchStructureUseCase,
+          useFactory: (
+            branches: BranchRepository,
+            departments: DepartmentRepository,
+            stations: OperationalStationRepository,
+            memberships: MembershipRepository,
+          ) =>
+            new ListBranchStructureUseCase(
+              branches,
+              departments,
+              stations,
+              memberships,
+            ),
+          inject: [
+            BRANCH_REPOSITORY,
+            DEPARTMENT_REPOSITORY,
+            STATION_REPOSITORY,
+            MEMBERSHIP_REPOSITORY,
+          ],
         },
         {
           provide: GetMembershipBranchesUseCase,

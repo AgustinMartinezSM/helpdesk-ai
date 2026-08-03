@@ -14,6 +14,7 @@ import {
   DuplicateStationCodeError,
   ForbiddenInvitationActionError,
   ForbiddenMembershipActionError,
+  ForbiddenStructureActionError,
   InvalidMembershipTransitionError,
   InvalidRoleTemplateError,
   InvitationAddresseeMismatchError,
@@ -99,6 +100,7 @@ function describe(
   if (
     exception instanceof ForbiddenInvitationActionError ||
     exception instanceof ForbiddenMembershipActionError ||
+    exception instanceof ForbiddenStructureActionError ||
     exception instanceof MembershipNotAdministrableError ||
     exception instanceof SelfMembershipAdministrationError ||
     exception instanceof RoleTemplateNotGrantableError ||

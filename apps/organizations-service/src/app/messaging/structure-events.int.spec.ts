@@ -187,8 +187,7 @@ describe('structure events (real broker, real database)', () => {
 
   it('announces a created branch with the tenant on the envelope', async () => {
     const code = `store-${randomUUID()}`;
-    const branch = await createBranch.execute({
-      organizationId,
+    const branch = await createBranch.execute(await administrator(), {
       code,
       name: 'Store 12',
       timezone: 'America/Argentina/Buenos_Aires',
@@ -212,14 +211,12 @@ describe('structure events (real broker, real database)', () => {
 
   it('announces an archive as branch.updated.v1', async () => {
     const code = `store-${randomUUID()}`;
-    const branch = await createBranch.execute({
-      organizationId,
+    const branch = await createBranch.execute(await administrator(), {
       code,
       name: 'Closing store',
     });
 
-    await updateBranch.execute({
-      organizationId,
+    await updateBranch.execute(await administrator(), {
       branchId: branch.id,
       status: 'archived',
     });
@@ -263,8 +260,7 @@ describe('structure events (real broker, real database)', () => {
   it('surfaces an assigned branch in the resolution branch set', async () => {
     const userId = randomUUID();
     await ensureMembership.execute({ userId, roles: ['user'] });
-    const branch = await createBranch.execute({
-      organizationId,
+    const branch = await createBranch.execute(await administrator(), {
       code: `store-${randomUUID()}`,
       name: 'Covered store',
     });

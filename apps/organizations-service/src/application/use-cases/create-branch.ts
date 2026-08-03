@@ -1,8 +1,10 @@
+import { PERMISSIONS, type Actor } from '@helpdesk-ai/security';
 import type { Branch } from '../../domain/branch';
 import {
   DuplicateBranchCodeError,
   OrganizationNotFoundError,
 } from '../../domain/errors';
+import { requireStructureAdministrator } from '../structure-administration';
 import type { StructureEventPublisher } from '../ports/event-publisher';
 import type { BranchRepository } from '../ports/structure.repository';
 import type {
@@ -12,7 +14,6 @@ import type {
 } from '../ports/organization.repository';
 
 export interface CreateBranchInput {
-  organizationId: string;
   code: string;
   name: string;
   timezone?: string;
@@ -24,10 +25,16 @@ export interface CreateBranchInput {
  * Registers a branch and announces it, so tickets-service can project the
  * `branch_refs` row ticket creation validates against (Sprint 9.5, D4).
  *
- * The organization is checked first: a branch pointing at an organization
- * this database has never seen would only fail later at the foreign key,
- * and a 500 where the caller deserves a 404 is the tickets-service lesson
- * the error filter already records.
+ * Gated on `branches.create`, and the organization comes from the actor
+ * (Sprint 9.11). Until then this ran behind a shared process credential with
+ * the tenant as a path parameter — the last category of write in the product
+ * that no person could be attributed for.
+ *
+ * The organization is still looked up: `requireOrganization` proves the token
+ * carries one, not that this database has ever seen it. A branch pointing at
+ * an unknown organization would only fail later at the foreign key, and a 500
+ * where the caller deserves a 404 is the tickets-service lesson the error
+ * filter already records.
  *
  * Publishing is best-effort after the commit (ADR 0006): the branch
  * survives a broker outage even though its announcement may not.
@@ -41,12 +48,15 @@ export class CreateBranchUseCase {
     private readonly events: StructureEventPublisher,
   ) {}
 
-  async execute(input: CreateBranchInput): Promise<Branch> {
-    const organization = await this.organizations.findById(
-      input.organizationId,
+  async execute(actor: Actor, input: CreateBranchInput): Promise<Branch> {
+    const organizationId = requireStructureAdministrator(
+      actor,
+      PERMISSIONS.BRANCHES_CREATE,
     );
+
+    const organization = await this.organizations.findById(organizationId);
     if (!organization) {
-      throw new OrganizationNotFoundError(input.organizationId);
+      throw new OrganizationNotFoundError(organizationId);
     }
 
     const now = this.clock.now();

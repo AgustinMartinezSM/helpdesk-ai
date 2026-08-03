@@ -63,4 +63,14 @@ export interface MembershipRepository {
     organizationId: string,
     membershipId: string,
   ): Promise<Membership | null>;
+  /**
+   * Several memberships by id, scoped the same way. Exists so the station
+   * listing can turn the `responsible_membership_id` column into the `userId`
+   * the public surface speaks (Sprint 9.11, D3) in one query rather than one
+   * per station.
+   */
+  listByOrganizationAndIds(
+    organizationId: string,
+    membershipIds: string[],
+  ): Promise<Membership[]>;
 }

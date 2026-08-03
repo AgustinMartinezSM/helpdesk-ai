@@ -145,6 +145,17 @@ export class InMemoryMembershipRepository implements MembershipRepository {
     return updated;
   }
 
+  async listByOrganizationAndIds(
+    organizationId: string,
+    membershipIds: string[],
+  ): Promise<Membership[]> {
+    return this.memberships.filter(
+      (membership) =>
+        membership.organizationId === organizationId &&
+        membershipIds.includes(membership.id),
+    );
+  }
+
   async findByOrganizationAndId(
     organizationId: string,
     membershipId: string,
@@ -365,6 +376,16 @@ export class InMemoryDepartmentRepository implements DepartmentRepository {
     );
   }
 
+  async list(organizationId: string, branchId: string): Promise<Department[]> {
+    return this.departments
+      .filter(
+        (department) =>
+          department.branchId === branchId &&
+          department.organizationId === organizationId,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async findByBranchAndName(
     branchId: string,
     name: string,
@@ -426,6 +447,19 @@ export class InMemoryOperationalStationRepository implements OperationalStationR
           station.id === stationId && station.organizationId === organizationId,
       ) ?? null
     );
+  }
+
+  async list(
+    organizationId: string,
+    branchId: string,
+  ): Promise<OperationalStation[]> {
+    return this.stations
+      .filter(
+        (station) =>
+          station.branchId === branchId &&
+          station.organizationId === organizationId,
+      )
+      .sort((a, b) => a.code.localeCompare(b.code));
   }
 
   async update(

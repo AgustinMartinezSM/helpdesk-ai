@@ -374,16 +374,8 @@ describe('Member administration HTTP API (fakes, real JWT verification)', () => 
       );
     });
 
-    it('lists only the caller organization branches', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/organizations/branches')
-        .set(asBearer(adminToken))
-        .expect(200);
-
-      expect(response.body).toEqual([
-        { id: BRANCH_ID, code: 'store-12', name: 'Store 12', status: 'active' },
-      ]);
-    });
+    // The branch LISTING moved to the structure controller in Sprint 9.11,
+    // where the writes for the same noun live; its spec covers the scoping.
 
     it('replaces the covered set and reads it back', async () => {
       await request(app.getHttpServer())
@@ -423,11 +415,7 @@ describe('Member administration HTTP API (fakes, real JWT verification)', () => 
         .expect(400);
     });
 
-    it('answers 403 without the branch keys', async () => {
-      await request(app.getHttpServer())
-        .get('/organizations/branches')
-        .set(asBearer(memberToken))
-        .expect(403);
+    it('answers 403 without branches.manage_members', async () => {
       await request(app.getHttpServer())
         .patch(`/organizations/memberships/${ADMIN_ID}/branches`)
         .set(asBearer(memberToken))

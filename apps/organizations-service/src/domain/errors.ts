@@ -104,6 +104,20 @@ export class MembershipNotAdministrableError extends OrganizationDomainError {
   }
 }
 
+/**
+ * Raised when the actor's token carries neither `branches.create` nor
+ * `branches.update` nor `branches.read`, whichever the operation needed.
+ *
+ * Separate from the membership one because the message has to name what was
+ * refused, and because the two surfaces are gated by different keys — folding
+ * them together would produce an error that lies about which one applied.
+ */
+export class ForbiddenStructureActionError extends OrganizationDomainError {
+  constructor() {
+    super('you are not allowed to manage this organization structure');
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Structure errors (branches, departments, stations — Sprint 9.5). The
 // not-found errors deliberately say nothing about whether the id exists in

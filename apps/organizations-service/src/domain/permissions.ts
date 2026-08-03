@@ -102,6 +102,13 @@ const ORGANIZATION_ADMIN_PERMISSIONS: ReadonlySet<string> = new Set([
   // has to mean "within my branches", and no endpoint enforces that yet.
   PERMISSIONS.BRANCHES_READ,
   PERMISSIONS.BRANCHES_MANAGE_MEMBERS,
+  // Sprint 9.11. Matrix ● cells for owner and admin. branches.update also
+  // carries a ○ for branch_manager — editing their OWN branches — which stays
+  // unrepresented for the reason the other ○ cells do: own-scope has no
+  // representation in a flat set of strings, and inventing one here would
+  // quietly answer the scope-qualifier question ADR 0016 closed.
+  PERMISSIONS.BRANCHES_CREATE,
+  PERMISSIONS.BRANCHES_UPDATE,
   PERMISSIONS.TICKETS_CREATE,
   PERMISSIONS.TICKETS_READ_OWN,
   PERMISSIONS.TICKETS_READ_ALL,

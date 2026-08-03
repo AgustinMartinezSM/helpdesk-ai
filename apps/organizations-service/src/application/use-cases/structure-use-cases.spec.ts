@@ -51,9 +51,18 @@ const UNKNOWN_ID = '99999999-9999-4999-8999-999999999999';
 
 /** An administrator's token, matching the stored row the fixtures create. */
 function admin(): Actor {
+  return adminOf(BOOTSTRAP_ID);
+}
+
+/**
+ * The same token, for another organization. Structure writes take the tenant
+ * from the actor now (Sprint 9.11), so a cross-tenant test changes WHO is
+ * asking rather than which id they pass.
+ */
+function adminOf(organizationId: string): Actor {
   return {
     id: ADMIN_ID,
-    organizationId: BOOTSTRAP_ID,
+    organizationId,
     permissions: new Set(permissionsForTemplate('organization_admin')),
   };
 }
@@ -158,8 +167,7 @@ function buildContext() {
 type Context = ReturnType<typeof buildContext>;
 
 async function withBranch(ctx: Context, organizationId = BOOTSTRAP_ID) {
-  return ctx.createBranch.execute({
-    organizationId,
+  return ctx.createBranch.execute(adminOf(organizationId), {
     code: 'store-12',
     name: 'Store 12',
     timezone: 'America/Argentina/Buenos_Aires',
@@ -208,8 +216,7 @@ describe('CreateBranchUseCase', () => {
     const ctx = buildContext();
 
     await expect(
-      ctx.createBranch.execute({
-        organizationId: UNKNOWN_ID,
+      ctx.createBranch.execute(adminOf(UNKNOWN_ID), {
         code: 'store-1',
         name: 'Store 1',
       }),
@@ -224,8 +231,7 @@ describe('UpdateBranchUseCase', () => {
     const branch = await withBranch(ctx);
     ctx.clock.advanceSeconds(60);
 
-    const archived = await ctx.updateBranch.execute({
-      organizationId: BOOTSTRAP_ID,
+    const archived = await ctx.updateBranch.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       status: 'archived',
     });
@@ -242,14 +248,12 @@ describe('UpdateBranchUseCase', () => {
     // archived has a way back.
     const ctx = buildContext();
     const branch = await withBranch(ctx);
-    await ctx.updateBranch.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.updateBranch.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       status: 'archived',
     });
 
-    const restored = await ctx.updateBranch.execute({
-      organizationId: BOOTSTRAP_ID,
+    const restored = await ctx.updateBranch.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       status: 'active',
     });
@@ -260,15 +264,13 @@ describe('UpdateBranchUseCase', () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
 
-    const renamed = await ctx.updateBranch.execute({
-      organizationId: BOOTSTRAP_ID,
+    const renamed = await ctx.updateBranch.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       name: 'Store 12 — North',
     });
     expect(renamed.timezone).toBe('America/Argentina/Buenos_Aires');
 
-    const cleared = await ctx.updateBranch.execute({
-      organizationId: BOOTSTRAP_ID,
+    const cleared = await ctx.updateBranch.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       timezone: null,
     });
@@ -286,8 +288,7 @@ describe('UpdateBranchUseCase', () => {
     // A guessed id from another tenant and a nonexistent one must be
     // indistinguishable — confirming existence is the leak.
     await expect(
-      ctx.updateBranch.execute({
-        organizationId,
+      ctx.updateBranch.execute(adminOf(organizationId), {
         branchId,
         name: 'Probe',
       }),
@@ -301,11 +302,13 @@ describe('department use cases', () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
 
-    const department = await ctx.createDepartment.execute({
-      organizationId: BOOTSTRAP_ID,
-      branchId: branch.id,
-      name: 'Electronics',
-    });
+    const department = await ctx.createDepartment.execute(
+      adminOf(BOOTSTRAP_ID),
+      {
+        branchId: branch.id,
+        name: 'Electronics',
+      },
+    );
 
     expect(department.branchId).toBe(branch.id);
     expect(department.organizationId).toBe(BOOTSTRAP_ID);
@@ -315,15 +318,13 @@ describe('department use cases', () => {
   it('refuses a duplicate name within the branch', async () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
-    await ctx.createDepartment.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.createDepartment.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       name: 'Electronics',
     });
 
     await expect(
-      ctx.createDepartment.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.createDepartment.execute(adminOf(BOOTSTRAP_ID), {
         branchId: branch.id,
         name: 'Electronics',
       }),
@@ -333,20 +334,20 @@ describe('department use cases', () => {
   it('refuses a rename onto a sibling department name', async () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
-    await ctx.createDepartment.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.createDepartment.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       name: 'Electronics',
     });
-    const groceries = await ctx.createDepartment.execute({
-      organizationId: BOOTSTRAP_ID,
-      branchId: branch.id,
-      name: 'Groceries',
-    });
+    const groceries = await ctx.createDepartment.execute(
+      adminOf(BOOTSTRAP_ID),
+      {
+        branchId: branch.id,
+        name: 'Groceries',
+      },
+    );
 
     await expect(
-      ctx.updateDepartment.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.updateDepartment.execute(adminOf(BOOTSTRAP_ID), {
         departmentId: groceries.id,
         name: 'Electronics',
       }),
@@ -356,14 +357,15 @@ describe('department use cases', () => {
   it('archives a department without an event', async () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
-    const department = await ctx.createDepartment.execute({
-      organizationId: BOOTSTRAP_ID,
-      branchId: branch.id,
-      name: 'Electronics',
-    });
+    const department = await ctx.createDepartment.execute(
+      adminOf(BOOTSTRAP_ID),
+      {
+        branchId: branch.id,
+        name: 'Electronics',
+      },
+    );
 
-    const archived = await ctx.updateDepartment.execute({
-      organizationId: BOOTSTRAP_ID,
+    const archived = await ctx.updateDepartment.execute(adminOf(BOOTSTRAP_ID), {
       departmentId: department.id,
       status: 'archived',
     });
@@ -373,15 +375,16 @@ describe('department use cases', () => {
   it('answers not-found for a department reached through the wrong organization', async () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
-    const department = await ctx.createDepartment.execute({
-      organizationId: BOOTSTRAP_ID,
-      branchId: branch.id,
-      name: 'Electronics',
-    });
+    const department = await ctx.createDepartment.execute(
+      adminOf(BOOTSTRAP_ID),
+      {
+        branchId: branch.id,
+        name: 'Electronics',
+      },
+    );
 
     await expect(
-      ctx.updateDepartment.execute({
-        organizationId: OTHER_ORG_ID,
+      ctx.updateDepartment.execute(adminOf(OTHER_ORG_ID), {
         departmentId: department.id,
         name: 'Probe',
       }),
@@ -393,8 +396,7 @@ describe('department use cases', () => {
     const branch = await withBranch(ctx);
 
     await expect(
-      ctx.createDepartment.execute({
-        organizationId: OTHER_ORG_ID,
+      ctx.createDepartment.execute(adminOf(OTHER_ORG_ID), {
         branchId: branch.id,
         name: 'Electronics',
       }),
@@ -411,8 +413,7 @@ describe('station use cases', () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
 
-    const station = await ctx.createStation.execute({
-      organizationId: BOOTSTRAP_ID,
+    const station = await ctx.createStation.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       code: 'cashier-2',
       name: 'Cashier station 2',
@@ -434,12 +435,11 @@ describe('station use cases', () => {
     const branch = await withBranch(ctx);
     const membership = await withMembership(ctx);
 
-    const station = await ctx.createStation.execute({
-      organizationId: BOOTSTRAP_ID,
+    const station = await ctx.createStation.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       code: 'cashier-2',
       name: 'Cashier station 2',
-      responsibleMembershipId: membership.id,
+      responsibleUserId: membership.userId,
     });
     expect(station.responsibleMembershipId).toBe(membership.id);
   });
@@ -453,12 +453,11 @@ describe('station use cases', () => {
     // station) lives in the other organization. A station must not point at
     // another tenant's people.
     await expect(
-      ctx.createStation.execute({
-        organizationId: OTHER_ORG_ID,
+      ctx.createStation.execute(adminOf(OTHER_ORG_ID), {
         branchId: foreignBranch.id,
         code: 'cashier-2',
         name: 'Cashier station 2',
-        responsibleMembershipId: membership.id,
+        responsibleUserId: membership.userId,
       }),
     ).rejects.toBeInstanceOf(MembershipNotFoundError);
     expect(ctx.events.stationsCreated).toHaveLength(0);
@@ -467,16 +466,14 @@ describe('station use cases', () => {
   it('refuses a duplicate code within the branch', async () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
-    await ctx.createStation.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.createStation.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       code: 'cashier-2',
       name: 'Cashier station 2',
     });
 
     await expect(
-      ctx.createStation.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.createStation.execute(adminOf(BOOTSTRAP_ID), {
         branchId: branch.id,
         code: 'cashier-2',
         name: 'Another till',
@@ -489,20 +486,18 @@ describe('station use cases', () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
     const membership = await withMembership(ctx);
-    const station = await ctx.createStation.execute({
-      organizationId: BOOTSTRAP_ID,
+    const station = await ctx.createStation.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       code: 'cashier-2',
       name: 'Cashier station 2',
-      responsibleMembershipId: membership.id,
+      responsibleUserId: membership.userId,
     });
     ctx.clock.advanceSeconds(60);
 
-    const updated = await ctx.updateStation.execute({
-      organizationId: BOOTSTRAP_ID,
+    const updated = await ctx.updateStation.execute(adminOf(BOOTSTRAP_ID), {
       stationId: station.id,
       status: 'archived',
-      responsibleMembershipId: null,
+      responsibleUserId: null,
     });
 
     expect(updated.status).toBe('archived');
@@ -517,23 +512,20 @@ describe('station use cases', () => {
   it('answers the same not-found for a foreign station as for an unknown one', async () => {
     const ctx = buildContext();
     const branch = await withBranch(ctx);
-    const station = await ctx.createStation.execute({
-      organizationId: BOOTSTRAP_ID,
+    const station = await ctx.createStation.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       code: 'cashier-2',
       name: 'Cashier station 2',
     });
 
     await expect(
-      ctx.updateStation.execute({
-        organizationId: OTHER_ORG_ID,
+      ctx.updateStation.execute(adminOf(OTHER_ORG_ID), {
         stationId: station.id,
         name: 'Probe',
       }),
     ).rejects.toBeInstanceOf(StationNotFoundError);
     await expect(
-      ctx.updateStation.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.updateStation.execute(adminOf(BOOTSTRAP_ID), {
         stationId: UNKNOWN_ID,
         name: 'Probe',
       }),
@@ -582,8 +574,7 @@ describe('branch membership use cases', () => {
     // hides a branch from pickers, never from the people who covered it.
     const ctx = buildContext();
     const { branch } = await withCoveredMembership(ctx);
-    await ctx.updateBranch.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.updateBranch.execute(adminOf(BOOTSTRAP_ID), {
       branchId: branch.id,
       status: 'archived',
     });

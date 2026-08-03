@@ -1,8 +1,10 @@
+import { PERMISSIONS, type Actor } from '@helpdesk-ai/security';
 import type { Department } from '../../domain/branch';
 import {
   BranchNotFoundError,
   DuplicateDepartmentNameError,
 } from '../../domain/errors';
+import { requireStructureAdministrator } from '../structure-administration';
 import type {
   BranchRepository,
   DepartmentRepository,
@@ -10,7 +12,6 @@ import type {
 import type { Clock, IdGenerator } from '../ports/organization.repository';
 
 export interface CreateDepartmentInput {
-  organizationId: string;
   branchId: string;
   name: string;
 }
@@ -19,6 +20,10 @@ export interface CreateDepartmentInput {
  * Adds a department under a branch. Rows and memberships exist per
  * ADR 0016's shape, but nothing keys on them yet — routing will
  * (Sprint 9.12).
+ *
+ * Gated on `branches.update` rather than a key of its own: a department is
+ * not a scope, it is the contents of one, and the approved matrix has no row
+ * for it (Sprint 9.11, D1).
  *
  * NO event, deliberately: no consumer exists, and a contract nobody reads
  * is a promise nobody keeps. When routing needs departments, that sprint
@@ -32,13 +37,21 @@ export class CreateDepartmentUseCase {
     private readonly ids: IdGenerator,
   ) {}
 
-  async execute(input: CreateDepartmentInput): Promise<Department> {
+  async execute(
+    actor: Actor,
+    input: CreateDepartmentInput,
+  ): Promise<Department> {
+    const organizationId = requireStructureAdministrator(
+      actor,
+      PERMISSIONS.BRANCHES_UPDATE,
+    );
+
     const branch = await this.branches.findByOrganizationAndId(
-      input.organizationId,
+      organizationId,
       input.branchId,
     );
     if (!branch) {
-      throw new BranchNotFoundError(input.organizationId, input.branchId);
+      throw new BranchNotFoundError(organizationId, input.branchId);
     }
 
     const now = this.clock.now();

@@ -51,6 +51,18 @@ export class PrismaOperationalStationRepository implements OperationalStationRep
     return row ? toDomain(row) : null;
   }
 
+  async list(
+    organizationId: string,
+    branchId: string,
+  ): Promise<OperationalStation[]> {
+    const rows = await this.prisma.operationalStation.findMany({
+      where: { branchId, branch: { organizationId } },
+      include: { branch: { select: { organizationId: true } } },
+      orderBy: { code: 'asc' },
+    });
+    return rows.map(toDomain);
+  }
+
   async update(
     stationId: string,
     changes: UpdateStationChanges,

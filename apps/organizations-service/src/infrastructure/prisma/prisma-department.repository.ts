@@ -47,6 +47,17 @@ export class PrismaDepartmentRepository implements DepartmentRepository {
     return row ? toDomain(row) : null;
   }
 
+  async list(organizationId: string, branchId: string): Promise<Department[]> {
+    // Scoped by BOTH, so a branch id belonging to another tenant lists
+    // nothing rather than that tenant's departments.
+    const rows = await this.prisma.department.findMany({
+      where: { branchId, branch: { organizationId } },
+      include: { branch: { select: { organizationId: true } } },
+      orderBy: { name: 'asc' },
+    });
+    return rows.map(toDomain);
+  }
+
   async findByBranchAndName(
     branchId: string,
     name: string,

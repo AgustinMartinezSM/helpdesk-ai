@@ -44,6 +44,7 @@ const TEST_ENV = {
 const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const UNKNOWN_USER_ID = '22222222-2222-4222-8222-222222222222';
+const BRANCH_ID = '00000000-0000-4000-8000-0000000000bb';
 
 function membership(overrides: Partial<Membership> = {}): Membership {
   return {
@@ -259,142 +260,60 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
   });
 
   describe('structure surface', () => {
-    it('rejects every structure route without the service credential', async () => {
-      // Creating and archiving places stays operator work: `branches.create`
-      // and `branches.update` have no product surface, and Sprint 9.10's
-      // claim is only that no ONBOARDING step is unattributable.
+    it('no longer exposes structure here either', async () => {
+      // Sprint 9.11 finished what 9.10 started. With the credential present
+      // and correct these answer 404: the guard passed and there is no route.
+      // INTERNAL_SERVICE_TOKEN now guards no mutation anywhere in the
+      // platform — what is left behind it is the two reads above.
+      const base = `/internal/organizations/${ORGANIZATION_ID}`;
+
       await request(app.getHttpServer())
-        .post(`/internal/organizations/${ORGANIZATION_ID}/branches`)
+        .post(`${base}/branches`)
+        .set(asService())
         .send({ code: 'store-12', name: 'Store 12' })
-        .expect(401);
+        .expect(404);
       await request(app.getHttpServer())
-        .patch(
-          `/internal/organizations/${ORGANIZATION_ID}/branches/00000000-0000-4000-8000-0000000000bb`,
-        )
+        .patch(`${base}/branches/${BRANCH_ID}`)
+        .set(asService())
         .send({ name: 'Store 12' })
-        .expect(401);
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`${base}/branches/${BRANCH_ID}/stations`)
+        .set(asService())
+        .send({ code: 'cashier-2', name: 'Cashier station 2' })
+        .expect(404);
 
       expect(branches.branches).toHaveLength(0);
       expect(events.branchesCreated).toHaveLength(0);
     });
 
-    async function createBranch(code = 'store-12') {
-      const response = await request(app.getHttpServer())
-        .post(`/internal/organizations/${ORGANIZATION_ID}/branches`)
-        .set(asService())
-        .send({ code, name: `Branch ${code}`, timezone: 'UTC' })
-        .expect(201);
-      return response.body as { branchId: string };
-    }
-
-    it('creates a branch, publishes it, and answers 409 on the duplicate code', async () => {
-      const created = await createBranch();
-
-      expect(created.branchId).toBeDefined();
-      expect(events.branchesCreated).toHaveLength(1);
-
-      await request(app.getHttpServer())
-        .post(`/internal/organizations/${ORGANIZATION_ID}/branches`)
-        .set(asService())
-        .send({ code: 'store-12', name: 'Another' })
-        .expect(409);
-      expect(events.branchesCreated).toHaveLength(1);
-    });
-
-    it('archives a branch through PATCH and publishes the update', async () => {
-      const created = await createBranch();
-
-      const archived = await request(app.getHttpServer())
-        .patch(
-          `/internal/organizations/${ORGANIZATION_ID}/branches/${created.branchId}`,
-        )
-        .set(asService())
-        .send({ status: 'archived' })
-        .expect(200);
-
-      expect(archived.body.status).toBe('archived');
-      expect(events.branchesUpdated).toHaveLength(1);
-    });
-
-    it('answers 400 for a word that is not a branch status', async () => {
-      const created = await createBranch();
-
-      await request(app.getHttpServer())
-        .patch(
-          `/internal/organizations/${ORGANIZATION_ID}/branches/${created.branchId}`,
-        )
-        .set(asService())
-        .send({ status: 'closed' })
-        .expect(400);
-    });
-
-    it('answers 404 for a branch of another organization', async () => {
-      const created = await createBranch();
-      const OTHER_ORG = '33333333-3333-4333-8333-333333333333';
-
-      // Foreign and nonexistent must be the same 404: confirming existence
-      // is the leak.
-      await request(app.getHttpServer())
-        .patch(
-          `/internal/organizations/${OTHER_ORG}/branches/${created.branchId}`,
-        )
-        .set(asService())
-        .send({ name: 'Probe' })
-        .expect(404);
-      expect(events.branchesUpdated).toHaveLength(0);
-    });
-
-    it('creates departments and stations under the branch', async () => {
-      const created = await createBranch();
-
-      await request(app.getHttpServer())
-        .post(
-          `/internal/organizations/${ORGANIZATION_ID}/branches/${created.branchId}/departments`,
-        )
-        .set(asService())
-        .send({ name: 'Electronics' })
-        .expect(201);
-
-      const station = await request(app.getHttpServer())
-        .post(
-          `/internal/organizations/${ORGANIZATION_ID}/branches/${created.branchId}/stations`,
-        )
-        .set(asService())
-        .send({ code: 'cashier-2', name: 'Cashier station 2' })
-        .expect(201);
-
-      // Stations announce themselves (tickets-service projects them);
-      // departments stay silent (no consumer exists).
-      expect(events.stationsCreated).toHaveLength(1);
-      expect(station.body.stationId).toBeDefined();
-
-      await request(app.getHttpServer())
-        .patch(
-          `/internal/organizations/${ORGANIZATION_ID}/stations/${station.body.stationId}`,
-        )
-        .set(asService())
-        .send({ status: 'archived' })
-        .expect(200);
-      expect(events.stationsUpdated).toHaveLength(1);
-    });
-
-    it('surfaces a covered branch in the resolution branch set', async () => {
-      // The edge itself is written through the person-facing surface now
-      // (memberships.controller.spec.ts); what this asserts is that mint-time
-      // resolution still reads it, which is the only reason the table exists.
+    it('still surfaces a covered branch in the resolution branch set', async () => {
+      // The rows are written through the person-facing surface now; what
+      // this asserts is that mint-time resolution still reads the edge,
+      // which is the only reason the table exists.
       memberships.memberships.push(membership());
-      const created = await createBranch();
+      branches.branches.push({
+        id: BRANCH_ID,
+        organizationId: ORGANIZATION_ID,
+        code: 'store-12',
+        name: 'Store 12',
+        status: 'active',
+        timezone: null,
+        address: null,
+        createdAt: new Date('2026-08-01T12:00:00.000Z'),
+        updatedAt: new Date('2026-08-01T12:00:00.000Z'),
+      });
       await branchMemberships.assign({
         membershipId: membership().id,
-        branchId: created.branchId,
-        createdAt: new Date('2026-07-30T12:00:00.000Z'),
+        branchId: BRANCH_ID,
+        createdAt: new Date('2026-08-01T12:00:00.000Z'),
       });
 
       const resolved = await request(app.getHttpServer())
         .get(`/internal/memberships/${USER_ID}/active`)
         .set(asService())
         .expect(200);
-      expect(resolved.body.branchIds).toEqual([created.branchId]);
+      expect(resolved.body.branchIds).toEqual([BRANCH_ID]);
     });
   });
 });

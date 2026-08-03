@@ -119,6 +119,19 @@ export class PrismaMembershipRepository implements MembershipRepository {
     });
     return row ? toDomain(row) : null;
   }
+
+  async listByOrganizationAndIds(
+    organizationId: string,
+    membershipIds: string[],
+  ): Promise<Membership[]> {
+    if (membershipIds.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.membership.findMany({
+      where: { id: { in: membershipIds }, organizationId },
+    });
+    return rows.map(toDomain);
+  }
 }
 
 function toDomain(row: MembershipRow): Membership {

@@ -62,6 +62,17 @@ export const PERMISSIONS = {
   PEOPLE_ASSIGN_ROLES: 'people.assign_roles',
   /** Listing the organization's branches. Reading structure, not editing it. */
   BRANCHES_READ: 'branches.read',
+  /** Registering a branch. Only the branch itself — its contents are below. */
+  BRANCHES_CREATE: 'branches.create',
+  /**
+   * Editing a branch AND everything inside it: renaming, archiving, adding a
+   * department, registering an operational station.
+   *
+   * Departments and stations get no key of their own because they are not
+   * scopes — they are the contents of one, and the approved matrix has no row
+   * for them. A key per child would be inventing vocabulary nobody approved.
+   */
+  BRANCHES_UPDATE: 'branches.update',
   /**
    * Which branches a membership covers — the edge that feeds the `br` claim
    * and with it `tickets.read_branch`. Creating and editing branches

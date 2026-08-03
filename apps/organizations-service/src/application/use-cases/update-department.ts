@@ -1,13 +1,14 @@
+import { PERMISSIONS, type Actor } from '@helpdesk-ai/security';
 import type { Department, DepartmentStatus } from '../../domain/branch';
 import {
   DepartmentNotFoundError,
   DuplicateDepartmentNameError,
 } from '../../domain/errors';
+import { requireStructureAdministrator } from '../structure-administration';
 import type { DepartmentRepository } from '../ports/structure.repository';
 import type { Clock } from '../ports/organization.repository';
 
 export interface UpdateDepartmentInput {
-  organizationId: string;
   departmentId: string;
   name?: string;
   status?: DepartmentStatus;
@@ -29,16 +30,21 @@ export class UpdateDepartmentUseCase {
     private readonly clock: Clock,
   ) {}
 
-  async execute(input: UpdateDepartmentInput): Promise<Department> {
+  async execute(
+    actor: Actor,
+    input: UpdateDepartmentInput,
+  ): Promise<Department> {
+    const organizationId = requireStructureAdministrator(
+      actor,
+      PERMISSIONS.BRANCHES_UPDATE,
+    );
+
     const department = await this.departments.findByOrganizationAndId(
-      input.organizationId,
+      organizationId,
       input.departmentId,
     );
     if (!department) {
-      throw new DepartmentNotFoundError(
-        input.organizationId,
-        input.departmentId,
-      );
+      throw new DepartmentNotFoundError(organizationId, input.departmentId);
     }
 
     if (input.name !== undefined && input.name !== department.name) {
