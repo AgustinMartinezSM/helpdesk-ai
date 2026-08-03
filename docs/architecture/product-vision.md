@@ -1,5 +1,15 @@
 # Product Vision
 
+Status: **written in Sprint 1 and deliberately not rewritten since.** It is
+kept as the original statement of what the product was for, and most of it
+still holds. What it says about _stage_ does not: "Planned" below means
+planned in Sprint 1, and a great deal of it shipped.
+
+Do not read a capability status from this file. The source of truth for what
+the product can claim is `apps/web/src/lib/product-status.ts`
+([ADR 0009](../adr/0009-public-product-status-representation.md)); how any of
+it should be said is [brand-strategy.md](brand-strategy.md).
+
 ## Problem
 
 Organizations that handle support requests — internal IT desks, customer support teams, service providers — need a single place to receive, triage, track, and resolve those requests. Without one, requests scatter across email and chat, ownership is unclear, priorities are guessed, and nobody can answer basic questions like "what is open, who is working on it, and how long is resolution taking".
@@ -32,7 +42,11 @@ AI is a supporting capability, not the product. The platform must be a complete,
 
 In every case the AI suggests and a human decides. AI output never changes ticket state on its own.
 
-## Current stage
+## Current stage — as of Sprint 1
+
+Left as written, because the point of this section now is the starting line
+rather than the position. For where the project actually stands, read
+`docs/progress/` and `docs/handoffs/CURRENT-HANDOFF.md`.
 
 Sprint 1 delivered the platform foundation only:
 

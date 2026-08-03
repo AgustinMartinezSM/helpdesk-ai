@@ -8,6 +8,13 @@ library, no animation library. Everything below is CSS custom properties
 plus one CSS Module per component or page. This document is the
 reference for extending it.
 
+**This describes the system as built.** Sprint 10.0 decided a different
+direction for it — warm neutrals, an achromatic action colour, the brand
+yellow promoted to signature, and the mark rebuilt — in
+[brand-strategy.md](brand-strategy.md), with the measurements it rests on.
+Sprint 10.1 implements that; until it does, everything below is still what
+the code does, and the two documents disagree on purpose.
+
 ## Principles
 
 1. **Tokens, never raw values.** A component that hard-codes a color or
@@ -179,14 +186,20 @@ per theme so native controls follow.
 
 ## Helpi — the product guide
 
-`components/public/helpi.tsx` is a small floating guide on the public
-pages. It is **written guidance, not a chatbot and not AI**, and that
-distinction is a hard constraint rather than a preference. The reason is
-structural rather than a matter of current status: Helpi is a navigation
-aid on the **public** site, while the AI capabilities live inside the
-authenticated product and are staff-only. A public companion that behaved
-like an AI assistant would imply a capability no visitor to that page can
-reach. Concretely, Helpi:
+`components/helpi.tsx` is a small floating guide mounted in **both**
+shells — bottom-right on the public site, bottom-left in the authenticated
+app, with its own hint set for each. (It lived under `components/public/`
+when it was public-only; the path here said so for longer than it was
+true.)
+
+It is **written guidance, not a chatbot and not AI**, and that distinction
+is a hard constraint rather than a preference. The reason is structural
+rather than a matter of current status: every string is authored by hand
+and selected by route, so a companion that behaved like an AI assistant
+would promise a kind of answer nothing behind it can produce — and on the
+public site specifically, one no visitor can reach at all, since the AI
+capabilities are staff-only and live inside the product. Concretely,
+Helpi:
 
 - has **no text input and no conversation** — every hint is authored by
   hand in `lib/helpi-hints.ts` and selected by route;
