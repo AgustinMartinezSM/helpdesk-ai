@@ -297,7 +297,13 @@ Two were self-contradictions rather than repository errors, and those are the
 ones I am least comfortable with. The executive summary said **"every public page
 renders from"** the status module — a sentence the same document contradicts six
 sections later in its own defect list, and the sentence the whole "candor is
-structural" argument rests on. And two audience headings used **"agents"** as an
+structural" argument rests on. My first correction then reused ADR 0009's own
+wording, "landing, features and how-it-works all render from it", and the
+adversarial judge caught that **the ADR is stale too**: `how-it-works` imports
+`StatusPill` and imports nothing from `product-status.ts`, which is exactly what
+lets its three hard-coded literals exist. Fixing a false sentence by copying a
+second false sentence from a document I was citing as authority is the most
+instructive thing that happened in this sprint. And two audience headings used **"agents"** as an
 interface word, which the document's own rejected-vocabulary table bans in the
 same breath as it flags that exact drift on the landing page. A brand document
 that cannot follow its own vocabulary rule for the length of one file has not

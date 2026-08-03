@@ -34,12 +34,15 @@ automation: it is that **every request gets a place, an owner and an ending, and
 you can see all three**.
 
 The brand rests on something unusual and verifiable — this project's claims are
-enforced by tests. Capability statuses live in one module, the landing, features
-and how-it-works pages render from it, and a spec fails CI if a status is quietly
+enforced by tests. Capability statuses live in one module, the landing and
+features pages render from it, and a spec fails CI if a status is quietly
 promoted. A brand built on candor is only worth building when the candor is
-structural, and here it is. It is structural with **six hard-coded exceptions
-this sprint found and 10.1 removes**, which is the honest version of the
-sentence and the one to use.
+structural, and here it is — **structural with six hard-coded exceptions this
+sprint found and 10.1 removes.** That qualified sentence is the honest version
+and the one to use. Do not restore the unqualified one, and do not reach for
+ADR 0009's own phrasing either: it says landing, features **and how-it-works**
+render from the module, and how-it-works imports `StatusPill` without importing
+the module at all.
 
 Three decisions drive everything downstream:
 
@@ -906,7 +909,18 @@ and noted in the sprint record.
    the JSX rather than from `CAPABILITY_AREAS`. Those three will silently
    disagree with `product-status.ts` the moment step one of 10.1 changes an AI
    status. (The features page's legend is not one of these: it defines the
-   vocabulary rather than claiming a capability's status.)
+   vocabulary rather than claiming a capability's status. The security page has
+   a seventh `StatusPill` literal, for the security roadmap rather than for a
+   capability in `product-status.ts` — a different question, listed here so a
+   grep does not turn it up as a surprise.)
+
+   **ADR 0009 itself is stale on this point and should be amended with the
+   fix.** It says "Landing, features and how-it-works all render from it";
+   `how-it-works/page.tsx` imports `StatusPill` and imports nothing at all from
+   `product-status.ts`, so it renders no status from the module. That is what
+   makes its three literals possible, and it means the ADR's own claim needs the
+   same correction the pages do.
+
 3. **The authenticated app footer says "HelpDesk AI — AI-assisted support"** with
    no status qualifier — the one line in the product less honest than the
    product, in a shell whose own AI panel says "No language model is connected".
@@ -945,7 +959,8 @@ page a vulnerability; the header's sprint range went from 9.8 to 9.16 with it.
 ## What this means for Sprint 10.1 and later
 
 **10.1 — the design system.** In this order: refresh `product-status.ts` first,
-because every claim depends on it; then the token layer (warm neutrals, ink
+because every claim depends on it, and amend ADR 0009 with it — the ADR names
+`how-it-works` among the pages that render from the module, and it does not; then the token layer (warm neutrals, ink
 action colour, focus-ring inversion, re-tuned bands), re-measuring every ratio in
 this document rather than trusting it; then the mark and the wordmark, and delete
 the scaffold favicon; then underlined inline links; then the four competing
