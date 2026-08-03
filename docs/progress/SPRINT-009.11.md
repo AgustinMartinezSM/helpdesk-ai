@@ -289,10 +289,12 @@ The full gate — format, lint, typecheck, test, build — ran green across all 
 projects, and all nine integration suites passed against real PostgreSQL and
 RabbitMQ.
 
-**Remote CI: GitHub Actions run `30782752211` on `4a80a15` was green on its
-first attempt**, every step included — format, lint, typecheck, test, build,
-and the integration tests against the real PostgreSQL and RabbitMQ service
-containers. 3m38s.
+**Remote CI: two runs, both green on their first attempt**, every step
+included — format, lint, typecheck, test, build, and the integration tests
+against the real PostgreSQL and RabbitMQ service containers. Run
+`30782752211` on `4a80a15` covered the sprint's work (3m38s); run
+`30783298165` on `5cc0036` covers it plus the refusal-message fix the
+end-to-end walk found (3m35s), and is the tip of `main`.
 
 **An end-to-end walk through five real processes** (browser client → web-bff →
 api-gateway → auth / organizations): a requester refused both the write and
