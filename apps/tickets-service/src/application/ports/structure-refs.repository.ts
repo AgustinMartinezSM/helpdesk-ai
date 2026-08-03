@@ -81,6 +81,22 @@ export interface BranchRefRepository {
   ): Promise<BranchRef | null>;
   /** Active branches of the organization, ordered by name for the picker. */
   listActive(organizationId: string): Promise<BranchRef[]>;
+  /**
+   * The row by id ALONE, whatever its organization or status (Sprint 9.16).
+   *
+   * Every other read here is scoped, deliberately, so a foreign row and a
+   * missing one are indistinguishable. This one is not, and it is not an
+   * authorization surface: reconciliation already holds the authoritative row
+   * from the owning service and needs to know only whether the local copy is
+   * older. It answers a timestamp, never data a caller could act on.
+   */
+  findAny(id: string): Promise<{ updatedAt: Date } | null>;
+  /**
+   * Local ids the snapshot did not offer — drift, never a deletion to mirror.
+   * The domain archives rather than deletes, so these are counted and
+   * reported, never removed.
+   */
+  idsNotIn(ids: readonly string[]): Promise<string[]>;
 }
 
 /**
@@ -98,6 +114,22 @@ export interface StationRefRepository {
   ): Promise<StationRef | null>;
   /** Active stations of the branch, ordered by name for the picker. */
   listActive(organizationId: string, branchId: string): Promise<StationRef[]>;
+  /**
+   * The row by id ALONE, whatever its organization or status (Sprint 9.16).
+   *
+   * Every other read here is scoped, deliberately, so a foreign row and a
+   * missing one are indistinguishable. This one is not, and it is not an
+   * authorization surface: reconciliation already holds the authoritative row
+   * from the owning service and needs to know only whether the local copy is
+   * older. It answers a timestamp, never data a caller could act on.
+   */
+  findAny(id: string): Promise<{ updatedAt: Date } | null>;
+  /**
+   * Local ids the snapshot did not offer — drift, never a deletion to mirror.
+   * The domain archives rather than deletes, so these are counted and
+   * reported, never removed.
+   */
+  idsNotIn(ids: readonly string[]): Promise<string[]>;
 }
 
 export const TEAM_REF_REPOSITORY = Symbol('TEAM_REF_REPOSITORY');
@@ -153,4 +185,20 @@ export interface TeamRefRepository {
   findActive(organizationId: string, teamId: string): Promise<TeamRef | null>;
   /** Active teams of the organization, ordered by name for the picker. */
   listActive(organizationId: string): Promise<TeamRef[]>;
+  /**
+   * The row by id ALONE, whatever its organization or status (Sprint 9.16).
+   *
+   * Every other read here is scoped, deliberately, so a foreign row and a
+   * missing one are indistinguishable. This one is not, and it is not an
+   * authorization surface: reconciliation already holds the authoritative row
+   * from the owning service and needs to know only whether the local copy is
+   * older. It answers a timestamp, never data a caller could act on.
+   */
+  findAny(id: string): Promise<{ updatedAt: Date } | null>;
+  /**
+   * Local ids the snapshot did not offer — drift, never a deletion to mirror.
+   * The domain archives rather than deletes, so these are counted and
+   * reported, never removed.
+   */
+  idsNotIn(ids: readonly string[]): Promise<string[]>;
 }

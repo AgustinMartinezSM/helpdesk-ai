@@ -16,6 +16,7 @@ import type {
   ApplyTeamEventUseCase,
   ApplyTeamScopeEventUseCase,
 } from '../../application/use-cases/apply-structure-events';
+import type { ReconcileStructureUseCase } from '../../application/use-cases/reconcile-structure';
 
 /** Durable queue owned by this service (see docs/architecture/messaging.md). */
 export const STRUCTURE_EVENTS_QUEUE = 'tickets-service.structure-events';
@@ -39,16 +40,46 @@ export class StructureEventsConsumer {
     private readonly applyTeam: ApplyTeamEventUseCase,
     private readonly applyTeamScope: ApplyTeamScopeEventUseCase,
     private readonly logger?: MessagingLogger,
+    /** Null when no snapshot source is configured; see onApplicationBootstrap. */
+    private readonly reconcile?: ReconcileStructureUseCase | null,
   ) {}
 
+  /**
+   * Subscribe, THEN reconcile. The order is the safety argument (Sprint
+   * 9.16), and it lives here rather than in two coordinated call sites
+   * because separating them is how somebody reorders them.
+   *
+   * `start()` resolves only once the queue is declared and bound, so from
+   * that moment nothing published can be discarded — it waits in the queue
+   * whether or not this service is still catching up. The snapshot that
+   * follows is applied through the same last-write-wins guard the events use,
+   * so an update that lands during the walk wins on its newer timestamp
+   * instead of being overwritten by an older snapshot row.
+   *
+   * Snapshotting first would open exactly the window this closes: an event
+   * published between the read and the binding would go nowhere.
+   */
   onApplicationBootstrap(): void {
     void this.start()
-      .then(() => {
+      .then(async () => {
         this.logger?.log(
           `consuming structure events from ${STRUCTURE_EVENTS_QUEUE}`,
         );
+        if (!this.reconcile) {
+          // No snapshot source configured. The service still works from
+          // events alone — which is exactly the cold-start hole this exists
+          // to close, so it is a warning rather than silence.
+          this.logger?.warn(
+            'structure reconciliation is not configured: a cold projection will only fill from new events',
+          );
+          return;
+        }
+        await this.reconcile.execute();
       })
       .catch((error: unknown) => {
+        // Fire-and-forget like every consumer here: a broker or snapshot
+        // failure delays the projection instead of blocking HTTP startup, and
+        // creation keeps failing closed against the projection meanwhile.
         this.logger?.error(
           `failed to start the ${STRUCTURE_EVENTS_QUEUE} subscription: ${
             error instanceof Error ? error.message : String(error)

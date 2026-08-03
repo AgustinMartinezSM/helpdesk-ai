@@ -50,6 +50,10 @@ import {
 import { APP_ENV, SERVICE_NAME, type TicketsServiceEnv } from '../config/env';
 import { JwtAccessGuard } from '@helpdesk-ai/security';
 import { HttpMembershipVerifier } from '../infrastructure/http/http-membership-verifier';
+import { HttpStructureSnapshotSource } from '../infrastructure/http/http-structure-snapshot.source';
+import { ReconcileStructureUseCase } from '../application/use-cases/reconcile-structure';
+import { InternalProjectionsController } from './internal/internal-projections.controller';
+import { InternalServiceGuard } from './internal/internal-service.guard';
 import { RabbitMqEventPublisher } from '../infrastructure/messaging/rabbitmq-event-publisher';
 import {
   PrismaBranchRefRepository,
@@ -80,7 +84,11 @@ export class AppModule {
         // Verification only: this service never signs tokens.
         JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
       ],
-      controllers: [HealthController, TicketsController],
+      controllers: [
+        HealthController,
+        TicketsController,
+        InternalProjectionsController,
+      ],
       providers: [
         { provide: APP_ENV, useValue: env },
         { provide: CLOCK, useClass: SystemClock },
@@ -274,6 +282,39 @@ export class AppModule {
           inject: [TICKET_REPOSITORY, TEAM_REF_REPOSITORY, CLOCK],
         },
         {
+          // Null when the snapshot source is unconfigured, exactly like the
+          // membership verifier above: the service still runs from events
+          // alone, which is the cold-start hole this closes, so the consumer
+          // warns rather than failing to boot.
+          provide: ReconcileStructureUseCase,
+          useFactory: (
+            branches: BranchRefRepository,
+            stations: StationRefRepository,
+            teams: TeamRefRepository,
+            logger: Logger,
+          ): ReconcileStructureUseCase | null => {
+            if (!env.ORGANIZATIONS_SERVICE_URL || !env.INTERNAL_SERVICE_TOKEN) {
+              return null;
+            }
+            return new ReconcileStructureUseCase(
+              new HttpStructureSnapshotSource(
+                env.ORGANIZATIONS_SERVICE_URL,
+                env.INTERNAL_SERVICE_TOKEN,
+              ),
+              branches,
+              stations,
+              teams,
+              logger,
+            );
+          },
+          inject: [
+            BRANCH_REF_REPOSITORY,
+            STATION_REF_REPOSITORY,
+            TEAM_REF_REPOSITORY,
+            Logger,
+          ],
+        },
+        {
           provide: StructureEventsConsumer,
           useFactory: (
             messaging: MessagingClient,
@@ -282,6 +323,7 @@ export class AppModule {
             applyTeam: ApplyTeamEventUseCase,
             applyTeamScope: ApplyTeamScopeEventUseCase,
             logger: Logger,
+            reconcile: ReconcileStructureUseCase | null,
           ) =>
             new StructureEventsConsumer(
               messaging,
@@ -290,6 +332,7 @@ export class AppModule {
               applyTeam,
               applyTeamScope,
               logger,
+              reconcile,
             ),
           inject: [
             MessagingClient,
@@ -298,9 +341,11 @@ export class AppModule {
             ApplyTeamEventUseCase,
             ApplyTeamScopeEventUseCase,
             Logger,
+            ReconcileStructureUseCase,
           ],
         },
         JwtAccessGuard,
+        InternalServiceGuard,
       ],
     };
   }

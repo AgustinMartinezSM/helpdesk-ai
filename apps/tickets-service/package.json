@@ -120,7 +120,8 @@
           "parallel": false,
           "cwd": "apps/tickets-service",
           "env": {
-            "DATABASE_URL": "postgresql://tickets_service:helpdesk_local_only_tickets@localhost:5433/helpdesk_tickets_test"
+            "DATABASE_URL": "postgresql://tickets_service:helpdesk_local_only_tickets@localhost:5433/helpdesk_tickets_test",
+            "RABBITMQ_URL": "amqp://helpdesk:helpdesk_local_only_rabbit@localhost:5672"
           }
         }
       }
@@ -138,6 +139,7 @@
     "@nestjs/swagger": "^11.4.6",
     "@prisma/adapter-pg": "7.9.1",
     "@prisma/client": "7.9.1",
+    "amqplib": "^2.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "helmet": "^8.3.0",

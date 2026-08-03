@@ -73,6 +73,22 @@ export class PrismaBranchRefRepository implements BranchRefRepository {
       orderBy: { name: 'asc' },
     });
   }
+
+  async findAny(id: string): Promise<{ updatedAt: Date } | null> {
+    const row = await this.prisma.branchRef.findUnique({
+      where: { id },
+      select: { updatedAt: true },
+    });
+    return row ? { updatedAt: row.updatedAt } : null;
+  }
+
+  async idsNotIn(ids: readonly string[]): Promise<string[]> {
+    const rows = await this.prisma.branchRef.findMany({
+      where: ids.length > 0 ? { id: { notIn: [...ids] } } : {},
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
 }
 
 export class PrismaStationRefRepository implements StationRefRepository {
@@ -136,6 +152,22 @@ export class PrismaStationRefRepository implements StationRefRepository {
       where: { branchId, organizationId, status: ACTIVE_REF_STATUS },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async findAny(id: string): Promise<{ updatedAt: Date } | null> {
+    const row = await this.prisma.stationRef.findUnique({
+      where: { id },
+      select: { updatedAt: true },
+    });
+    return row ? { updatedAt: row.updatedAt } : null;
+  }
+
+  async idsNotIn(ids: readonly string[]): Promise<string[]> {
+    const rows = await this.prisma.stationRef.findMany({
+      where: ids.length > 0 ? { id: { notIn: [...ids] } } : {},
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
   }
 }
 
@@ -227,6 +259,22 @@ export class PrismaTeamRefRepository implements TeamRefRepository {
       orderBy: { name: 'asc' },
     });
     return rows.map(toTeamRef);
+  }
+
+  async findAny(id: string): Promise<{ updatedAt: Date } | null> {
+    const row = await this.prisma.teamRef.findUnique({
+      where: { id },
+      select: { updatedAt: true },
+    });
+    return row ? { updatedAt: row.updatedAt } : null;
+  }
+
+  async idsNotIn(ids: readonly string[]): Promise<string[]> {
+    const rows = await this.prisma.teamRef.findMany({
+      where: ids.length > 0 ? { id: { notIn: [...ids] } } : {},
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
   }
 }
 

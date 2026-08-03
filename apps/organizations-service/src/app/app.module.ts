@@ -11,6 +11,7 @@ import {
   type InvitationRepository,
 } from '../application/ports/invitation.repository';
 import { MEMBERSHIP_REPOSITORY } from '../application/ports/membership.repository';
+import { STRUCTURE_SNAPSHOT_REPOSITORY } from '../application/ports/structure-snapshot.repository';
 import {
   SUPPORT_TEAM_REPOSITORY,
   type SupportTeamRepository,
@@ -81,6 +82,7 @@ import { PrismaInvitationRepository } from '../infrastructure/prisma/prisma-invi
 import { PrismaMembershipRepository } from '../infrastructure/prisma/prisma-membership.repository';
 import { PrismaOperationalStationRepository } from '../infrastructure/prisma/prisma-operational-station.repository';
 import { PrismaOrganizationRepository } from '../infrastructure/prisma/prisma-organization.repository';
+import { PrismaStructureSnapshotRepository } from '../infrastructure/prisma/prisma-structure-snapshot.repository';
 import { PrismaSupportTeamRepository } from '../infrastructure/prisma/prisma-support-team.repository';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { UuidGenerator } from '../infrastructure/uuid-generator';
@@ -94,6 +96,7 @@ import {
   OrganizationStructureItemsController,
 } from './structure/structure.controller';
 import { InternalMembershipsController } from './internal/internal-memberships.controller';
+import { InternalStructureSnapshotController } from './internal/internal-structure-snapshot.controller';
 import { InternalOrganizationMembershipsController } from './internal/internal-organization-memberships.controller';
 import { InternalServiceGuard } from './internal/internal-service.guard';
 import { RegistrationConsumer } from './messaging/registration.consumer';
@@ -134,6 +137,7 @@ export class AppModule {
         OrganizationStructureController,
         OrganizationStructureItemsController,
         InternalMembershipsController,
+        InternalStructureSnapshotController,
         InternalOrganizationMembershipsController,
       ],
       providers: [
@@ -381,6 +385,12 @@ export class AppModule {
             CLOCK,
             EVENT_PUBLISHER,
           ],
+        },
+        {
+          provide: STRUCTURE_SNAPSHOT_REPOSITORY,
+          useFactory: (prisma: PrismaService) =>
+            new PrismaStructureSnapshotRepository(prisma),
+          inject: [PrismaService],
         },
         {
           provide: SUPPORT_TEAM_REPOSITORY,

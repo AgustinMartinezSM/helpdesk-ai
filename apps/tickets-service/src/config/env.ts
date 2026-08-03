@@ -43,6 +43,15 @@ export const ticketsServiceEnvSchema = baseEnvSchema.extend({
     .string()
     .min(32, 'must be at least 32 characters')
     .optional(),
+  // The value being rotated OUT, accepted alongside the current one so a
+  // rotation is add-promote-drop rather than a synchronized restart of every
+  // process (Sprint 9.8's runbook, in SECURITY.md). Only meaningful since
+  // Sprint 9.16, when this service began ACCEPTING the credential as well as
+  // presenting it.
+  INTERNAL_SERVICE_TOKEN_PREVIOUS: z
+    .string()
+    .min(32, 'must be at least 32 characters')
+    .optional(),
 });
 
 export type TicketsServiceEnv = z.infer<typeof ticketsServiceEnvSchema>;

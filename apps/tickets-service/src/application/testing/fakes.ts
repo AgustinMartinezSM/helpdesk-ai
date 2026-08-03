@@ -250,6 +250,16 @@ export class InMemoryBranchRefRepository implements BranchRefRepository {
       )
       .sort((a, b) => a.name.localeCompare(b.name));
   }
+
+  async findAny(id: string): Promise<{ updatedAt: Date } | null> {
+    const row = this.rows.get(id);
+    return row ? { updatedAt: row.updatedAt } : null;
+  }
+
+  async idsNotIn(ids: readonly string[]): Promise<string[]> {
+    const wanted = new Set(ids);
+    return [...this.rows.keys()].filter((id) => !wanted.has(id));
+  }
 }
 
 /** The station projection double, under the same R2 discipline. */
@@ -306,6 +316,16 @@ export class InMemoryStationRefRepository implements StationRefRepository {
           row.status === ACTIVE_REF_STATUS,
       )
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async findAny(id: string): Promise<{ updatedAt: Date } | null> {
+    const row = this.rows.get(id);
+    return row ? { updatedAt: row.updatedAt } : null;
+  }
+
+  async idsNotIn(ids: readonly string[]): Promise<string[]> {
+    const wanted = new Set(ids);
+    return [...this.rows.keys()].filter((id) => !wanted.has(id));
   }
 }
 
@@ -387,5 +407,15 @@ export class InMemoryTeamRefRepository implements TeamRefRepository {
           row.status === ACTIVE_REF_STATUS,
       )
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async findAny(id: string): Promise<{ updatedAt: Date } | null> {
+    const row = this.rows.get(id);
+    return row ? { updatedAt: row.updatedAt } : null;
+  }
+
+  async idsNotIn(ids: readonly string[]): Promise<string[]> {
+    const wanted = new Set(ids);
+    return [...this.rows.keys()].filter((id) => !wanted.has(id));
   }
 }
