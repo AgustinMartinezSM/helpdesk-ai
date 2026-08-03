@@ -150,16 +150,35 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
     await request(app.getHttpServer())
       .get(`/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}`)
       .expect(401);
-    await request(app.getHttpServer())
-      .patch(
-        `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/status`,
-      )
-      .send({ status: 'suspended' })
-      .expect(401);
+  });
 
-    // Rejected before the handler ran: nothing changed, nothing published.
+  it('no longer exposes the membership lifecycle here', async () => {
+    // Sprint 9.10 moved these to `organizations/memberships`, behind a
+    // person's token, and DELETED them here rather than deprecating them:
+    // an unattributable write path kept for emergencies is the one that gets
+    // used (ADR 0016). A 404 with the credential present is the proof — the
+    // guard passed and there was no route.
+    memberships.memberships.push(membership());
+    const base = `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}`;
+
+    await request(app.getHttpServer())
+      .patch(`${base}/status`)
+      .set(asService())
+      .send({ status: 'suspended' })
+      .expect(404);
+    await request(app.getHttpServer())
+      .patch(`${base}/role`)
+      .set(asService())
+      .send({ roleTemplate: 'branch_manager' })
+      .expect(404);
+    await request(app.getHttpServer())
+      .put(`${base}/branches/00000000-0000-4000-8000-0000000000bb`)
+      .set(asService())
+      .expect(404);
+
     expect(memberships.memberships[0].status).toBe('active');
     expect(events.statusChanged).toHaveLength(0);
+    expect(events.roleChanged).toHaveLength(0);
   });
 
   it('reports a membership with its template permissions and organization status', async () => {
@@ -205,23 +224,10 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
       .expect(404);
   });
 
-  it('changes a status through the lifecycle endpoint and stops resolution', async () => {
-    memberships.memberships.push(membership());
+  it('stops resolving a suspended membership', async () => {
+    memberships.memberships.push(membership({ status: 'suspended' }));
 
-    const changed = await request(app.getHttpServer())
-      .patch(
-        `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/status`,
-      )
-      .set(asService())
-      .send({ status: 'suspended' })
-      .expect(200);
-
-    expect(changed.body).toEqual({ status: 'suspended', version: 2 });
-    expect(events.statusChanged).toHaveLength(1);
-    expect(events.statusChanged[0].fromStatus).toBe('active');
-
-    // The suspension is immediately visible to the mint-time resolution:
-    // the next token this user gets carries no organization.
+    // The next token this user gets carries no organization at all.
     const resolved = await request(app.getHttpServer())
       .get(`/internal/memberships/${USER_ID}/active`)
       .set(asService())
@@ -234,41 +240,6 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
       // array, because auth-service parses exactly `branchIds: string[]`.
       branchIds: [],
     });
-  });
-
-  it('answers 409 for a transition the table refuses', async () => {
-    memberships.memberships.push(membership({ status: 'deactivated' }));
-
-    await request(app.getHttpServer())
-      .patch(
-        `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/status`,
-      )
-      .set(asService())
-      .send({ status: 'active' })
-      .expect(409);
-    expect(events.statusChanged).toHaveLength(0);
-  });
-
-  it('answers 404 when changing a status for a user with no membership', async () => {
-    await request(app.getHttpServer())
-      .patch(
-        `/internal/organizations/${ORGANIZATION_ID}/memberships/${UNKNOWN_USER_ID}/status`,
-      )
-      .set(asService())
-      .send({ status: 'suspended' })
-      .expect(404);
-  });
-
-  it('answers 400 for a word that is not a status', async () => {
-    memberships.memberships.push(membership());
-
-    await request(app.getHttpServer())
-      .patch(
-        `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/status`,
-      )
-      .set(asService())
-      .send({ status: 'paused' })
-      .expect(400);
   });
 
   it('resolves an active membership with its template permissions', async () => {
@@ -289,15 +260,18 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
 
   describe('structure surface', () => {
     it('rejects every structure route without the service credential', async () => {
+      // Creating and archiving places stays operator work: `branches.create`
+      // and `branches.update` have no product surface, and Sprint 9.10's
+      // claim is only that no ONBOARDING step is unattributable.
       await request(app.getHttpServer())
         .post(`/internal/organizations/${ORGANIZATION_ID}/branches`)
         .send({ code: 'store-12', name: 'Store 12' })
         .expect(401);
       await request(app.getHttpServer())
         .patch(
-          `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/role`,
+          `/internal/organizations/${ORGANIZATION_ID}/branches/00000000-0000-4000-8000-0000000000bb`,
         )
-        .send({ roleTemplate: 'branch_manager' })
+        .send({ name: 'Store 12' })
         .expect(401);
 
       expect(branches.branches).toHaveLength(0);
@@ -404,74 +378,23 @@ describe('Internal membership HTTP surface (fakes, real guard)', () => {
       expect(events.stationsUpdated).toHaveLength(1);
     });
 
-    it('assigns and removes a branch idempotently, reflected in resolution', async () => {
+    it('surfaces a covered branch in the resolution branch set', async () => {
+      // The edge itself is written through the person-facing surface now
+      // (memberships.controller.spec.ts); what this asserts is that mint-time
+      // resolution still reads it, which is the only reason the table exists.
       memberships.memberships.push(membership());
       const created = await createBranch();
-      const edge = `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/branches/${created.branchId}`;
-
-      await request(app.getHttpServer()).put(edge).set(asService()).expect(204);
-      // Idempotent: the second PUT converges on the same edge.
-      await request(app.getHttpServer()).put(edge).set(asService()).expect(204);
-      expect(branchMemberships.edges).toHaveLength(1);
+      await branchMemberships.assign({
+        membershipId: membership().id,
+        branchId: created.branchId,
+        createdAt: new Date('2026-07-30T12:00:00.000Z'),
+      });
 
       const resolved = await request(app.getHttpServer())
         .get(`/internal/memberships/${USER_ID}/active`)
         .set(asService())
         .expect(200);
       expect(resolved.body.branchIds).toEqual([created.branchId]);
-
-      await request(app.getHttpServer())
-        .delete(edge)
-        .set(asService())
-        .expect(204);
-      await request(app.getHttpServer())
-        .delete(edge)
-        .set(asService())
-        .expect(204);
-      expect(branchMemberships.edges).toHaveLength(0);
-    });
-
-    it('changes a role template, bumps the version, and refuses the self-loop', async () => {
-      memberships.memberships.push(membership());
-
-      const changed = await request(app.getHttpServer())
-        .patch(
-          `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/role`,
-        )
-        .set(asService())
-        .send({ roleTemplate: 'branch_manager' })
-        .expect(200);
-
-      expect(changed.body).toEqual({
-        roleTemplate: 'branch_manager',
-        version: 2,
-      });
-      expect(events.roleChanged).toHaveLength(1);
-      expect(events.roleChanged[0].fromTemplate).toBe('agent');
-
-      // "Already there" is a stale caller, not a success (409), and must
-      // not bump the version over a non-change.
-      await request(app.getHttpServer())
-        .patch(
-          `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/role`,
-        )
-        .set(asService())
-        .send({ roleTemplate: 'branch_manager' })
-        .expect(409);
-      expect(memberships.memberships[0].version).toBe(2);
-    });
-
-    it('answers 400 for a word that is not a role template', async () => {
-      memberships.memberships.push(membership());
-
-      await request(app.getHttpServer())
-        .patch(
-          `/internal/organizations/${ORGANIZATION_ID}/memberships/${USER_ID}/role`,
-        )
-        .set(asService())
-        .send({ roleTemplate: 'superuser' })
-        .expect(400);
-      expect(events.roleChanged).toHaveLength(0);
     });
   });
 });

@@ -37,28 +37,35 @@ export interface UserProfileRepository {
     updatedAt: Date,
   ): Promise<void>;
   /**
-   * Profiles of the organization's ACTIVE members, ordered by display name.
-   * The organization is required — an unscoped listing no longer exists as
-   * an operation. Active-only because suspended/deactivated/invited members
-   * leave the directory until the people-management sprint decides how to
-   * present them. Pagination arrives with demand.
+   * Profiles of the organization's members, ordered by display name. The
+   * organization is required — an unscoped listing no longer exists as an
+   * operation. Pagination arrives with demand.
+   *
+   * `statuses` names which membership statuses to include and DEFAULTS TO
+   * ACTIVE ONLY (Sprint 9.10). The default is the point: this listing feeds
+   * assignee pickers as well as the People screen, and quietly adding
+   * suspended people to a picker would be a regression wearing a feature's
+   * clothes. Only a screen that can act on them asks for more.
    */
-  list(organizationId: string): Promise<DirectoryEntry[]>;
+  list(
+    organizationId: string,
+    statuses?: readonly string[],
+  ): Promise<DirectoryEntry[]>;
 }
 
 /**
- * A directory row: the profile plus the role template the membership
- * projection holds for that person.
+ * A directory row: the profile plus the role template and status the
+ * membership projection holds for that person.
  *
- * No membership STATUS here, deliberately. The listing already filters to
- * active members, so a status column would say 'active' on every row —
- * a field that cannot vary is noise, not information. It arrives with the
- * increment that decides how to present suspended and invited people, which
- * is the same increment that would give them a row at all.
+ * `status` arrived in Sprint 9.10 with the surface that can change it. It was
+ * deliberately absent before: the listing filtered to active members, so the
+ * column would have said 'active' on every row, and a field that cannot vary
+ * is noise rather than information.
  */
 export interface DirectoryEntry {
   readonly profile: UserProfile;
   readonly roleTemplate: string;
+  readonly status: string;
 }
 
 export const CLOCK = Symbol('CLOCK');

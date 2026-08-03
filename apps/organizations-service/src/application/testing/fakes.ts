@@ -311,6 +311,12 @@ export class InMemoryBranchRepository implements BranchRepository {
     );
   }
 
+  async list(organizationId: string): Promise<Branch[]> {
+    return this.branches
+      .filter((branch) => branch.organizationId === organizationId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async update(
     branchId: string,
     changes: UpdateBranchChanges,

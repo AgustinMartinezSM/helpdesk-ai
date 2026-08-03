@@ -18,11 +18,13 @@ import {
   userRegisteredV1,
   type ContractEnvelope,
 } from '@helpdesk-ai/messaging';
+import type { Actor } from '@helpdesk-ai/security';
 import { SystemClock } from '../../application/ports/organization.repository';
 import { ChangeMembershipStatusUseCase } from '../../application/use-cases/change-membership-status';
 import { EnsureMembershipUseCase } from '../../application/use-cases/ensure-membership';
 import { ResolveActiveMembershipUseCase } from '../../application/use-cases/resolve-active-membership';
 import { BOOTSTRAP_ORGANIZATION_SLUG } from '../../domain/organization';
+import { permissionsForTemplate } from '../../domain/permissions';
 import { RabbitMqEventPublisher } from '../../infrastructure/messaging/rabbitmq-event-publisher';
 import { PrismaBranchMembershipRepository } from '../../infrastructure/prisma/prisma-branch-membership.repository';
 import { PrismaMembershipRepository } from '../../infrastructure/prisma/prisma-membership.repository';
@@ -57,11 +59,27 @@ async function waitFor<T>(
 }
 
 describe('membership provisioning (real broker, real database)', () => {
+  /**
+   * Creates a real administrator membership and returns the token an
+   * administration call would arrive with. The row has to exist: the use case
+   * reads the actor's standing from it rather than from the claims.
+   */
+  async function administrator(organizationId: string): Promise<Actor> {
+    const id = randomUUID();
+    await ensureMembership.execute({ userId: id, roles: ['admin'] });
+    return {
+      id,
+      organizationId,
+      permissions: new Set(permissionsForTemplate('organization_admin')),
+    };
+  }
+
   let prisma: PrismaService;
   let organizations: PrismaOrganizationRepository;
   let memberships: PrismaMembershipRepository;
   let resolveActiveMembership: ResolveActiveMembershipUseCase;
   let changeMembershipStatus: ChangeMembershipStatusUseCase;
+  let ensureMembership: EnsureMembershipUseCase;
   let publisherClient: MessagingClient;
   let consumerClient: MessagingClient;
   let consumer: RegistrationConsumer;
@@ -101,16 +119,14 @@ describe('membership provisioning (real broker, real database)', () => {
       new SystemClock(),
       events,
     );
-    consumer = new RegistrationConsumer(
-      consumerClient,
-      new EnsureMembershipUseCase(
-        organizations,
-        memberships,
-        new SystemClock(),
-        new UuidGenerator(),
-        events,
-      ),
+    ensureMembership = new EnsureMembershipUseCase(
+      organizations,
+      memberships,
+      new SystemClock(),
+      new UuidGenerator(),
+      events,
     );
+    consumer = new RegistrationConsumer(consumerClient, ensureMembership);
     await consumer.start();
 
     // A durable capture queue for what THIS service publishes. Like the
@@ -245,9 +261,11 @@ describe('membership provisioning (real broker, real database)', () => {
       resolveActiveMembership.execute(userId),
     );
     const organizationId = created.organizationId;
+    // The administrator is a real row: since Sprint 9.10 the use case reads
+    // the actor's standing from the database, not from the token it is given.
+    const admin = await administrator(organizationId);
 
-    await changeMembershipStatus.execute({
-      organizationId,
+    await changeMembershipStatus.execute(admin, {
       userId,
       to: 'suspended',
     });
@@ -268,11 +286,7 @@ describe('membership provisioning (real broker, real database)', () => {
     // gets carries no organization.
     expect(await resolveActiveMembership.execute(userId)).toBeNull();
 
-    await changeMembershipStatus.execute({
-      organizationId,
-      userId,
-      to: 'active',
-    });
+    await changeMembershipStatus.execute(admin, { userId, to: 'active' });
 
     const reinstated = await resolveActiveMembership.execute(userId);
     expect(reinstated?.organizationId).toBe(organizationId);

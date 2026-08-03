@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -94,6 +95,12 @@ interface UserProfileResponse {
    * and nothing may branch on it.
    */
   roleTemplate?: string;
+  /**
+   * Present on directory rows only, from Sprint 9.10. Also display data: it
+   * tells a management screen which of suspend / reinstate / remove makes
+   * sense to offer, and the server refuses whatever the screen gets wrong.
+   */
+  status?: string;
 }
 
 interface FieldDefinitionResponse {
@@ -126,10 +133,40 @@ function toProfileResponse(profile: UserProfile): UserProfileResponse {
   };
 }
 
+/**
+ * Which membership statuses a directory request means.
+ *
+ * A closed vocabulary, refused rather than ignored when unknown: silently
+ * falling back to the default would answer a narrower question than the one
+ * asked, and the caller would have no way to tell.
+ */
+const DIRECTORY_STATUSES = [
+  'active',
+  'suspended',
+  'deactivated',
+  'invited',
+] as const;
+
+function directoryStatuses(status?: string): readonly string[] | undefined {
+  if (status === undefined) {
+    return undefined;
+  }
+  if (status === 'all') {
+    return DIRECTORY_STATUSES;
+  }
+  if ((DIRECTORY_STATUSES as readonly string[]).includes(status)) {
+    return [status];
+  }
+  throw new BadRequestException(
+    `status must be "all" or one of: ${DIRECTORY_STATUSES.join(', ')}`,
+  );
+}
+
 function toViewResponse(view: ProfileView): UserProfileResponse {
   return {
     ...toProfileResponse(view.profile),
     ...(view.roleTemplate ? { roleTemplate: view.roleTemplate } : {}),
+    ...(view.status ? { status: view.status } : {}),
     fields: view.fields.map((field) => ({
       key: field.definition.key,
       labelEsAr: field.definition.labelEsAr,
@@ -272,10 +309,20 @@ export class UsersController {
 
   @Get()
   @ApiOperation({
-    summary: "Directory of the caller's organization (people.read)",
+    summary:
+      "Directory of the caller's organization (people.read); ?status=all adds suspended, removed and invited members",
   })
-  async list(@Req() req: AuthenticatedRequest): Promise<UserProfileResponse[]> {
-    const views = await this.listProfiles.execute(actorOf(req));
+  async list(
+    @Req() req: AuthenticatedRequest,
+    @Query('status') status?: string,
+  ): Promise<UserProfileResponse[]> {
+    // Absent means active, and every existing caller passes nothing: the
+    // pickers that consume this listing must not start offering suspended
+    // people because a management screen needed to see them.
+    const views = await this.listProfiles.execute(
+      actorOf(req),
+      directoryStatuses(status),
+    );
     return views.map(toViewResponse);
   }
 

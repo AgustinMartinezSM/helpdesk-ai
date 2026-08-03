@@ -89,6 +89,19 @@ const ORGANIZATION_ADMIN_PERMISSIONS: ReadonlySet<string> = new Set([
   // invitation would have to mean "into my branches", which needs the branch
   // set on the invitation itself — a shape this sprint does not build.
   PERMISSIONS.PEOPLE_INVITE,
+  // Sprint 9.10. Matrix ● cells for owner and admin, and blank for everyone
+  // else — including branch_manager, which the matrix confirmed on review:
+  // suspension is an organization-level act, and a store manager who needs it
+  // gets ORGANIZATION_ADMIN, which is a visible grant rather than a quiet
+  // widening of what every branch manager can do.
+  PERMISSIONS.PEOPLE_SUSPEND,
+  PERMISSIONS.PEOPLE_ASSIGN_ROLES,
+  // The matrix gives branches.read to nearly every template and
+  // branches.manage_members ○ to branch_manager. Both stay narrow here for
+  // the reason people.invite's ○ cell has since 9.8: a branch-scoped grant
+  // has to mean "within my branches", and no endpoint enforces that yet.
+  PERMISSIONS.BRANCHES_READ,
+  PERMISSIONS.BRANCHES_MANAGE_MEMBERS,
   PERMISSIONS.TICKETS_CREATE,
   PERMISSIONS.TICKETS_READ_OWN,
   PERMISSIONS.TICKETS_READ_ALL,

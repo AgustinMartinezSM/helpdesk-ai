@@ -43,6 +43,32 @@ export const PERMISSIONS = {
    * in the use case, against the stored membership rather than the token.
    */
   PEOPLE_INVITE: 'people.invite',
+  /**
+   * Moving a membership along the status transition table: suspend,
+   * reinstate, and remove (which is a deactivation, never a deleted row —
+   * ADR 0021).
+   */
+  PEOPLE_SUSPEND: 'people.suspend',
+  /**
+   * Changing which role template an existing membership carries. Separate
+   * from PEOPLE_SUSPEND because the matrix separates them, and collapsing
+   * the two would give everyone who can re-role somebody the power to lock
+   * them out.
+   *
+   * Bounded by two ceilings in the use case, both read from stored rows:
+   * the requested template and the target's current one must each be
+   * grantable by the actor's own (ADR 0021).
+   */
+  PEOPLE_ASSIGN_ROLES: 'people.assign_roles',
+  /** Listing the organization's branches. Reading structure, not editing it. */
+  BRANCHES_READ: 'branches.read',
+  /**
+   * Which branches a membership covers — the edge that feeds the `br` claim
+   * and with it `tickets.read_branch`. Creating and editing branches
+   * themselves is a different act with no key here yet: that surface is
+   * still operator-only.
+   */
+  BRANCHES_MANAGE_MEMBERS: 'branches.manage_members',
   TICKETS_CREATE: 'tickets.create',
   /** Own requests only; the requester's default visibility. */
   TICKETS_READ_OWN: 'tickets.read_own',

@@ -32,7 +32,6 @@ import {
   type OperationalStationRepository,
 } from '../application/ports/structure.repository';
 import { AcceptInvitationUseCase } from '../application/use-cases/accept-invitation';
-import { AssignBranchMembershipUseCase } from '../application/use-cases/assign-branch-membership';
 import { ChangeMembershipRoleUseCase } from '../application/use-cases/change-membership-role';
 import { ChangeMembershipStatusUseCase } from '../application/use-cases/change-membership-status';
 import { CreateBranchUseCase } from '../application/use-cases/create-branch';
@@ -42,8 +41,12 @@ import { EnsureMembershipUseCase } from '../application/use-cases/ensure-members
 import { GetMembershipUseCase } from '../application/use-cases/get-membership';
 import { IssueInvitationUseCase } from '../application/use-cases/issue-invitation';
 import { ListInvitationsUseCase } from '../application/use-cases/list-invitations';
+import {
+  GetMembershipBranchesUseCase,
+  ListBranchesUseCase,
+  SetMembershipBranchesUseCase,
+} from '../application/use-cases/membership-branches';
 import { PreviewInvitationUseCase } from '../application/use-cases/preview-invitation';
-import { RemoveBranchMembershipUseCase } from '../application/use-cases/remove-branch-membership';
 import { ResolveActiveMembershipUseCase } from '../application/use-cases/resolve-active-membership';
 import { RevokeInvitationUseCase } from '../application/use-cases/revoke-invitation';
 import { UpdateBranchUseCase } from '../application/use-cases/update-branch';
@@ -66,6 +69,10 @@ import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { UuidGenerator } from '../infrastructure/uuid-generator';
 import { HealthController } from './health/health.controller';
 import { InvitationsController } from './invitations/invitations.controller';
+import {
+  MembershipsController,
+  OrganizationBranchesController,
+} from './memberships/memberships.controller';
 import { InternalMembershipsController } from './internal/internal-memberships.controller';
 import { InternalOrganizationMembershipsController } from './internal/internal-organization-memberships.controller';
 import { InternalOrganizationStructureController } from './internal/internal-organization-structure.controller';
@@ -102,6 +109,8 @@ export class AppModule {
       controllers: [
         HealthController,
         InvitationsController,
+        MembershipsController,
+        OrganizationBranchesController,
         InternalMembershipsController,
         InternalOrganizationMembershipsController,
         InternalOrganizationStructureController,
@@ -350,14 +359,28 @@ export class AppModule {
           ],
         },
         {
-          provide: AssignBranchMembershipUseCase,
+          provide: ListBranchesUseCase,
+          useFactory: (branches: BranchRepository) =>
+            new ListBranchesUseCase(branches),
+          inject: [BRANCH_REPOSITORY],
+        },
+        {
+          provide: GetMembershipBranchesUseCase,
+          useFactory: (
+            memberships: MembershipRepository,
+            branchMemberships: BranchMembershipRepository,
+          ) => new GetMembershipBranchesUseCase(memberships, branchMemberships),
+          inject: [MEMBERSHIP_REPOSITORY, BRANCH_MEMBERSHIP_REPOSITORY],
+        },
+        {
+          provide: SetMembershipBranchesUseCase,
           useFactory: (
             memberships: MembershipRepository,
             branches: BranchRepository,
             branchMemberships: BranchMembershipRepository,
             clock: Clock,
           ) =>
-            new AssignBranchMembershipUseCase(
+            new SetMembershipBranchesUseCase(
               memberships,
               branches,
               branchMemberships,
@@ -368,24 +391,6 @@ export class AppModule {
             BRANCH_REPOSITORY,
             BRANCH_MEMBERSHIP_REPOSITORY,
             CLOCK,
-          ],
-        },
-        {
-          provide: RemoveBranchMembershipUseCase,
-          useFactory: (
-            memberships: MembershipRepository,
-            branches: BranchRepository,
-            branchMemberships: BranchMembershipRepository,
-          ) =>
-            new RemoveBranchMembershipUseCase(
-              memberships,
-              branches,
-              branchMemberships,
-            ),
-          inject: [
-            MEMBERSHIP_REPOSITORY,
-            BRANCH_REPOSITORY,
-            BRANCH_MEMBERSHIP_REPOSITORY,
           ],
         },
         {

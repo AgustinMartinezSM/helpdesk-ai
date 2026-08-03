@@ -20,14 +20,16 @@ import {
   membershipRoleChangedV1,
   type ContractEnvelope,
 } from '@helpdesk-ai/messaging';
+import type { Actor } from '@helpdesk-ai/security';
 import { SystemClock } from '../../application/ports/organization.repository';
-import { AssignBranchMembershipUseCase } from '../../application/use-cases/assign-branch-membership';
 import { ChangeMembershipRoleUseCase } from '../../application/use-cases/change-membership-role';
 import { CreateBranchUseCase } from '../../application/use-cases/create-branch';
 import { EnsureMembershipUseCase } from '../../application/use-cases/ensure-membership';
+import { SetMembershipBranchesUseCase } from '../../application/use-cases/membership-branches';
 import { ResolveActiveMembershipUseCase } from '../../application/use-cases/resolve-active-membership';
 import { UpdateBranchUseCase } from '../../application/use-cases/update-branch';
 import { BOOTSTRAP_ORGANIZATION_SLUG } from '../../domain/organization';
+import { permissionsForTemplate } from '../../domain/permissions';
 import { RabbitMqEventPublisher } from '../../infrastructure/messaging/rabbitmq-event-publisher';
 import { PrismaBranchMembershipRepository } from '../../infrastructure/prisma/prisma-branch-membership.repository';
 import { PrismaBranchRepository } from '../../infrastructure/prisma/prisma-branch.repository';
@@ -68,8 +70,20 @@ describe('structure events (real broker, real database)', () => {
   let updateBranch: UpdateBranchUseCase;
   let ensureMembership: EnsureMembershipUseCase;
   let changeMembershipRole: ChangeMembershipRoleUseCase;
-  let assignBranchMembership: AssignBranchMembershipUseCase;
+  let setMembershipBranches: SetMembershipBranchesUseCase;
   let resolveActiveMembership: ResolveActiveMembershipUseCase;
+
+  /** A real administrator row plus the token their request would carry. */
+  async function administrator(): Promise<Actor> {
+    const id = randomUUID();
+    await ensureMembership.execute({ userId: id, roles: ['admin'] });
+    return {
+      id,
+      organizationId,
+      permissions: new Set(permissionsForTemplate('organization_admin')),
+    };
+  }
+
   let publisherClient: MessagingClient;
   let consumerClient: MessagingClient;
   const branchCreatedEvents: ContractEnvelope<typeof branchCreatedV1>[] = [];
@@ -122,7 +136,7 @@ describe('structure events (real broker, real database)', () => {
       clock,
       events,
     );
-    assignBranchMembership = new AssignBranchMembershipUseCase(
+    setMembershipBranches = new SetMembershipBranchesUseCase(
       memberships,
       branches,
       branchMemberships,
@@ -223,8 +237,7 @@ describe('structure events (real broker, real database)', () => {
     const userId = randomUUID();
     await ensureMembership.execute({ userId, roles: ['user'] });
 
-    await changeMembershipRole.execute({
-      organizationId,
+    await changeMembershipRole.execute(await administrator(), {
       userId,
       roleTemplate: 'branch_manager',
     });
@@ -256,23 +269,29 @@ describe('structure events (real broker, real database)', () => {
       name: 'Covered store',
     });
 
-    await assignBranchMembership.execute({
-      organizationId,
+    const admin = await administrator();
+    await setMembershipBranches.execute(admin, {
       userId,
-      branchId: branch.id,
+      branchIds: [branch.id],
     });
 
     const resolved = await resolveActiveMembership.execute(userId);
     expect(resolved?.branchIds).toEqual([branch.id]);
 
-    // Idempotency under replay: a second PUT-shaped assign is the same edge.
-    await assignBranchMembership.execute({
-      organizationId,
+    // The replace converges: asking for the same set again is the same edge.
+    await setMembershipBranches.execute(admin, {
       userId,
-      branchId: branch.id,
+      branchIds: [branch.id],
     });
     expect((await resolveActiveMembership.execute(userId))?.branchIds).toEqual([
       branch.id,
     ]);
+
+    // And emptying it takes the edge away, which is what makes the editor a
+    // replace rather than an append.
+    await setMembershipBranches.execute(admin, { userId, branchIds: [] });
+    expect((await resolveActiveMembership.execute(userId))?.branchIds).toEqual(
+      [],
+    );
   });
 });

@@ -78,16 +78,22 @@ export function grantsAccess(membership: Membership): boolean {
  * Allowed status transitions, as data so a spec can walk every edge.
  *
  * There are no self-loops: "suspend an already-suspended member" means the
- * operator's picture of the row is stale, and confirming it with a success
+ * caller's picture of the row is stale, and confirming it with a success
  * would keep it stale. Refusing forces a re-read — and avoids a version bump
  * that would invalidate every outstanding token over a non-change.
  *
- * `deactivated` is terminal. Whether a deactivated member can be reinstated
- * — and with which role, after how long, decided by whom — is a product
- * decision deferred to the people-management sprint. Until it is made, "no
- * way back" is the recoverable default: a new membership can always be
- * created deliberately, while an accidental reactivation restores access
- * silently.
+ * `deactivated` was terminal until Sprint 9.10, on the argument that "no way
+ * back" is the recoverable default because a new membership can always be
+ * created deliberately. That argument had a false premise:
+ * @@unique([organizationId, userId]) means there is no second row to create,
+ * and redemption inserts with skipDuplicates — so a removed person who
+ * accepted a fresh invitation was told they had joined and stayed
+ * deactivated. Removal was permanent, and nothing said so.
+ *
+ * The other half of the argument was that reactivation would restore access
+ * silently. That was true of the operator endpoint it was written about, and
+ * is not true of what replaced it: reinstating now takes a person's token, a
+ * permission key, a confirmation and a published event (ADR 0021).
  */
 export const MEMBERSHIP_STATUS_TRANSITIONS: Readonly<
   Record<MembershipStatus, readonly MembershipStatus[]>
@@ -95,7 +101,7 @@ export const MEMBERSHIP_STATUS_TRANSITIONS: Readonly<
   invited: ['active', 'deactivated'],
   active: ['suspended', 'deactivated'],
   suspended: ['active', 'deactivated'],
-  deactivated: [],
+  deactivated: ['active'],
 };
 
 export function canTransitionMembershipStatus(

@@ -115,9 +115,29 @@ export class InMemoryMembershipProjectionRepository implements MembershipProject
    */
   activeMembers(organizationId: string): Map<string, string> {
     const members = new Map<string, string>();
+    for (const [userId, member] of this.membersByStatus(organizationId, [
+      'active',
+    ])) {
+      members.set(userId, member.roleTemplate);
+    }
+    return members;
+  }
+
+  /** The same read widened to whichever statuses the caller asked for. */
+  membersByStatus(
+    organizationId: string,
+    statuses: readonly string[],
+  ): Map<string, { roleTemplate: string; status: string }> {
+    const members = new Map<string, { roleTemplate: string; status: string }>();
     for (const row of this.rows.values()) {
-      if (row.organizationId === organizationId && row.status === 'active') {
-        members.set(row.userId, row.roleTemplate);
+      if (
+        row.organizationId === organizationId &&
+        statuses.includes(row.status)
+      ) {
+        members.set(row.userId, {
+          roleTemplate: row.roleTemplate,
+          status: row.status,
+        });
       }
     }
     return members;
@@ -191,14 +211,18 @@ export class InMemoryUserProfileRepository implements UserProfileRepository {
     });
   }
 
-  async list(organizationId: string): Promise<DirectoryEntry[]> {
-    const members = this.memberships.activeMembers(organizationId);
+  async list(
+    organizationId: string,
+    statuses: readonly string[] = ['active'],
+  ): Promise<DirectoryEntry[]> {
+    const members = this.memberships.membersByStatus(organizationId, statuses);
     return [...this.profiles.values()]
       .filter((profile) => members.has(profile.userId))
       .sort((a, b) => a.displayName.localeCompare(b.displayName))
       .map((profile) => ({
         profile,
-        roleTemplate: members.get(profile.userId) ?? 'requester',
+        roleTemplate: members.get(profile.userId)?.roleTemplate ?? 'requester',
+        status: members.get(profile.userId)?.status ?? 'active',
       }));
   }
 }

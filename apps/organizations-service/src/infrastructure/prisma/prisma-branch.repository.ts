@@ -46,6 +46,14 @@ export class PrismaBranchRepository implements BranchRepository {
     return row ? toDomain(row) : null;
   }
 
+  async list(organizationId: string): Promise<Branch[]> {
+    const rows = await this.prisma.branch.findMany({
+      where: { organizationId },
+      orderBy: { name: 'asc' },
+    });
+    return rows.map(toDomain);
+  }
+
   async update(
     branchId: string,
     changes: UpdateBranchChanges,

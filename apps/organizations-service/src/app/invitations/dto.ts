@@ -11,10 +11,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import {
-  INVITATION_STATUSES,
-  INVITABLE_ROLE_TEMPLATES,
-} from '../../domain/invitation';
+import { INVITATION_STATUSES } from '../../domain/invitation';
+import { GRANTABLE_ROLE_TEMPLATES } from '../../domain/role-grants';
 
 export class CreateInvitationDto {
   @ApiProperty({ example: 'nueva.persona@empresa.com' })
@@ -23,11 +21,11 @@ export class CreateInvitationDto {
   inviteeEmail!: string;
 
   /**
-   * `owner` is absent from the list on purpose (see INVITABLE_ROLE_TEMPLATES);
+   * `owner` is absent from the list on purpose (see GRANTABLE_ROLE_TEMPLATES);
    * the use case refuses it again for callers that never went through HTTP.
    */
-  @ApiProperty({ enum: INVITABLE_ROLE_TEMPLATES })
-  @IsIn(INVITABLE_ROLE_TEMPLATES)
+  @ApiProperty({ enum: GRANTABLE_ROLE_TEMPLATES })
+  @IsIn(GRANTABLE_ROLE_TEMPLATES)
   roleTemplate!: string;
 }
 

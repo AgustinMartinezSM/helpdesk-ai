@@ -7,10 +7,10 @@ import {
 import {
   isExpired,
   normalizeInviteeEmail,
-  canGrantRoleTemplate,
   type Invitation,
 } from '../../domain/invitation';
 import { grantsAccess, type Membership } from '../../domain/membership';
+import { canGrantRoleTemplate } from '../../domain/role-grants';
 import { isActive } from '../../domain/organization';
 import {
   hashInvitationSecret,

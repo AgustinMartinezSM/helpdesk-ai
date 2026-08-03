@@ -215,4 +215,89 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
 
     expect(response.body).toEqual([]);
   });
+
+  describe('membership status filter (Sprint 9.10)', () => {
+    async function withSuspendedColleague() {
+      await project(USER_ID, 'ada@example.com');
+      await project(AGENT_ID, 'agent@example.com');
+      await memberships.applyCreated({
+        organizationId: ORG_A,
+        userId: AGENT_ID,
+        roleTemplate: 'agent',
+        status: 'active',
+        occurredAt: new Date('2026-07-28T12:00:01.000Z'),
+      });
+      await memberships.applyCreated({
+        organizationId: ORG_A,
+        userId: USER_ID,
+        roleTemplate: 'requester',
+        status: 'suspended',
+        occurredAt: new Date('2026-07-28T12:00:01.000Z'),
+      });
+    }
+
+    it('defaults to active members, which is what pickers depend on', async () => {
+      await withSuspendedColleague();
+
+      const response = await request(app.getHttpServer())
+        .get('/users')
+        .set(asBearer(agentToken))
+        .expect(200);
+
+      // The default has to keep meaning what it meant before this sprint:
+      // an assignee picker must not start offering suspended people because
+      // a management screen needed to see them.
+      expect(
+        response.body.map((profile: { userId: string }) => profile.userId),
+      ).toEqual([AGENT_ID]);
+      expect(response.body[0].status).toBe('active');
+    });
+
+    it('includes everyone on ?status=all', async () => {
+      await withSuspendedColleague();
+
+      const response = await request(app.getHttpServer())
+        .get('/users?status=all')
+        .set(asBearer(agentToken))
+        .expect(200);
+
+      const byUser = new Map(
+        response.body.map((profile: { userId: string; status: string }) => [
+          profile.userId,
+          profile.status,
+        ]),
+      );
+      expect(byUser.get(USER_ID)).toBe('suspended');
+      expect(byUser.get(AGENT_ID)).toBe('active');
+    });
+
+    it('narrows to one named status', async () => {
+      await withSuspendedColleague();
+
+      const response = await request(app.getHttpServer())
+        .get('/users?status=suspended')
+        .set(asBearer(agentToken))
+        .expect(200);
+
+      expect(
+        response.body.map((profile: { userId: string }) => profile.userId),
+      ).toEqual([USER_ID]);
+    });
+
+    it('refuses a status it does not know rather than ignoring it', async () => {
+      // Falling back to the default would answer a narrower question than
+      // the one asked, and the caller would have no way to tell.
+      await request(app.getHttpServer())
+        .get('/users?status=paused')
+        .set(asBearer(agentToken))
+        .expect(400);
+    });
+
+    it('still needs people.read, whatever the filter says', async () => {
+      await request(app.getHttpServer())
+        .get('/users?status=all')
+        .set(asBearer(userToken))
+        .expect(403);
+    });
+  });
 });

@@ -13,16 +13,19 @@ import {
   DuplicatePendingInvitationError,
   DuplicateStationCodeError,
   ForbiddenInvitationActionError,
+  ForbiddenMembershipActionError,
   InvalidMembershipTransitionError,
   InvalidRoleTemplateError,
   InvitationAddresseeMismatchError,
   InvitationNotFoundError,
   InvitationNotRedeemableError,
+  MembershipNotAdministrableError,
   MembershipNotFoundError,
   OrganizationDomainError,
   OrganizationNotFoundError,
   RoleTemplateNotGrantableError,
   SameRoleTemplateError,
+  SelfMembershipAdministrationError,
   StationNotFoundError,
 } from '../domain/errors';
 
@@ -95,6 +98,9 @@ function describe(
   }
   if (
     exception instanceof ForbiddenInvitationActionError ||
+    exception instanceof ForbiddenMembershipActionError ||
+    exception instanceof MembershipNotAdministrableError ||
+    exception instanceof SelfMembershipAdministrationError ||
     exception instanceof RoleTemplateNotGrantableError ||
     exception instanceof InvitationAddresseeMismatchError ||
     exception instanceof NoOrganizationContextError

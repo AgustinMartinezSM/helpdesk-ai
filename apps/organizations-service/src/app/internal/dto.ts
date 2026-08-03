@@ -13,32 +13,9 @@ import {
   type DepartmentStatus,
   type StationStatus,
 } from '../../domain/branch';
-import {
-  MEMBERSHIP_STATUSES,
-  ROLE_TEMPLATES,
-  type MembershipStatus,
-  type RoleTemplate,
-} from '../../domain/membership';
 
-export class ChangeMembershipStatusDto {
-  /**
-   * Target status only. Whether the move is legal is the transition table's
-   * decision (409), not validation's (400): validation rejects words that
-   * are not statuses, the domain rejects statuses that are not reachable.
-   */
-  @IsIn(MEMBERSHIP_STATUSES)
-  status!: MembershipStatus;
-}
-
-export class ChangeMembershipRoleDto {
-  /**
-   * Same split as the status DTO: validation rejects words that are not
-   * templates (400); the domain refuses the template the row already has
-   * (409) — the no-self-loop rule applied to roles.
-   */
-  @IsIn(ROLE_TEMPLATES)
-  roleTemplate!: RoleTemplate;
-}
+// The membership status and role DTOs moved to app/memberships/dto.ts in
+// Sprint 9.10, with the operator endpoints that used them.
 
 // ---------------------------------------------------------------------------
 // Structure DTOs. On the PATCH DTOs, nullable columns (timezone, address,

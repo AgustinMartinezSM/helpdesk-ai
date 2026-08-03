@@ -87,28 +87,29 @@ export class PrismaUserProfileRepository implements UserProfileRepository {
     });
   }
 
-  async list(organizationId: string): Promise<DirectoryEntry[]> {
+  async list(
+    organizationId: string,
+    statuses: readonly string[] = ['active'],
+  ): Promise<DirectoryEntry[]> {
     // Two queries in the same database, not a cross-service join: the
     // membership projection lives in helpdesk_users precisely so this read
-    // needs no call to organizations-service (ADR 0014). Active members
-    // only — suspended/deactivated/invited members leave the directory until
-    // the people-management sprint decides how to present them.
+    // needs no call to organizations-service (ADR 0014).
     const members = await this.prisma.directoryMembership.findMany({
-      where: { organizationId, status: 'active' },
-      select: { userId: true, roleTemplate: true },
+      where: { organizationId, status: { in: [...statuses] } },
+      select: { userId: true, roleTemplate: true, status: true },
     });
     const rows = await this.prisma.userProfile.findMany({
       where: { userId: { in: members.map((member) => member.userId) } },
       orderBy: { displayName: 'asc' },
     });
-    // The role comes from the projection this query already reads — the
-    // directory can say who is an admin without a second service call.
-    const templates = new Map(
-      members.map((member) => [member.userId, member.roleTemplate]),
-    );
+    // The role and status come from the projection this query already reads
+    // — the directory can say who is an admin, and who is suspended, without
+    // a second service call.
+    const byUser = new Map(members.map((member) => [member.userId, member]));
     return rows.map((row) => ({
       profile: toDomain(row),
-      roleTemplate: templates.get(row.userId) ?? 'requester',
+      roleTemplate: byUser.get(row.userId)?.roleTemplate ?? 'requester',
+      status: byUser.get(row.userId)?.status ?? 'active',
     }));
   }
 }

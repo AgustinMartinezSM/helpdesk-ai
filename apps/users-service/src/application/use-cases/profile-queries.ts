@@ -31,6 +31,8 @@ export interface ProfileView {
    * would need a second query to invent one.
    */
   readonly roleTemplate?: string;
+  /** Same rule as roleTemplate: a directory-row field, not a profile field. */
+  readonly status?: string;
 }
 
 function viewerFor(actor: Actor, subjectUserId: string): FieldViewer {
@@ -118,13 +120,21 @@ export class ListUserProfilesUseCase {
    * to the caller's organization — a token without one gets a refusal, not
    * a global directory. GET /users/me stays unscoped by contrast: the own
    * profile is keyed by the token subject, not by tenancy.
+   *
+   * `statuses` widens the listing beyond active members and needs no extra
+   * key: people.read is the key for seeing who is in the organization, and a
+   * suspended colleague is not more sensitive than an active one. What the
+   * caller may DO about them is a different permission entirely.
    */
-  async execute(actor: Actor): Promise<ProfileView[]> {
+  async execute(
+    actor: Actor,
+    statuses?: readonly string[],
+  ): Promise<ProfileView[]> {
     if (!hasPermission(actor, PERMISSIONS.PEOPLE_READ)) {
       throw new ForbiddenProfileActionError();
     }
     const organizationId = requireOrganization(actor);
-    const entries = await this.profiles.list(organizationId);
+    const entries = await this.profiles.list(organizationId, statuses);
     const definitions = await this.definitions.list(organizationId);
     const values = await this.values.listForUsers(
       organizationId,
@@ -135,6 +145,7 @@ export class ListUserProfilesUseCase {
     return entries.map((entry) => ({
       profile: entry.profile,
       roleTemplate: entry.roleTemplate,
+      status: entry.status,
       fields: assembleFields(
         definitions,
         values,

@@ -11,13 +11,15 @@ import {
   RoleTemplateNotGrantableError,
 } from '../../domain/errors';
 import {
-  canGrantRoleTemplate,
   expiresAtFrom,
-  isInvitableRoleTemplate,
   normalizeInviteeEmail,
   type Invitation,
 } from '../../domain/invitation';
 import { grantsAccess } from '../../domain/membership';
+import {
+  canGrantRoleTemplate,
+  isGrantableRoleTemplate,
+} from '../../domain/role-grants';
 import {
   composeInvitationCode,
   generateInvitationSecret,
@@ -85,7 +87,7 @@ export class IssueInvitationUseCase {
     // `owner` is refused here and not by the subset check below, because
     // TEMPLATE_PERMISSIONS resolves owner and organization_admin to the same
     // set — a subset test alone would let an admin mint a peer at the top.
-    if (!isInvitableRoleTemplate(input.roleTemplate)) {
+    if (!isGrantableRoleTemplate(input.roleTemplate)) {
       throw new InvalidRoleTemplateError(input.roleTemplate);
     }
 

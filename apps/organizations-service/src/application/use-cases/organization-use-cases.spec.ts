@@ -1,8 +1,15 @@
-import { PERMISSIONS } from '@helpdesk-ai/security';
 import {
+  NoOrganizationContextError,
+  PERMISSIONS,
+  type Actor,
+} from '@helpdesk-ai/security';
+import {
+  ForbiddenMembershipActionError,
   InvalidMembershipTransitionError,
+  MembershipNotAdministrableError,
   MembershipNotFoundError,
   OrganizationNotFoundError,
+  SelfMembershipAdministrationError,
 } from '../../domain/errors';
 import {
   canTransitionMembershipStatus,
@@ -29,6 +36,16 @@ import { ResolveActiveMembershipUseCase } from './resolve-active-membership';
 const BOOTSTRAP_ID = '00000000-0000-4000-8000-000000000001';
 const OTHER_ORG_ID = '00000000-0000-4000-8000-0000000000ff';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
+const ADMIN_ID = '22222222-2222-4222-8222-222222222222';
+
+/** An administrator's token, matching the stored row the fixtures create. */
+function admin(): Actor {
+  return {
+    id: ADMIN_ID,
+    organizationId: BOOTSTRAP_ID,
+    permissions: new Set(permissionsForTemplate('organization_admin')),
+  };
+}
 
 function organization(overrides: Partial<Organization> = {}): Organization {
   return {
@@ -110,6 +127,11 @@ describe('canTransitionMembershipStatus', () => {
     ['active', 'deactivated'],
     ['suspended', 'active'],
     ['suspended', 'deactivated'],
+    // Sprint 9.10 (ADR 0021). Removal used to be terminal on the argument
+    // that a new membership could always be created instead — which the
+    // unique index made impossible, so it was a permanent ban nothing said
+    // out loud. Reinstating is now an attributed, permissioned act.
+    ['deactivated', 'active'],
   ] as const)('allows %s -> %s', (from, to) => {
     expect(canTransitionMembershipStatus(from, to)).toBe(true);
   });
@@ -118,14 +140,12 @@ describe('canTransitionMembershipStatus', () => {
     ['active', 'invited'],
     ['suspended', 'invited'],
     ['invited', 'suspended'],
+    // Reinstatement lands on `active` and nowhere else: back into the
+    // holding state, or straight into suspension, are moves nothing needs.
+    ['deactivated', 'invited'],
+    ['deactivated', 'suspended'],
   ] as const)('refuses %s -> %s', (from, to) => {
     expect(canTransitionMembershipStatus(from, to)).toBe(false);
-  });
-
-  it.each(MEMBERSHIP_STATUSES)('refuses deactivated -> %s', (to) => {
-    // Terminal on purpose: reactivation policy is a product decision
-    // deferred to the people-management sprint.
-    expect(canTransitionMembershipStatus('deactivated', to)).toBe(false);
   });
 
   it.each(MEMBERSHIP_STATUSES)('refuses the self-loop on %s', (status) => {
@@ -295,6 +315,9 @@ describe('ChangeMembershipStatusUseCase', () => {
   async function contextWithActiveMembership() {
     const ctx = buildContext();
     ctx.organizations.add(organization());
+    // The administrator has to exist as a ROW: the use case reads their
+    // standing from the database, never from the token it was handed.
+    await ctx.ensureMembership.execute({ userId: ADMIN_ID, roles: ['admin'] });
     const membership = await ctx.ensureMembership.execute({
       userId: USER_ID,
       roles: ['user'],
@@ -306,8 +329,7 @@ describe('ChangeMembershipStatusUseCase', () => {
     const ctx = await contextWithActiveMembership();
     ctx.clock.advanceSeconds(60);
 
-    const updated = await ctx.changeMembershipStatus.execute({
-      organizationId: BOOTSTRAP_ID,
+    const updated = await ctx.changeMembershipStatus.execute(admin(), {
       userId: USER_ID,
       to: 'suspended',
     });
@@ -315,14 +337,13 @@ describe('ChangeMembershipStatusUseCase', () => {
     expect(updated.status).toBe('suspended');
     expect(updated.version).toBe(2);
     expect(updated.updatedAt).toEqual(new Date('2026-07-30T12:01:00.000Z'));
-    expect(ctx.memberships.memberships[0]).toEqual(updated);
+    expect(ctx.memberships.memberships[1]).toEqual(updated);
   });
 
   it('publishes membership.status-changed.v1 with the pre-transition status', async () => {
     const ctx = await contextWithActiveMembership();
 
-    const updated = await ctx.changeMembershipStatus.execute({
-      organizationId: BOOTSTRAP_ID,
+    const updated = await ctx.changeMembershipStatus.execute(admin(), {
       userId: USER_ID,
       to: 'suspended',
       correlationId: 'req-456',
@@ -338,13 +359,11 @@ describe('ChangeMembershipStatusUseCase', () => {
   it('bumps the version on every transition', async () => {
     const ctx = await contextWithActiveMembership();
 
-    await ctx.changeMembershipStatus.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.changeMembershipStatus.execute(admin(), {
       userId: USER_ID,
       to: 'suspended',
     });
-    const reinstated = await ctx.changeMembershipStatus.execute({
-      organizationId: BOOTSTRAP_ID,
+    const reinstated = await ctx.changeMembershipStatus.execute(admin(), {
       userId: USER_ID,
       to: 'active',
     });
@@ -358,13 +377,11 @@ describe('ChangeMembershipStatusUseCase', () => {
   });
 
   it('rejects a change for a user with no membership', async () => {
-    const ctx = buildContext();
-    ctx.organizations.add(organization());
+    const ctx = await contextWithActiveMembership();
 
     await expect(
-      ctx.changeMembershipStatus.execute({
-        organizationId: BOOTSTRAP_ID,
-        userId: USER_ID,
+      ctx.changeMembershipStatus.execute(admin(), {
+        userId: '99999999-9999-4999-8999-999999999999',
         to: 'suspended',
       }),
     ).rejects.toBeInstanceOf(MembershipNotFoundError);
@@ -377,14 +394,10 @@ describe('ChangeMembershipStatusUseCase', () => {
       const ctx = await contextWithActiveMembership();
 
       await expect(
-        ctx.changeMembershipStatus.execute({
-          organizationId: BOOTSTRAP_ID,
-          userId: USER_ID,
-          to,
-        }),
+        ctx.changeMembershipStatus.execute(admin(), { userId: USER_ID, to }),
       ).rejects.toBeInstanceOf(InvalidMembershipTransitionError);
 
-      expect(ctx.memberships.memberships[0]).toEqual(ctx.membership);
+      expect(ctx.memberships.memberships[1]).toEqual(ctx.membership);
       expect(ctx.events.statusChanged).toHaveLength(0);
     },
   );
@@ -393,29 +406,148 @@ describe('ChangeMembershipStatusUseCase', () => {
     const ctx = await contextWithActiveMembership();
 
     await expect(
-      ctx.changeMembershipStatus.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.changeMembershipStatus.execute(admin(), {
         userId: USER_ID,
         to: 'active',
       }),
     ).rejects.toThrow('from "active" to "active"');
   });
 
-  it('refuses everything out of deactivated', async () => {
+  it('reinstates a removed member (Sprint 9.10 reversed the terminal status)', async () => {
     const ctx = await contextWithActiveMembership();
-    await ctx.changeMembershipStatus.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.changeMembershipStatus.execute(admin(), {
+      userId: USER_ID,
+      to: 'deactivated',
+    });
+
+    const rehired = await ctx.changeMembershipStatus.execute(admin(), {
+      userId: USER_ID,
+      to: 'active',
+    });
+
+    // Removal used to be permanent in a way nothing said out loud: the unique
+    // index leaves no second membership to create, and redemption skips
+    // duplicates, so re-inviting a removed person did not bring them back.
+    expect(rehired.status).toBe('active');
+    expect(rehired.version).toBe(3);
+  });
+
+  it('still refuses the self-loop out of deactivated', async () => {
+    const ctx = await contextWithActiveMembership();
+    await ctx.changeMembershipStatus.execute(admin(), {
       userId: USER_ID,
       to: 'deactivated',
     });
 
     await expect(
-      ctx.changeMembershipStatus.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.changeMembershipStatus.execute(admin(), {
         userId: USER_ID,
-        to: 'active',
+        to: 'deactivated',
       }),
     ).rejects.toBeInstanceOf(InvalidMembershipTransitionError);
+  });
+
+  describe('administration boundaries (ADR 0021)', () => {
+    it('refuses a caller without people.suspend', async () => {
+      const ctx = await contextWithActiveMembership();
+
+      await expect(
+        ctx.changeMembershipStatus.execute(
+          { ...admin(), permissions: new Set([PERMISSIONS.PEOPLE_READ]) },
+          { userId: USER_ID, to: 'suspended' },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenMembershipActionError);
+      expect(ctx.events.statusChanged).toHaveLength(0);
+    });
+
+    it('refuses acting on your own membership', async () => {
+      // The rule that keeps an organization from losing its last
+      // administrator: the actor can never be the target, so one always
+      // survives whatever sequence of calls is made.
+      const ctx = await contextWithActiveMembership();
+
+      await expect(
+        ctx.changeMembershipStatus.execute(admin(), {
+          userId: ADMIN_ID,
+          to: 'suspended',
+        }),
+      ).rejects.toBeInstanceOf(SelfMembershipAdministrationError);
+      expect(ctx.events.statusChanged).toHaveLength(0);
+    });
+
+    it('refuses an actor whose stored membership is suspended', async () => {
+      // The token still says organization_admin; the row does not. The row
+      // wins, because a token outlives a suspension by up to 900 seconds.
+      const ctx = await contextWithActiveMembership();
+      ctx.memberships.memberships[0] = {
+        ...ctx.memberships.memberships[0],
+        status: 'suspended',
+      };
+
+      await expect(
+        ctx.changeMembershipStatus.execute(admin(), {
+          userId: USER_ID,
+          to: 'suspended',
+        }),
+      ).rejects.toBeInstanceOf(MembershipNotFoundError);
+    });
+
+    it('refuses the owner as a target', async () => {
+      // owner and organization_admin resolve to the same permission set, so
+      // the ceiling below cannot tell them apart — the constant is what stops
+      // an admin from unseating the owner.
+      const ctx = await contextWithActiveMembership();
+      ctx.memberships.memberships[1] = {
+        ...ctx.memberships.memberships[1],
+        roleTemplate: 'owner',
+      };
+
+      await expect(
+        ctx.changeMembershipStatus.execute(admin(), {
+          userId: USER_ID,
+          to: 'suspended',
+        }),
+      ).rejects.toBeInstanceOf(MembershipNotAdministrableError);
+    });
+
+    it('refuses a target whose template outreaches the actor', async () => {
+      const ctx = await contextWithActiveMembership();
+      ctx.memberships.memberships[0] = {
+        ...ctx.memberships.memberships[0],
+        roleTemplate: 'agent',
+      };
+      ctx.memberships.memberships[1] = {
+        ...ctx.memberships.memberships[1],
+        roleTemplate: 'organization_admin',
+      };
+
+      await expect(
+        ctx.changeMembershipStatus.execute(
+          {
+            id: ADMIN_ID,
+            organizationId: BOOTSTRAP_ID,
+            // A token claiming people.suspend the stored template does not
+            // carry — the shape a demoted admin holds for 15 minutes.
+            permissions: new Set([
+              ...permissionsForTemplate('agent'),
+              PERMISSIONS.PEOPLE_SUSPEND,
+            ]),
+          },
+          { userId: USER_ID, to: 'suspended' },
+        ),
+      ).rejects.toBeInstanceOf(MembershipNotAdministrableError);
+    });
+
+    it('refuses a token carrying no organization', async () => {
+      const ctx = await contextWithActiveMembership();
+
+      await expect(
+        ctx.changeMembershipStatus.execute(
+          { ...admin(), organizationId: undefined },
+          { userId: USER_ID, to: 'suspended' },
+        ),
+      ).rejects.toBeInstanceOf(NoOrganizationContextError);
+    });
   });
 });
 
@@ -423,9 +555,9 @@ describe('GetMembershipUseCase', () => {
   it('reports standing with template permissions, whatever the status', async () => {
     const ctx = buildContext();
     ctx.organizations.add(organization());
+    await ctx.ensureMembership.execute({ userId: ADMIN_ID, roles: ['admin'] });
     await ctx.ensureMembership.execute({ userId: USER_ID, roles: ['agent'] });
-    await ctx.changeMembershipStatus.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.changeMembershipStatus.execute(admin(), {
       userId: USER_ID,
       to: 'suspended',
     });

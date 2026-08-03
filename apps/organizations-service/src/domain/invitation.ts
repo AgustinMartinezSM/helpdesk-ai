@@ -1,5 +1,4 @@
-import { permissionsForTemplate } from './permissions';
-import { ROLE_TEMPLATES, type RoleTemplate } from './membership';
+import type { RoleTemplate } from './membership';
 
 /**
  * An invitation is a redeemable offer of membership, not a credential for an
@@ -61,46 +60,7 @@ export function normalizeInviteeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/**
- * Templates an invitation may name.
- *
- * `owner` is excluded outright rather than left to the subset check below,
- * and the reason is in the map it would be checked against: TEMPLATE_PERMISSIONS
- * resolves `owner` and `organization_admin` to the same set today, so a subset
- * test alone would happily let an organization admin mint a peer at the top
- * template. Two mechanisms, because one of them is currently blind.
- */
-export const INVITABLE_ROLE_TEMPLATES = ROLE_TEMPLATES.filter(
-  (template) => template !== 'owner',
-);
-
-export function isInvitableRoleTemplate(value: string): value is RoleTemplate {
-  return (INVITABLE_ROLE_TEMPLATES as readonly string[]).includes(value);
-}
-
-/**
- * Whether an issuer holding `issuerTemplate` may hand out `requested`.
- *
- * Privilege must not travel upward: an invitation cannot grant a permission
- * its issuer does not hold, or `people.invite` would be a self-promotion key.
- * The comparison is over resolved permission SETS rather than a template
- * ranking, because the templates are not ordered — a branch manager and an
- * agent hold overlapping but incomparable sets, and inventing a hierarchy
- * would encode a claim ADR 0015 never made.
- *
- * Callers must read `issuerTemplate` from the stored membership, not from the
- * token: access tokens live JWT_ACCESS_TTL_SECONDS (900 by default), so a
- * demoted admin's claims outlive their authority by a quarter of an hour.
- */
-export function canGrantRoleTemplate(
-  issuerTemplate: RoleTemplate,
-  requested: RoleTemplate,
-): boolean {
-  const issuer = permissionsForTemplate(issuerTemplate);
-  for (const permission of permissionsForTemplate(requested)) {
-    if (!issuer.has(permission)) {
-      return false;
-    }
-  }
-  return true;
-}
+// The templates an invitation may name, the ceiling that bounds them and the
+// `owner` exclusion all moved to `role-grants.ts` in Sprint 9.10, when
+// changing an existing membership became the second caller. One name for one
+// list: an invitation grants a template exactly as a role change does.

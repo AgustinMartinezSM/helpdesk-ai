@@ -40,6 +40,13 @@ export interface BranchRepository {
     organizationId: string,
     branchId: string,
   ): Promise<Branch | null>;
+  /**
+   * Every branch of one organization, ordered by name, ARCHIVED ONES
+   * INCLUDED. A membership can still cover an archived branch — archival
+   * never drops the edge — so a listing that hid them would let a branch
+   * editor silently drop one on save. Callers filter for pickers.
+   */
+  list(organizationId: string): Promise<Branch[]>;
   /** Applies the provided fields and stamps `at` as updatedAt. */
   update(
     branchId: string,

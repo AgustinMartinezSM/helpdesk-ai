@@ -1,15 +1,21 @@
+import { PERMISSIONS, type Actor } from '@helpdesk-ai/security';
 import {
   BranchNotFoundError,
   DepartmentNotFoundError,
   DuplicateBranchCodeError,
   DuplicateDepartmentNameError,
   DuplicateStationCodeError,
+  ForbiddenMembershipActionError,
   InvalidRoleTemplateError,
+  MembershipNotAdministrableError,
   MembershipNotFoundError,
   OrganizationNotFoundError,
+  RoleTemplateNotGrantableError,
   SameRoleTemplateError,
+  SelfMembershipAdministrationError,
   StationNotFoundError,
 } from '../../domain/errors';
+import { permissionsForTemplate } from '../../domain/permissions';
 import type { Organization } from '../../domain/organization';
 import {
   FakeOrganizationEventPublisher,
@@ -22,13 +28,16 @@ import {
   InMemoryOrganizationRepository,
   SequentialIdGenerator,
 } from '../testing/fakes';
-import { AssignBranchMembershipUseCase } from './assign-branch-membership';
 import { ChangeMembershipRoleUseCase } from './change-membership-role';
 import { CreateBranchUseCase } from './create-branch';
 import { CreateDepartmentUseCase } from './create-department';
 import { CreateStationUseCase } from './create-station';
 import { EnsureMembershipUseCase } from './ensure-membership';
-import { RemoveBranchMembershipUseCase } from './remove-branch-membership';
+import {
+  GetMembershipBranchesUseCase,
+  ListBranchesUseCase,
+  SetMembershipBranchesUseCase,
+} from './membership-branches';
 import { ResolveActiveMembershipUseCase } from './resolve-active-membership';
 import { UpdateBranchUseCase } from './update-branch';
 import { UpdateDepartmentUseCase } from './update-department';
@@ -37,7 +46,17 @@ import { UpdateStationUseCase } from './update-station';
 const BOOTSTRAP_ID = '00000000-0000-4000-8000-000000000001';
 const OTHER_ORG_ID = '00000000-0000-4000-8000-0000000000ff';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
+const ADMIN_ID = '22222222-2222-4222-8222-222222222222';
 const UNKNOWN_ID = '99999999-9999-4999-8999-999999999999';
+
+/** An administrator's token, matching the stored row the fixtures create. */
+function admin(): Actor {
+  return {
+    id: ADMIN_ID,
+    organizationId: BOOTSTRAP_ID,
+    permissions: new Set(permissionsForTemplate('organization_admin')),
+  };
+}
 
 function organization(overrides: Partial<Organization> = {}): Organization {
   return {
@@ -112,16 +131,16 @@ function buildContext() {
       clock,
       events,
     ),
-    assignBranchMembership: new AssignBranchMembershipUseCase(
+    listBranches: new ListBranchesUseCase(branches),
+    getMembershipBranches: new GetMembershipBranchesUseCase(
+      memberships,
+      branchMemberships,
+    ),
+    setMembershipBranches: new SetMembershipBranchesUseCase(
       memberships,
       branches,
       branchMemberships,
       clock,
-    ),
-    removeBranchMembership: new RemoveBranchMembershipUseCase(
-      memberships,
-      branches,
-      branchMemberships,
     ),
     changeMembershipRole: new ChangeMembershipRoleUseCase(
       memberships,
@@ -525,27 +544,26 @@ describe('station use cases', () => {
 
 describe('branch membership use cases', () => {
   async function withCoveredMembership(ctx: Context) {
+    await ctx.ensureMembership.execute({ userId: ADMIN_ID, roles: ['admin'] });
     const membership = await ctx.ensureMembership.execute({
       userId: USER_ID,
       roles: ['user'],
     });
     const branch = await withBranch(ctx);
-    await ctx.assignBranchMembership.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.setMembershipBranches.execute(admin(), {
       userId: USER_ID,
-      branchId: branch.id,
+      branchIds: [branch.id],
     });
     return { membership, branch };
   }
 
-  it('assigns idempotently: two PUTs are one edge', async () => {
+  it('converges: replacing with the same set is one edge', async () => {
     const ctx = buildContext();
     const { branch } = await withCoveredMembership(ctx);
 
-    await ctx.assignBranchMembership.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.setMembershipBranches.execute(admin(), {
       userId: USER_ID,
-      branchId: branch.id,
+      branchIds: [branch.id],
     });
 
     expect(ctx.branchMemberships.edges).toHaveLength(1);
@@ -572,24 +590,20 @@ describe('branch membership use cases', () => {
 
     const resolved = await ctx.resolveActiveMembership.execute(USER_ID);
     expect(resolved?.branchIds).toEqual([branch.id]);
+    // And the listing still names it, or the editor above would silently
+    // drop it the next time somebody saved.
+    const listed = await ctx.listBranches.execute(admin());
+    expect(listed.map((entry) => entry.id)).toContain(branch.id);
   });
 
-  it('removes idempotently: deleting an absent edge succeeds', async () => {
+  it('removes what the desired set leaves out', async () => {
     const ctx = buildContext();
-    const { branch } = await withCoveredMembership(ctx);
+    await withCoveredMembership(ctx);
 
-    await ctx.removeBranchMembership.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.setMembershipBranches.execute(admin(), {
       userId: USER_ID,
-      branchId: branch.id,
+      branchIds: [],
     });
-    await expect(
-      ctx.removeBranchMembership.execute({
-        organizationId: BOOTSTRAP_ID,
-        userId: USER_ID,
-        branchId: branch.id,
-      }),
-    ).resolves.toBeUndefined();
 
     expect(ctx.branchMemberships.edges).toHaveLength(0);
     expect(
@@ -597,34 +611,88 @@ describe('branch membership use cases', () => {
     ).toEqual([]);
   });
 
+  it('reads back the covered set', async () => {
+    const ctx = buildContext();
+    const { branch } = await withCoveredMembership(ctx);
+
+    await expect(
+      ctx.getMembershipBranches.execute(admin(), USER_ID),
+    ).resolves.toEqual([branch.id]);
+  });
+
   it('refuses to bridge organizations', async () => {
     const ctx = buildContext();
+    await ctx.ensureMembership.execute({ userId: ADMIN_ID, roles: ['admin'] });
     await ctx.ensureMembership.execute({ userId: USER_ID, roles: ['user'] });
     const foreignBranch = await withBranch(ctx, OTHER_ORG_ID);
 
     // A membership of org A covering a branch of org B would widen
-    // someone's visibility across the tenant boundary.
+    // someone's visibility across the tenant boundary. The organization is
+    // the ACTOR'S now, so there is no parameter left to get wrong.
     await expect(
-      ctx.assignBranchMembership.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.setMembershipBranches.execute(admin(), {
         userId: USER_ID,
-        branchId: foreignBranch.id,
+        branchIds: [foreignBranch.id],
       }),
     ).rejects.toBeInstanceOf(BranchNotFoundError);
-    await expect(
-      ctx.assignBranchMembership.execute({
-        organizationId: OTHER_ORG_ID,
-        userId: USER_ID,
-        branchId: foreignBranch.id,
-      }),
-    ).rejects.toBeInstanceOf(MembershipNotFoundError);
     expect(ctx.branchMemberships.edges).toHaveLength(0);
+  });
+
+  it('validates every id before writing any edge', async () => {
+    const ctx = buildContext();
+    const { branch } = await withCoveredMembership(ctx);
+    const foreignBranch = await withBranch(ctx, OTHER_ORG_ID);
+
+    await expect(
+      ctx.setMembershipBranches.execute(admin(), {
+        userId: USER_ID,
+        branchIds: [branch.id, foreignBranch.id],
+      }),
+    ).rejects.toBeInstanceOf(BranchNotFoundError);
+    // A partially applied replace would be worse than a refused one: the
+    // caller asked for a set, not for whichever prefix happened to validate.
+    expect(ctx.branchMemberships.edges).toHaveLength(1);
+  });
+
+  it('refuses a caller without branches.manage_members', async () => {
+    const ctx = buildContext();
+    const { branch } = await withCoveredMembership(ctx);
+
+    await expect(
+      ctx.setMembershipBranches.execute(
+        { ...admin(), permissions: new Set([PERMISSIONS.BRANCHES_READ]) },
+        { userId: USER_ID, branchIds: [branch.id] },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenMembershipActionError);
+  });
+
+  it('refuses branch listing without branches.read', async () => {
+    const ctx = buildContext();
+    await withCoveredMembership(ctx);
+
+    await expect(
+      ctx.listBranches.execute({
+        ...admin(),
+        permissions: new Set([PERMISSIONS.PEOPLE_READ]),
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenMembershipActionError);
+  });
+
+  it('lists only the caller organization branches', async () => {
+    const ctx = buildContext();
+    await withCoveredMembership(ctx);
+    await withBranch(ctx, OTHER_ORG_ID);
+
+    const listed = await ctx.listBranches.execute(admin());
+    expect(listed).toHaveLength(1);
+    expect(listed[0].organizationId).toBe(BOOTSTRAP_ID);
   });
 });
 
 describe('ChangeMembershipRoleUseCase', () => {
   async function contextWithRequester() {
     const ctx = buildContext();
+    await ctx.ensureMembership.execute({ userId: ADMIN_ID, roles: ['admin'] });
     const membership = await ctx.ensureMembership.execute({
       userId: USER_ID,
       roles: ['user'],
@@ -636,8 +704,7 @@ describe('ChangeMembershipRoleUseCase', () => {
     const ctx = await contextWithRequester();
     ctx.clock.advanceSeconds(60);
 
-    const updated = await ctx.changeMembershipRole.execute({
-      organizationId: BOOTSTRAP_ID,
+    const updated = await ctx.changeMembershipRole.execute(admin(), {
       userId: USER_ID,
       roleTemplate: 'branch_manager',
       correlationId: 'req-789',
@@ -656,10 +723,25 @@ describe('ChangeMembershipRoleUseCase', () => {
     expect(published.correlationId).toBe('req-789');
   });
 
+  it('lets an administrator create a branch manager (the 9.8 ceiling could not)', async () => {
+    // The defect this sprint found: the ceiling compares permission sets, a
+    // branch manager holds tickets.read_branch, and admins deliberately hold
+    // tickets.read_all instead — so the subset test refused, and NOBODY could
+    // create a branch manager through the product. The implication table is
+    // what makes this pass.
+    const ctx = await contextWithRequester();
+
+    const updated = await ctx.changeMembershipRole.execute(admin(), {
+      userId: USER_ID,
+      roleTemplate: 'branch_manager',
+    });
+
+    expect(updated.roleTemplate).toBe('branch_manager');
+  });
+
   it('reflects the new template in resolution', async () => {
     const ctx = await contextWithRequester();
-    await ctx.changeMembershipRole.execute({
-      organizationId: BOOTSTRAP_ID,
+    await ctx.changeMembershipRole.execute(admin(), {
       userId: USER_ID,
       roleTemplate: 'branch_manager',
     });
@@ -676,38 +758,102 @@ describe('ChangeMembershipRoleUseCase', () => {
     // there" is a stale caller, and a write would bump the version over a
     // non-change.
     await expect(
-      ctx.changeMembershipRole.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.changeMembershipRole.execute(admin(), {
         userId: USER_ID,
         roleTemplate: 'requester',
       }),
     ).rejects.toBeInstanceOf(SameRoleTemplateError);
-    expect(ctx.memberships.memberships[0].version).toBe(1);
+    expect(ctx.memberships.memberships[1].version).toBe(1);
     expect(ctx.events.roleChanged).toHaveLength(0);
   });
 
-  it('refuses a word that is not a template', async () => {
+  it.each(['superuser', 'owner'])('refuses the template %s', async (name) => {
+    // Unknown words and `owner` answer alike, and owner is excluded by
+    // constant rather than by the ceiling: it resolves to the same permission
+    // set as organization_admin, so a subset test would wave it through.
     const ctx = await contextWithRequester();
 
     await expect(
-      ctx.changeMembershipRole.execute({
-        organizationId: BOOTSTRAP_ID,
+      ctx.changeMembershipRole.execute(admin(), {
         userId: USER_ID,
-        roleTemplate: 'superuser',
+        roleTemplate: name,
       }),
     ).rejects.toBeInstanceOf(InvalidRoleTemplateError);
     expect(ctx.events.roleChanged).toHaveLength(0);
   });
 
   it('rejects a change for a user with no membership', async () => {
-    const ctx = buildContext();
+    const ctx = await contextWithRequester();
 
     await expect(
-      ctx.changeMembershipRole.execute({
-        organizationId: BOOTSTRAP_ID,
-        userId: USER_ID,
+      ctx.changeMembershipRole.execute(admin(), {
+        userId: UNKNOWN_ID,
         roleTemplate: 'agent',
       }),
     ).rejects.toBeInstanceOf(MembershipNotFoundError);
+  });
+
+  describe('administration boundaries (ADR 0021)', () => {
+    it('refuses a caller without people.assign_roles', async () => {
+      const ctx = await contextWithRequester();
+
+      await expect(
+        ctx.changeMembershipRole.execute(
+          { ...admin(), permissions: new Set([PERMISSIONS.PEOPLE_SUSPEND]) },
+          { userId: USER_ID, roleTemplate: 'agent' },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenMembershipActionError);
+    });
+
+    it('refuses re-roling yourself', async () => {
+      // Self-demotion is the one mistake here with no undo: the key that
+      // would reverse it is the key being given away.
+      const ctx = await contextWithRequester();
+
+      await expect(
+        ctx.changeMembershipRole.execute(admin(), {
+          userId: ADMIN_ID,
+          roleTemplate: 'requester',
+        }),
+      ).rejects.toBeInstanceOf(SelfMembershipAdministrationError);
+    });
+
+    it('refuses a template the actor could not exercise themselves', async () => {
+      const ctx = await contextWithRequester();
+      ctx.memberships.memberships[0] = {
+        ...ctx.memberships.memberships[0],
+        roleTemplate: 'agent',
+      };
+
+      await expect(
+        ctx.changeMembershipRole.execute(
+          {
+            ...admin(),
+            permissions: new Set([
+              ...permissionsForTemplate('agent'),
+              PERMISSIONS.PEOPLE_ASSIGN_ROLES,
+            ]),
+          },
+          { userId: USER_ID, roleTemplate: 'organization_admin' },
+        ),
+      ).rejects.toBeInstanceOf(RoleTemplateNotGrantableError);
+      expect(ctx.events.roleChanged).toHaveLength(0);
+    });
+
+    it('refuses the owner as a target', async () => {
+      const ctx = await contextWithRequester();
+      ctx.memberships.memberships[1] = {
+        ...ctx.memberships.memberships[1],
+        roleTemplate: 'owner',
+      };
+
+      await expect(
+        ctx.changeMembershipRole.execute(admin(), {
+          userId: USER_ID,
+          roleTemplate: 'requester',
+        }),
+      ).rejects.toBeInstanceOf(MembershipNotAdministrableError);
+      expect(ctx.events.roleChanged).toHaveLength(0);
+    });
   });
 });

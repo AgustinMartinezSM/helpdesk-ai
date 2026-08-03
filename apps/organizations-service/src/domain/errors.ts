@@ -54,6 +54,57 @@ export class InvalidMembershipTransitionError extends OrganizationDomainError {
 }
 
 // ---------------------------------------------------------------------------
+// Member administration errors (Sprint 9.10). All three answer a caller who
+// IS a member and is asking about their own reach, so each says why: there is
+// nothing to conceal from someone being told what they may not do to a row
+// they can already see. The 404 on a membership outside their organization is
+// what keeps this surface from confirming which user ids belong where.
+// ---------------------------------------------------------------------------
+
+/**
+ * Raised when the actor's token carries neither `people.suspend` nor
+ * `people.assign_roles` nor `branches.manage_members`, whichever the
+ * operation needed. In the use case rather than a route decorator, per
+ * ADR 0015 rule 1 — a guard that has to be remembered per route is a guard
+ * that gets forgotten.
+ */
+export class ForbiddenMembershipActionError extends OrganizationDomainError {
+  constructor() {
+    super('you are not allowed to manage memberships here');
+  }
+}
+
+/**
+ * Raised when the actor targets their own membership.
+ *
+ * This is what keeps an organization from losing its last administrator: the
+ * actor must be an active member holding the key, and can never be the
+ * target, so at least one privileged member survives any sequence of these
+ * operations. A "count the remaining admins" check would race concurrent
+ * requests; making the bad state unreachable does not (ADR 0021).
+ */
+export class SelfMembershipAdministrationError extends OrganizationDomainError {
+  constructor() {
+    super('you cannot change your own membership');
+  }
+}
+
+/**
+ * Raised when the TARGET's current template is out of the actor's reach.
+ *
+ * Two mechanisms answer with this one error: the ceiling, and the `owner`
+ * exclusion the ceiling is blind to (owner and organization_admin resolve to
+ * the same permission set, so a subset test would let an admin unseat the
+ * owner). Naming the template is safe — the caller can already read it off
+ * the directory.
+ */
+export class MembershipNotAdministrableError extends OrganizationDomainError {
+  constructor(template: string) {
+    super(`you cannot manage a member whose role template is "${template}"`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Structure errors (branches, departments, stations — Sprint 9.5). The
 // not-found errors deliberately say nothing about whether the id exists in
 // another organization: a foreign row and a nonexistent one answer alike,
