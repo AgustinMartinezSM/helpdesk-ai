@@ -239,12 +239,23 @@ suites in parallel against one broker.
   or a legacy backfilled user would be issued a code by an import. Redeeming
   it is harmless — the membership insert skips duplicates and leaves their
   role alone — which is why it is listed here rather than fixed.
-- **The organization's own name and slug cannot be changed from inside the
-  product.** The slug is what the bootstrap lookup keys on, so its immutability
-  is its own decision; the name is a small endpoint nobody has needed.
-- **No transfer of ownership.** `owner` can be neither granted nor targeted, so
-  an organization whose only privileged member is its owner cannot change that
-  from inside.
+- ~~**The organization's own name and slug cannot be changed from inside the
+  product.**~~ **Half closed in Sprint 10.5** (ADR 0024): the display name can
+  be changed by anybody holding `organization.update`. The **slug still
+  cannot**, and that half is a decision rather than a gap — it is what the
+  bootstrap lookup keys on, what `prisma migrate deploy` collides with, and
+  what ADR 0023 derived silently so a collision could never be reported across
+  tenants. Editing it by hand would need a redirect story and a uniqueness
+  answer that does not leak, and nothing needs it yet.
+- ~~**No transfer of ownership.**~~ **Closed in Sprint 10.5** (ADR 0024): the
+  current owner can hand the organization to any active member, in one
+  transaction, and becomes an `organization_admin` rather than being removed.
+  `owner` is still neither grantable nor targetable — the transfer is not a
+  grant path and does not go through the derivation — and a partial unique
+  index makes two owners unrepresentable. What is still open is narrow and
+  listed with ADR 0023's remainder below: there is no way to hand an
+  organization to somebody who is not a member yet, because inviting them first
+  is the whole mechanism.
 - ~~**The first administrator of a fresh database has to be made in SQL.**~~
   **Closed in Sprint 10.4** (ADR 0023): an authenticated person who belongs to
   no real organization can create one and becomes its owner, in one

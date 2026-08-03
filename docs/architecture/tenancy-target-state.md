@@ -288,6 +288,26 @@ it is narrower than every cell there, and it exists so that a `○` cell could b
 honoured rather than widened. When this matrix is next revised it should gain a
 `people.read_assignable` row with `●` for DESK_MGR.
 
+**Sprint 10.5 gave two more rows of this table their first call sites, and
+deliberately added no row of its own.** `organization.read` had been granted by
+every template since the permission migration and checked by nothing;
+`GET /organizations/current` is the first place the platform actually asks for
+it. `organization.update` gained a second call site — the organization's own
+display name — beside users-service's profile-field definitions, granted
+exactly as this table has it.
+
+**Transferring ownership has no permission key, and should not get one**
+(ADR 0024). It is authorized by reading the actor's stored membership and
+requiring `owner` there. Three reasons, and the third is the one that decides
+it: this table has no such row; a key would have to be granted to `owner` alone,
+which means splitting it from `organization_admin` in the permission map to
+express something a column already says; and the check has to read the row
+regardless, because a token outlives a demotion by
+`JWT_ACCESS_TTL_SECONDS` — so a key beside it would only be a second answer
+that can disagree, and the staler of the two. `organization.delete` and the
+billing keys stay unimplemented and are the reason owner and admin still resolve
+alike.
+
 Four things in that table are deliberate and worth challenging:
 
 - **`REQUESTER` has `tickets.change_status` as own-scope only.** This

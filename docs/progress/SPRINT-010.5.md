@@ -180,4 +180,144 @@ one.
 
 ## Outcome
 
-_Written at the close of the sprint._
+A tenant created through Sprint 10.4's route is now fully self-serve: it can be
+named, renamed, and handed to somebody else, without anybody touching a
+database.
+
+### What was built
+
+`GET /organizations/current`, `PATCH /organizations/current` and
+`POST /organizations/ownership/transfer` on organizations-service, through the
+BFF's `/organization/current` and `/organization/ownership/transfer`, behind two
+cards on the existing Organization screen. The decision and everything it rests
+on is **ADR 0024**.
+
+### The three things most likely to have gone wrong, and what the repository said
+
+**Ownership cannot be decided from a token, and the reason is specific.**
+`owner` and `organization_admin` resolve to the same permission set — a test has
+pinned that premise since Sprint 9.14 — so no claim in a token distinguishes
+them. Adding a key would have meant splitting the two templates in the
+permission map to express something the `role_template` column already says,
+and inventing matrix vocabulary nobody approved. It would also have been the
+staler of the two answers: a token outlives a demotion by 900 seconds, so the
+use case must read the row regardless. The browser gets `viewerIsOwner`, read
+fresh per request. A web spec gives the owner and the administrator
+**byte-identical permission arrays** so a regression that started gating on a
+permission key fails there.
+
+**The statement order inside the transaction is decided by the index.** A
+partial unique index is checked per statement, not deferred to commit, so
+promoting before demoting would make the transaction fail against its own index
+every time. Demote first, promote second, both conditional, either failure
+rolling the other back.
+
+**A transfer is not a grant, and the distinction is not a technicality.** A
+grant hands a template out of the grantable set and the count of holders goes
+up; this moves one `owner` between two rows and leaves the count where it was.
+Routing it through `canGrantRoleTemplate` to "reuse" the checks would have meant
+widening the constant that makes ADR 0015's no-platform-privilege invariant
+structural.
+
+### Two things the tests found that reading did not
+
+**The BFF would have answered 201 Created for an operation that creates
+nothing.** `@Post()` defaults to 201 in Nest, the upstream route answers 200,
+and the pass-through spec caught the mismatch. It is exactly the defect Sprint
+9.15 named on the import preview — a lie told in the protocol rather than in the
+copy — and the people controller had already established `@HttpCode(200)` as the
+answer.
+
+**The tenant-isolation assertion I wrote first was wrong, and being wrong was
+informative.** I asserted that a foreign target and a nonexistent one produce
+byte-identical 404 messages. They do not: the message echoes the id the caller
+supplied, which the caller obviously already knows. The real property is that
+substituting one id for the other makes the two bodies identical, and that
+neither mentions the organization the foreign member actually belongs to. The
+test says that now, which is a stronger claim than the one I started with.
+
+### One thing I did not do, and why
+
+**The new UI is in English, not es-AR.** The sprint brief asked for Spanish
+copy. Sprint 10.1 decided that Helpi is the only translated part of the product
+and that full i18n is Sprint 10.8, precisely so a half-translated interface does
+not happen; every other screen in `apps/web` is English today. Writing this one
+in Spanish would have created the exact state that decision exists to prevent,
+one sprint before the machinery that keeps two languages in step. Helpi's hints
+for `/organization` and `/organization/new` are es-AR like the rest of Helpi,
+and one of them had to change anyway — it said the organization's name could
+never be changed.
+
+### Verification
+
+Full gate green: format, lint, typecheck across 15 projects, **1251 unit tests
+across all 15** (423 in organizations-service, up 69 from 354; 281 in
+`apps/web`, up 15 from 266), and build. The workspace total is counted here
+rather than one service's, because the last two sprint records each quoted a
+single project's number beside the word "total" and the two do not compare.
+
+Three levels, deliberately:
+
+- **Unit**, with fakes that honour the new partial unique index for real — a
+  fake that let a second `owner` row exist would let a use case with a missing
+  check pass.
+- **HTTP**, through the real guard, the real validation pipe and the real error
+  filter: 403 for an administrator holding identical permissions, 403 for the
+  former owner whose token still says owner, 409 for an ineligible or
+  already-owning target, 404 for a foreign one, 400 for a body naming a slug or
+  an organization. This level exists because of the lesson Sprint 9.13 paid for.
+- **Integration**, against real PostgreSQL: both rows in one transaction, the
+  rollback that leaves the organization with its original owner rather than with
+  none, the index refusing a second owner while still allowing two ordinary
+  memberships, two concurrent writes leaving exactly one, and a rename read back
+  through a fresh query with its slug intact.
+
+**The integration suite was not run locally and I want that stated plainly, for
+the second sprint running.** Docker is not running on this machine, so
+`docker compose up` fails and the suite cannot start. It runs on CI, which
+provisions a throwaway database per integration target. Every other level ran
+here.
+
+**No browser pass was possible either, and that is the same limitation.** The
+whole surface reads from organizations-service, which cannot boot without
+PostgreSQL. Sprint 10.1 recorded that measuring the rendered page finds defects
+the unit suite cannot; that check is genuinely missing here, and the component
+specs assert behaviour rather than appearance.
+
+### What this leaves open
+
+**Ownership can only be handed to somebody who is already a member.** Inviting
+them first is the mechanism, and there is nothing to build — but it means an
+organization whose only member is its owner cannot hand ownership anywhere, and
+the screen says so rather than showing an empty picker.
+
+**The slug still cannot change**, by decision rather than by omission (ADR
+0024). Editing it would need a redirect story and a uniqueness answer that does
+not leak across tenants.
+
+**Second-organization creation is still refused**, unchanged from ADR 0023, and
+it should be revisited in the same change that adds token exchange and
+organization selection — which have to answer which organization a person is
+acting in, how they change it, and how a token is re-minted for the new one.
+
+**Nothing deletes or suspends an organization.** `organization.delete` is in the
+matrix for `owner` and has no call site; deleting a tenant is a data-retention
+decision before it is an endpoint.
+
+### Documentation
+
+- **ADR 0024** — new: the decision, the five alternatives rejected, and the
+  consequences.
+- **`SECURITY.md`** — a new authorization bullet: privilege cannot travel
+  upward, a transfer is not a grant, and the one operation that reads the stored
+  row rather than the token.
+- **`tenancy-target-state.md`** — `organization.read` and `organization.update`
+  gained call sites; why transferring ownership adds no row to that matrix.
+- **`pilot-readiness.md`** — the two open items are struck through and say what
+  closed them and what remains.
+- **`product-status.ts`** — two new `available` capabilities, and the stale note
+  claiming the name could never change is gone.
+- **`CURRENT-HANDOFF.md`** — Sprint 10.5's entry and the next exact action.
+
+No fictional experience, customer, testimonial, incident, external approval or
+commercial adoption was introduced.

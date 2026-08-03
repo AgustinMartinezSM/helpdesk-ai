@@ -1,10 +1,11 @@
 # Current handoff
 
-**Date:** 2026-08-03
-**Sprint:** **10.4 complete — an organization can be created from the product
-(ADR 0023). BLOCK A IS CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy),
-10.1 (design system), 10.2 (migration), 10.3 (public copy) and 9.4-9.16
-complete
+**Date:** 2026-08-04
+**Sprint:** **10.5 complete — an organization can be renamed and can change
+hands (ADR 0024), which makes a single tenant fully self-serve. BLOCK A IS
+CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy), 10.1 (design system), 10.2
+(migration), 10.3 (public copy), 10.4 (creating an organization — ADR 0023) and
+9.4-9.16 complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -915,6 +916,100 @@ now the only things between a person and running their own tenant end to end.
 The remaining design-system debt is in `design-system.md`. Open it with its
 own Definition of Ready.
 
+## Sprint 10.5 in one breath
+
+Remote CI green on the closing HEAD — the run is recorded in
+`SPRINT-010.5.md`. Full local gate green: format, lint, typecheck across 15
+projects, **1251 unit tests across all 15**, and build.
+
+**A tenant is now fully self-serve.** It can be created (10.4), named, renamed
+and handed to somebody else, without anybody touching a database. The decision
+and everything it rests on is **ADR 0024** — read it before touching any of
+this.
+
+**Ownership is a ROW, not a permission, and that is the load-bearing
+decision.** `owner` and `organization_admin` resolve to the same permission set
+— a test has pinned that premise since 9.14 — so nothing in a token
+distinguishes them. Adding an `organization.transfer_ownership` key would have
+meant splitting the two templates in the permission map to express something
+`memberships.role_template` already says, inventing matrix vocabulary nobody
+approved, and shipping the STALER of two answers: a token outlives a demotion
+by 900 seconds, so the use case has to read the row regardless. The browser
+gets `viewerIsOwner` from `GET /organizations/current`, read fresh per request.
+**Do not "tidy" this into a permission key.**
+
+**A transfer is not a grant, and `owner` stays out of the derivation.** A grant
+hands a template out of the grantable set and the number of holders goes up;
+this moves one `owner` between two rows of one organization and leaves the
+count where it was. Routing it through `canGrantRoleTemplate` to reuse the
+checks would mean widening the constant that makes ADR 0015's invariant
+structural — the same trap ADR 0023 avoided for creation.
+
+**Exactly one owner is a PARTIAL UNIQUE INDEX**, `(organization_id) WHERE
+role_template = 'owner'`, in raw SQL. It is not `@@unique([organizationId])` in
+the schema and must never become one — that would generate a total index and
+lock every organization to a single member, exactly as the invitations
+migration warns. **It also decides the statement order**: a unique index is
+checked per statement, so the transaction demotes before it promotes, and
+reversing them makes the transaction fail against its own index every time.
+
+**The previous owner becomes `organization_admin`, never removed.** It is the
+only template that keeps every permission they were exercising a moment
+earlier, so nothing open stops working mid-session and the organization does not
+lose an administrator because somebody handed the top of it on.
+
+**The slug does not move with the name, and that half is a decision.** It is
+what the bootstrap lookup keys on, what `migrate deploy` collides with, and
+what ADR 0023 derived silently so a collision could never be reported across
+tenants. The port's `rename` has no slug parameter at all — the shape makes the
+careless version unwritable.
+
+**Two events, and their only consumer is the audit trail.** A transfer also
+publishes `membership.role-changed.v1` for both rows (that is what keeps the
+directory projection right), but those name the rows that moved and never the
+person who moved them. `organization.*` is now in audit-service's
+born-tenant-carrying prefix list, so one arriving without its tenant
+dead-letters.
+
+**Two defects the tests found that reading did not.** The BFF would have
+answered **201 Created** for an operation that creates nothing — `@Post()`
+defaults to 201 and the people controller had already established
+`@HttpCode(200)` as the answer. And a tenant-isolation assertion I wrote was
+too strong: a foreign target and a nonexistent one do NOT produce identical 404
+messages, because each echoes the id the caller supplied. The real property —
+substituting one id makes them identical, and neither names the other
+organization — is what the test asserts now.
+
+**The new UI is in English, and that was a deliberate refusal.** The sprint
+brief asked for es-AR copy. 10.1 decided Helpi is the only translated part and
+full i18n is **10.8**, so writing one screen in Spanish would create exactly the
+half-translated interface that decision prevents. Helpi's `/organization` and
+`/organization/new` hints are es-AR, and one of them had to change: it claimed
+the name could never be changed.
+
+**Neither the integration suite nor a browser pass ran locally**, for the
+second sprint running — Docker is not running on this machine, and the whole
+surface reads from organizations-service. The integration suite runs on CI.
+The browser check that 10.1 proved finds defects the unit suite cannot is
+genuinely missing here.
+
+Three things NOT to do: never decide ownership from a token or a permission key
+(the row is the only thing that cannot be stale); never reverse
+demote-before-promote, and never express the one-owner rule as a total unique
+index; never let a rename touch the slug — display name and stable key are
+different things, and the port is shaped so it cannot.
+
+**The next action is Sprint 10.6.** Block B's domain work for a SINGLE tenant
+is complete: create, name, rename, invite, administer, hand on. What is left
+is the multi-organization story ADR 0023 and ADR 0024 both defer to the same
+change — **token exchange and organization selection**, which have to answer
+which organization a person is acting in, how they change it, and how a token
+is re-minted for the new one. Closing it also retires 9.8's real-beats-bootstrap
+tiebreak and lets a second organization be created. It is the largest remaining
+Block B item and the one every deferral now points at. The alternative, if a
+smaller sprint is wanted first, is the remaining design-system debt in
+`design-system.md`. Open whichever with its own Definition of Ready.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -1039,16 +1134,20 @@ own Definition of Ready.
   half of ADR 0011's story 9.8 did not close. Much narrower since 9.11:
   everything behind that credential is a read, so an unattributed call can no
   longer change anything.
-- **The organization's own name and slug cannot be changed from inside the
-  product.** The slug is what the bootstrap lookup keys on, so immutability
-  there is its own decision; the name is a small endpoint nobody has needed.
+- **The organization's SLUG cannot be changed from inside the product.** The
+  name can, since 10.5. The slug is what the bootstrap lookup keys on and what
+  ADR 0023 derived silently so a collision could never be reported, so
+  immutability there is its own decision (ADR 0024) rather than the other half
+  of a job left undone. Editing it would need a redirect story and a uniqueness
+  answer that does not leak across tenants.
 - **Departments store rows and nothing keys on them.** Routing (9.12) is what
   will, and it is also what introduces their first event — there is no
   department contract on purpose (no consumer, no promise).
-- **No transfer of ownership.** `owner` can be neither granted nor targeted,
-  so an organization whose only privileged member is its owner cannot change
-  that from inside. Refusing is the reversible half of a decision nobody has
-  made; the operation is what would retire it.
+- ~~**No transfer of ownership.**~~ **Closed in 10.5** (ADR 0024). `owner` is
+  still neither grantable nor targetable — the transfer is not a grant path.
+  What remains is narrow and is not a gap to close: ownership can only go to
+  somebody who is already an active member, because inviting them first IS the
+  mechanism.
 - **`INTERNAL_SERVICE_TOKEN` stays optional in auth-service** (degrade-open
   with a boot warning): making it required would 503 the auth integration
   suite, which runs without organizations-service — revisit when the suite
@@ -1073,7 +1172,16 @@ do NOT "simplify" the Prisma model to @@unique, it would generate a total
 index and make re-invitation impossible). Sprint 9.15: organizations
 invitation_placement (`branch_id` + `department_id` on invitations, additive,
 nullable, real foreign keys with ON DELETE SET NULL — applied to dev and
-`_test`). Sprints 9.9, 9.10, 9.11, 9.13, 9.14, **10.0, 10.1, 10.2, 10.3 and 10.4**: none — 10.4 added a write path, not a column.
+`_test`). **Sprint 10.5: organizations `single_organization_owner`** — one
+PARTIAL unique index in raw SQL, `(organization_id) WHERE role_template =
+'owner'`. Additive, rewrites nothing, and true of every existing row (the
+bootstrap organization has no owner; every organization 10.4 created has
+exactly one). Do NOT "simplify" it into `@@unique([organizationId])` — that
+generates a TOTAL index and allows one member per organization, the same trap
+the invitations partial index carries. **It was applied by CI, not locally:
+Docker is not running on this machine.** Sprints 9.9, 9.10, 9.11, 9.13, 9.14,
+**10.0, 10.1, 10.2, 10.3 and 10.4**: none — 10.4 added a write path, not a
+column.
 
 ## Tests executed (through 2026-08-03, local)
 
@@ -1137,11 +1245,12 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-**The next action is Sprint 10.5**, as described in the Sprint 10.4 entry
-above. The list below is **Block A's** candidate list, kept because it is still
-the right list for whenever Block A resumes. Nothing on it is the next thing to
-do, and email in particular still requires the project owner's approval under
-ADR 0008.
+**The next action is Sprint 10.6**, as described at the end of the Sprint 10.5
+entry above: token exchange and organization selection, which is what both ADR
+0023 and ADR 0024 defer their remaining limits to. The list below is **Block
+A's** candidate list, kept because it is still the right list for whenever
+Block A resumes. Nothing on it is the next thing to do, and email in particular
+still requires the project owner's approval under ADR 0008.
 
 9.15 took bulk import and 9.16 took projection reconciliation, which were the
 top two of this list:
@@ -1161,8 +1270,9 @@ top two of this list:
    also means it competes with product work on cost alone. Weigh it against
    the two residuals 9.16 left: nothing schedules the check, and drift is a log
    line rather than an alert.
-4. **Transfer of ownership**, plus the organization's own name: the two small
-   gaps that keep a fresh organization from being fully self-serve.
+4. ~~**Transfer of ownership**, plus the organization's own name~~ — **done in
+   Sprint 10.5** (ADR 0024). Left here struck through rather than deleted,
+   because this list is also a record of what the candidates were.
 5. **Automatic routing rules**, now that manual routing is real and visible.
    Named out of 9.12 and 9.13 on the grounds that rules whose effects nobody
    can see are unfalsifiable — that objection is now answered, because a person
@@ -1196,13 +1306,21 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ## Suggested continuation prompt
 
 > Continue HelpDesk AI. **Block A is formally closed and Block B is open;
-> Sprints 10.0 (brand strategy) and 10.1 (design system, logo and Helpi) are
-> complete, and the next action is Sprint 10.2.** Read
+> Sprints 10.0 through 10.5 are complete, and the next action is Sprint 10.6 —
+> token exchange and organization selection, which is what ADR 0023 and ADR
+> 0024 both defer their remaining limits to.** Read
 > `docs/architecture/design-system.md` before touching a colour and
 > `brand-strategy.md` before touching copy; `apps/web/src/lib/product-status.ts`
-> stays authoritative for what may be claimed (ADR 0009) and is current again
-> as of 10.1. Do not start email, WhatsApp, billing, SSO, SCIM or
-> production-readiness work, and do not reopen Block A.
+> stays authoritative for what may be claimed (ADR 0009). Do not start email,
+> WhatsApp, billing, SSO, SCIM or production-readiness work, and do not reopen
+> Block A.
+>
+> **A single tenant is now fully self-serve** (10.4 + 10.5): somebody can
+> register, create an organization, name it, rename it, invite colleagues,
+> administer them and hand the organization on, without anybody touching a
+> database. What is NOT possible is belonging to two — resolution picks the
+> oldest non-bootstrap membership at every mint and there is no selector, which
+> is exactly what 10.6 exists to fix.
 >
 > Complete and green on main: the tenancy migration
 > (phases 0-8), Sprint 9.5 (branches/departments/stations with branch-scoped
@@ -1295,7 +1413,22 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > section join nobody had counted. When a sprint changes what the browser
 > computes, open the browser.
 >
-> Open 10.2 with its own Definition of Ready, the pattern the last thirteen
+> **What 10.4 and 10.5 make true, and the one sentence to carry**: an
+> organization is created by a person, not a migration (ADR 0023), and its
+> ownership is a ROW that moves between two memberships in one transaction (ADR
+> 0024). Ownership is never decided from a token or a permission key — `owner`
+> and `organization_admin` resolve to the same permission set, so nothing in a
+> token distinguishes them, and a token outlives a demotion by 900 seconds. A
+> transfer is NOT a grant path: `owner` stays excluded from the derivation by
+> constant, because a grant increases the number of holders and this does not.
+> "Exactly one owner" is a PARTIAL unique index in raw SQL, which also fixes
+> the statement order — demote, then promote. A rename moves the display name
+> and never the slug, and the repository port has no slug parameter so the
+> careless version is unwritable. The product UI stays ENGLISH until 10.8;
+> Helpi is the only translated part, and half-translating ahead of the i18n
+> machinery is what 10.1 decided against.
+>
+> Open 10.6 with its own Definition of Ready, the pattern the last sixteen
 > sprints set. Block A's candidate list (email delivery top by consequence, and
 > still the project owner's decision under ADR 0008) is kept in "Exact next
 > action" for whenever Block A resumes — it is not the next thing to do.
@@ -1308,7 +1441,12 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > never what to allow (ADR 0015 rule 2 / ADR 0020); the BFF forwards refusals
 > verbatim and decides no access of its own; keep libs/security's permissions
 > module import-free; nobody administers their own membership and `owner` is
-> refused in both directions (ADR 0021); the permission-implication table
+> refused in both directions as a GRANT (ADR 0021), which the ownership
+> transfer does not breach because it is not a grant and writes one owner and
+> one admin (ADR 0024); ownership is decided from the stored row and never
+> from a token or a permission key; the one-owner rule stays a PARTIAL unique
+> index and the transfer demotes before it promotes; a rename never touches the
+> slug; the permission-implication table
 > bounds grants and never decides access; the directory's default listing stays
 > active-only; no public route ever takes an organization id — the tenant comes
 > from the token; archiving never cascades; a station authenticates nothing
