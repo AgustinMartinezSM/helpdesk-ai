@@ -19,6 +19,12 @@
       "types": "./dist/lib/permissions.d.ts",
       "import": "./dist/lib/permissions.js",
       "default": "./dist/lib/permissions.js"
+    },
+    "./role-templates": {
+      "@helpdesk-ai/source": "./src/lib/role-templates.ts",
+      "types": "./dist/lib/role-templates.d.ts",
+      "import": "./dist/lib/role-templates.js",
+      "default": "./dist/lib/role-templates.js"
     }
   },
   "dependencies": {

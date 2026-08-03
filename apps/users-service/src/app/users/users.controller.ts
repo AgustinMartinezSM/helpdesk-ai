@@ -26,7 +26,9 @@ import type { UserProfile } from '../../domain/user-profile';
 import {
   GetMyProfileUseCase,
   GetUserProfileUseCase,
+  ListAssignableCandidatesUseCase,
   ListUserProfilesUseCase,
+  type AssignableCandidate,
   type ProfileView,
 } from '../../application/use-cases/profile-queries';
 import {
@@ -213,6 +215,7 @@ export class UsersController {
   constructor(
     private readonly getMyProfile: GetMyProfileUseCase,
     private readonly listProfiles: ListUserProfilesUseCase,
+    private readonly listAssignable: ListAssignableCandidatesUseCase,
     private readonly getUserProfile: GetUserProfileUseCase,
     private readonly updateMyProfile: UpdateMyPersonProfileUseCase,
     private readonly updateMemberProfile: UpdateMemberPersonProfileUseCase,
@@ -324,6 +327,21 @@ export class UsersController {
       directoryStatuses(status),
     );
     return views.map(toViewResponse);
+  }
+
+  // Declared BEFORE ':userId' — Nest matches in declaration order, so a
+  // literal 'assignable' segment after the parameter route would be read as a
+  // user id and refused by the UUID pipe with a 400. The same rule the ticket
+  // pickers and `organizations/teams/mine` follow.
+  @Get('assignable')
+  @ApiOperation({
+    summary:
+      'Active members as candidates, id/name/email only (people.read_assignable or people.read)',
+  })
+  async assignable(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<AssignableCandidate[]> {
+    return this.listAssignable.execute(actorOf(req));
   }
 
   @Get(':userId')

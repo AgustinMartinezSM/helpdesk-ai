@@ -23,6 +23,7 @@ import {
 } from './apply-membership-events';
 import {
   GetMyProfileUseCase,
+  ListAssignableCandidatesUseCase,
   ListUserProfilesUseCase,
 } from './profile-queries';
 import { RegisterUserProfileUseCase } from './register-user-profile';
@@ -71,6 +72,7 @@ function buildContext() {
     applyRoleChanged: new ApplyMembershipRoleChangedUseCase(memberships),
     getMine: new GetMyProfileUseCase(profiles, definitions, values),
     list: new ListUserProfilesUseCase(profiles, definitions, values),
+    listAssignable: new ListAssignableCandidatesUseCase(profiles),
   };
 }
 
@@ -329,5 +331,121 @@ describe('profile queries', () => {
     });
 
     expect(await ctx.list.execute(AGENT)).toEqual([]);
+  });
+});
+
+/**
+ * The candidate list (Sprint 9.14, D4) — required case 2 on the users side.
+ */
+describe('assignable candidates', () => {
+  /** Holds the narrow key ONLY: no people.read anywhere in this set. */
+  const DESK_MANAGER: Actor = {
+    id: '44444444-4444-4444-8444-444444444444',
+    organizationId: ORG_A,
+    permissions: new Set([PERMISSIONS.PEOPLE_READ_ASSIGNABLE]),
+  };
+
+  it('answers the narrow key without the directory key', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute(REGISTRATION);
+    await joinOrganization(ctx, ORG_A, USER.id);
+
+    const candidates = await ctx.listAssignable.execute(DESK_MANAGER);
+
+    // The display name is seeded from the email's local part on registration
+    // and is user-owned from then on (ADR 0018).
+    expect(candidates).toEqual([
+      { userId: USER.id, name: 'ada.lovelace', email: REGISTRATION.email },
+    ]);
+  });
+
+  it('prefers a preferred name once somebody sets one', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute(REGISTRATION);
+    await joinOrganization(ctx, ORG_A, USER.id);
+    await ctx.profiles.updateProfile(
+      USER.id,
+      { preferredName: 'Ada' },
+      new Date('2026-07-28T13:00:00.000Z'),
+    );
+
+    const [candidate] = await ctx.listAssignable.execute(DESK_MANAGER);
+    expect(candidate.name).toBe('Ada');
+  });
+
+  it('returns id, name and email and NOTHING else', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute(REGISTRATION);
+    await joinOrganization(ctx, ORG_A, USER.id);
+
+    const [candidate] = await ctx.listAssignable.execute(DESK_MANAGER);
+
+    // The narrowing, asserted as the shape rather than described in a comment:
+    // a desk manager staffing a team learns who exists, not what role they
+    // carry, whether they are suspended, or how to phone them.
+    expect(Object.keys(candidate).sort()).toEqual(['email', 'name', 'userId']);
+  });
+
+  it('answers a people.read holder too, because refusing them would be theatre', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute(REGISTRATION);
+    await joinOrganization(ctx, ORG_A, USER.id);
+
+    await expect(ctx.listAssignable.execute(AGENT)).resolves.toHaveLength(1);
+  });
+
+  it('refuses somebody holding neither key (required case 3)', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute(REGISTRATION);
+    await joinOrganization(ctx, ORG_A, USER.id);
+
+    await expect(ctx.listAssignable.execute(USER)).rejects.toBeInstanceOf(
+      ForbiddenProfileActionError,
+    );
+  });
+
+  it('refuses a tenantless actor', async () => {
+    const ctx = buildContext();
+
+    await expect(
+      ctx.listAssignable.execute({
+        ...DESK_MANAGER,
+        organizationId: undefined,
+      }),
+    ).rejects.toBeInstanceOf(NoOrganizationContextError);
+  });
+
+  it('excludes a suspended member, as a rule and not as a default (case 8)', async () => {
+    const ctx = buildContext();
+    await ctx.register.execute(REGISTRATION);
+    await joinOrganization(ctx, ORG_A, USER.id);
+    expect(await ctx.listAssignable.execute(DESK_MANAGER)).toHaveLength(1);
+
+    await ctx.applyStatusChanged.execute({
+      organizationId: ORG_A,
+      userId: USER.id,
+      toStatus: 'suspended',
+      occurredAt: new Date('2026-07-28T13:00:00.000Z'),
+    });
+
+    // A suspended person must not be quietly staffed onto a support team.
+    // Unlike the directory, this listing takes no status argument at all.
+    expect(await ctx.listAssignable.execute(DESK_MANAGER)).toEqual([]);
+  });
+
+  it('never crosses organizations', async () => {
+    const ctx = buildContext();
+    const outsiderId = '99999999-9999-4999-8999-999999999999';
+    await ctx.register.execute(REGISTRATION);
+    await ctx.register.execute({
+      userId: outsiderId,
+      email: 'rival@rival.example.com',
+      registeredAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+    await joinOrganization(ctx, ORG_A, USER.id);
+    await joinOrganization(ctx, ORG_B, outsiderId);
+
+    const candidates = await ctx.listAssignable.execute(DESK_MANAGER);
+    expect(candidates.map((c) => c.userId)).toEqual([USER.id]);
   });
 });

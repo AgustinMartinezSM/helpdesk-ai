@@ -1,6 +1,10 @@
-import { PERMISSIONS } from '@helpdesk-ai/security';
+import {
+  ORGANIZATION_GRANTABLE_TEMPLATES,
+  PERMISSIONS,
+  isOrganizationGrantable,
+  type RoleTemplate,
+} from '@helpdesk-ai/security';
 import { permissionsForTemplate } from './permissions';
-import { ROLE_TEMPLATES, type RoleTemplate } from './membership';
 
 /**
  * The grant ceiling: which role templates a person may hand to somebody else,
@@ -8,25 +12,28 @@ import { ROLE_TEMPLATES, type RoleTemplate } from './membership';
  * (Sprint 9.10). It lived in `invitation.ts` while invitations were its only
  * caller; it moved here when the second one arrived, because a membership use
  * case importing from `invitation.ts` reads like a mistake.
+ *
+ * There are two gates, and Sprint 9.14 separated them because they answer
+ * different questions:
+ *
+ * 1. **May an organization grant this template at all?** — scope, and the
+ *    `owner` exclusion. Derived in `@helpdesk-ai/security` so every grant path
+ *    reads one answer, including the CSV import that does not exist yet.
+ * 2. **May THIS actor grant it?** — the permission subset below, per actor.
+ *
+ * A grant has to pass both.
  */
 
 /**
- * Templates that may be granted at all.
- *
- * `owner` is excluded outright rather than left to the subset check below,
- * and the reason is in the map it would be checked against:
- * TEMPLATE_PERMISSIONS resolves `owner` and `organization_admin` to the same
- * set today, so a subset test alone would happily let an organization admin
- * mint a peer at the top — or, in the role-change direction, unseat the
- * person already there. Two mechanisms, because one of them is currently
- * blind (ADR 0021).
+ * Re-exported so the existing call sites keep their import. The list itself is
+ * derived from each template's declared scope now, which is what makes ADR
+ * 0015's platform invariant structural instead of accidental — see
+ * `role-templates.ts` for why that mattered.
  */
-export const GRANTABLE_ROLE_TEMPLATES = ROLE_TEMPLATES.filter(
-  (template) => template !== 'owner',
-);
+export const GRANTABLE_ROLE_TEMPLATES = ORGANIZATION_GRANTABLE_TEMPLATES;
 
 export function isGrantableRoleTemplate(value: string): value is RoleTemplate {
-  return (GRANTABLE_ROLE_TEMPLATES as readonly string[]).includes(value);
+  return isOrganizationGrantable(value);
 }
 
 /**
@@ -57,6 +64,14 @@ const IMPLIED_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
     PERMISSIONS.TICKETS_READ_BRANCH,
     PERMISSIONS.TICKETS_READ_OWN,
   ],
+  // Sprint 9.14, and the line this table's warning was written for. The
+  // directory answers strictly more than the candidate list — same people,
+  // more columns, plus the statuses the candidate list refuses — so an admin
+  // holding `people.read` can grant a template that holds only
+  // `people.read_assignable`. Without this line, giving the desk manager the
+  // narrower key would have made that template ungrantable by anybody, which
+  // is precisely the failure `tickets.read_branch` produced in Sprint 9.10.
+  [PERMISSIONS.PEOPLE_READ]: [PERMISSIONS.PEOPLE_READ_ASSIGNABLE],
 };
 
 /**

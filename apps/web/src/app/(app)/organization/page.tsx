@@ -15,7 +15,10 @@ import {
   updateBranch,
   type Branch,
 } from '../../../lib/organization';
-import { listPeople, type DirectoryPerson } from '../../../lib/people';
+import {
+  listAssignableCandidates,
+  type AssignableCandidate,
+} from '../../../lib/people';
 import {
   createTeam,
   listTeams,
@@ -49,7 +52,7 @@ export default function OrganizationPage() {
   const [teams, setTeams] = useState<SupportTeam[] | null>(null);
   const [teamsError, setTeamsError] = useState<string | null>(null);
   const [openTeam, setOpenTeam] = useState<string | null>(null);
-  const [people, setPeople] = useState<DirectoryPerson[] | null>(null);
+  const [people, setPeople] = useState<AssignableCandidate[] | null>(null);
   const [teamCode, setTeamCode] = useState('');
   const [teamName, setTeamName] = useState('');
   const [teamFormError, setTeamFormError] = useState<string | null>(null);
@@ -87,10 +90,11 @@ export default function OrganizationPage() {
       return;
     }
     try {
-      // The server's default — active members only — is exactly right here: a
-      // suspended colleague should not be offered as somebody who resolves
-      // tickets.
-      setPeople(await listPeople(accessToken));
+      // The candidate list, not the directory (Sprint 9.14). Active members
+      // only — a suspended colleague must not be offered as somebody who
+      // resolves tickets — and no role, status or phone, because a picker has
+      // no use for them and a desk manager has no key for them.
+      setPeople(await listAssignableCandidates(accessToken));
     } catch {
       // A refused directory must not take the teams section down with it; the
       // member editor says so instead of showing an empty set as if nobody

@@ -1,8 +1,10 @@
 /**
  * A membership is the edge that answers "does this person belong here", and
  * with which role template. It is the substrate every authorization decision
- * will read once the permission evaluator exists (ADR 0015).
+ * reads (ADR 0015).
  */
+import { ROLE_TEMPLATES, type RoleTemplate } from '@helpdesk-ai/security';
+
 export const MEMBERSHIP_STATUSES = [
   'invited',
   'active',
@@ -12,26 +14,16 @@ export const MEMBERSHIP_STATUSES = [
 export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 
 /**
- * Role template keys. These are string values today, not seeded rows with
- * permission mappings — ADR 0015 wants rows, and they arrive with the
- * evaluator. Naming them here keeps the vocabulary in one place so the seed
- * migration, the consumer and the backfill cannot drift apart.
+ * The template vocabulary moved to `@helpdesk-ai/security` in Sprint 9.14 and
+ * is re-exported here so the many call sites in this service keep their
+ * import. It lives there for the reason the permission keys do: the browser
+ * and this service were each declaring their own list, and two lists agreeing
+ * by coincidence is a drift waiting to happen.
  *
- * Only three of these are reachable in this sprint; the rest exist because
- * ADR 0015 named them and a half-declared vocabulary invites invention at
- * the call site.
+ * What did NOT move is the mapping from a template to permissions. That is the
+ * evaluator, and ADR 0013 keeps it here.
  */
-export const ROLE_TEMPLATES = [
-  'owner',
-  'organization_admin',
-  'branch_manager',
-  'service_desk_manager',
-  'team_manager',
-  'agent',
-  'requester',
-  'auditor',
-] as const;
-export type RoleTemplate = (typeof ROLE_TEMPLATES)[number];
+export { ROLE_TEMPLATES, type RoleTemplate };
 
 export interface Membership {
   readonly id: string;

@@ -54,6 +54,7 @@ import {
   SetSupportTeamScopeUseCase,
   UpdateSupportTeamUseCase,
 } from '../application/use-cases/support-teams';
+import { ListGrantableRoleTemplatesUseCase } from '../application/use-cases/grantable-role-templates';
 import { ListInvitationsUseCase } from '../application/use-cases/list-invitations';
 import {
   GetMembershipBranchesUseCase,
@@ -509,6 +510,12 @@ export class AppModule {
             BRANCH_MEMBERSHIP_REPOSITORY,
             CLOCK,
           ],
+        },
+        {
+          provide: ListGrantableRoleTemplatesUseCase,
+          useFactory: (memberships: MembershipRepository) =>
+            new ListGrantableRoleTemplatesUseCase(memberships),
+          inject: [MEMBERSHIP_REPOSITORY],
         },
         {
           provide: IssueInvitationUseCase,

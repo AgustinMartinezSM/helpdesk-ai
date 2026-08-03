@@ -42,6 +42,7 @@ import {
 import {
   GetMyProfileUseCase,
   GetUserProfileUseCase,
+  ListAssignableCandidatesUseCase,
   ListUserProfilesUseCase,
 } from '../application/use-cases/profile-queries';
 import { RegisterUserProfileUseCase } from '../application/use-cases/register-user-profile';
@@ -166,6 +167,14 @@ export class AppModule {
             FIELD_DEFINITION_REPOSITORY,
             FIELD_VALUE_REPOSITORY,
           ],
+        },
+        {
+          // One dependency, and that is the point: a candidate list has no
+          // business assembling organization-defined field values.
+          provide: ListAssignableCandidatesUseCase,
+          useFactory: (profiles: UserProfileRepository) =>
+            new ListAssignableCandidatesUseCase(profiles),
+          inject: [USER_PROFILE_REPOSITORY],
         },
         {
           provide: GetUserProfileUseCase,

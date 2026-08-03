@@ -7,7 +7,6 @@ import { FormError, Select } from '../../../components/ui/field';
 import {
   changeMemberRole,
   changeMemberStatus,
-  INVITABLE_ROLE_TEMPLATES,
   listMemberBranches,
   roleLabel,
   setMemberBranches,
@@ -25,6 +24,12 @@ export interface MemberAdminProps {
   canManageBranches: boolean;
   /** Null until the branch listing has loaded, or when it was refused. */
   branches: OrganizationBranch[] | null;
+  /**
+   * What the SERVER says this caller may grant, loaded once by the page. An
+   * empty array is a real answer — somebody who can suspend but not re-role
+   * — so the role control renders only when there is something to choose.
+   */
+  grantableRoles: string[];
   onChanged: (message: string) => void;
 }
 
@@ -45,6 +50,7 @@ export function MemberAdmin({
   canSuspend,
   canManageBranches,
   branches,
+  grantableRoles,
   onChanged,
 }: MemberAdminProps) {
   const status = person.status ?? 'active';
@@ -89,7 +95,7 @@ export function MemberAdmin({
 
   return (
     <div className={styles.adminPanel}>
-      {canAssignRoles ? (
+      {canAssignRoles && grantableRoles.length > 0 ? (
         <div className={styles.adminGroup}>
           <Select
             id={`role-${userId}`}
@@ -97,7 +103,7 @@ export function MemberAdmin({
             value={role}
             onChange={(event) => setRole(event.target.value)}
           >
-            {INVITABLE_ROLE_TEMPLATES.map((value) => (
+            {grantableRoles.map((value) => (
               <option key={value} value={value}>
                 {roleLabel(value)}
               </option>

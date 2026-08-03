@@ -28,6 +28,27 @@ export const PERMISSIONS = {
   /** The people directory. Listing profiles, not managing them. */
   PEOPLE_READ: 'people.read',
   /**
+   * Naming candidates for something — today, who may be put in a support team
+   * (Sprint 9.14).
+   *
+   * Strictly narrower than PEOPLE_READ and introduced because the alternative
+   * was worse: Sprint 9.13 gave `service_desk_manager` the full directory so
+   * its team member picker would have names in it, marked as an interim
+   * widening of a matrix cell that grants them own scope only. A picker cannot
+   * work from own scope — it exists to add somebody who is NOT in the team yet
+   * — so the answer was a narrower key rather than a narrower scope.
+   *
+   * What it answers: ACTIVE members, as an identifier, a display name and an
+   * email. What it does not: phone, role template, membership status, profile
+   * field values, one-member reads, or the People screen. The email stays
+   * because a picker needs to tell two people with the same name apart, and
+   * dropping it would make the narrowing sound larger than it is.
+   *
+   * PEOPLE_READ holders get this by implication at the call site — somebody
+   * who may read the whole directory may obviously name a candidate from it.
+   */
+  PEOPLE_READ_ASSIGNABLE: 'people.read_assignable',
+  /**
    * Editing someone else's profile values. Editing your own person-level
    * fields needs no key — being yourself is the authorization.
    */

@@ -170,13 +170,18 @@ export default function TicketsPage() {
 
       {/* Only when the person is in more than nothing: an organization that
           has configured no teams, or somebody who belongs to none, is not
-          asked about a concept that does not apply to them (ADR 0016). */}
+          asked about a concept that does not apply to them (ADR 0016).
+
+          Labelled "Show", not "Filter", and that word is load-bearing
+          (Sprint 9.14). Choosing a team narrows to that team's work AND
+          keeps the caller's own requests, because the server's team scope is
+          a visibility rule rather than a filter — `assignedTeamId IN (…) OR
+          requesterId = me`, deliberate since Sprint 9.5 so a manager never
+          loses sight of a request they filed themselves. Sprint 9.13 called
+          this control a filter, which promised a narrowing it does not
+          perform. */}
       {teams.length > 0 ? (
-        <div
-          className={styles.filters}
-          role="group"
-          aria-label="Filter by support team"
-        >
+        <div className={styles.filters} role="group" aria-label="Show tickets">
           <button
             type="button"
             className={
@@ -205,6 +210,15 @@ export default function TicketsPage() {
             </button>
           ))}
         </div>
+      ) : null}
+
+      {/* Said rather than left to be discovered: a request you filed yourself
+          stays visible whichever team is selected. */}
+      {teams.length > 0 && team !== 'all' ? (
+        <p className={styles.scopeNote}>
+          Showing this team&rsquo;s tickets, plus any request you opened
+          yourself.
+        </p>
       ) : null}
 
       {error ? <FormError>{error}</FormError> : null}

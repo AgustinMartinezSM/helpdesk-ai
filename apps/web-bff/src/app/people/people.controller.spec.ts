@@ -310,6 +310,58 @@ describe('People endpoints (stub gateway)', () => {
     });
   });
 
+  describe('the Sprint 9.14 reads', () => {
+    it('forwards the candidate list to its own upstream, not the directory', async () => {
+      gateway.respond('GET /api/users/assignable', 200, []);
+
+      await request(app.getHttpServer())
+        .get('/people/assignable')
+        .set('authorization', 'Bearer jwt-access')
+        .expect(200);
+
+      // A different upstream path AND a different upstream key. If this ever
+      // forwarded to /api/users, a desk manager would be refused rather than
+      // answered, and the narrowing would look like a bug.
+      expect(gateway.requests[0].url).toBe('/api/users/assignable');
+    });
+
+    it('forwards the grantable templates to organizations-service', async () => {
+      gateway.respond(
+        'GET /api/organizations/memberships/role-templates',
+        200,
+        { roleTemplates: ['requester'] },
+      );
+
+      const response = await request(app.getHttpServer())
+        .get('/people/role-templates')
+        .set('authorization', 'Bearer jwt-access')
+        .expect(200);
+
+      expect(gateway.requests[0].url).toBe(
+        '/api/organizations/memberships/role-templates',
+      );
+      // The per-actor answer arrives unshaped: the BFF decides nothing about
+      // who may grant what.
+      expect(response.body).toEqual({ roleTemplates: ['requester'] });
+    });
+
+    it('passes a refusal on the candidate list through untouched', async () => {
+      gateway.respond('GET /api/users/assignable', 403, {
+        statusCode: 403,
+        message: 'you are not allowed to read profiles here',
+      });
+
+      const response = await request(app.getHttpServer())
+        .get('/people/assignable')
+        .set('authorization', 'Bearer jwt-access')
+        .expect(403);
+
+      expect(response.body.message).toBe(
+        'you are not allowed to read profiles here',
+      );
+    });
+  });
+
   it('adds no authorization of its own: an anonymous call still reaches upstream', async () => {
     // The BFF has never decided access and must not start here — the service
     // is the one place that refuses, and a second gate would be a second

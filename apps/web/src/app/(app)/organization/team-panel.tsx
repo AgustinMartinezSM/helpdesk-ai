@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { FormError } from '../../../components/ui/field';
 import { Skeleton } from '../../../components/ui/skeleton';
-import type { DirectoryPerson } from '../../../lib/people';
+import type { AssignableCandidate } from '../../../lib/people';
 import type { Branch } from '../../../lib/organization';
 import {
   getTeam,
@@ -21,13 +21,9 @@ export interface TeamPanelProps {
   /** Null when the branch listing was refused or failed — the coverage
    * editor then explains itself instead of offering an empty set. */
   branches: Branch[] | null;
-  /** Same, for the directory behind the member editor. */
-  people: DirectoryPerson[] | null;
+  /** Same, for the candidate list behind the member editor. */
+  people: AssignableCandidate[] | null;
   onChanged: (message: string) => void;
-}
-
-function personLabel(person: DirectoryPerson): string {
-  return person.preferredName ?? person.displayName;
 }
 
 /**
@@ -143,7 +139,7 @@ export function TeamPanel({
         </p>
         {people === null ? (
           <p className={styles.empty}>
-            The directory could not be loaded, so members cannot be changed
+            The list of people could not be loaded, so members cannot be changed
             here.
           </p>
         ) : people.length === 0 ? (
@@ -161,7 +157,7 @@ export function TeamPanel({
                         setMembers(toggle(members, person.userId))
                       }
                     />
-                    <span>{personLabel(person)}</span>
+                    <span>{person.name}</span>
                   </label>
                   <span className={styles.meta}>{person.email}</span>
                 </li>

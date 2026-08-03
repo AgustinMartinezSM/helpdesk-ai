@@ -43,6 +43,7 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
   let agentToken: string;
   let secondOrgAgentToken: string;
   let tenantlessAgentToken: string;
+  let deskManagerToken: string;
 
   beforeAll(async () => {
     const env = validateEnv(usersServiceEnvSchema, TEST_ENV);
@@ -118,6 +119,16 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
         perms: [PERMISSIONS.PEOPLE_READ],
       },
       { subject: '55555555-5555-4555-8555-555555555555' },
+    );
+    // The narrow key ALONE (Sprint 9.14): enough to name a candidate for a
+    // support team, and nothing else on this controller.
+    deskManagerToken = await jwt.signAsync(
+      {
+        email: 'desk@example.com',
+        org: ORG_A,
+        perms: [PERMISSIONS.PEOPLE_READ_ASSIGNABLE],
+      },
+      { subject: '66666666-6666-4666-8666-666666666666' },
     );
   });
 
@@ -298,6 +309,66 @@ describe('Users HTTP API (fakes, real JWT verification)', () => {
         .get('/users?status=all')
         .set(asBearer(userToken))
         .expect(403);
+    });
+  });
+
+  /**
+   * Over HTTP, through the real guard, the real pipe and the real exception
+   * filter — the lesson Sprint 9.13 paid for twice, where a rule that was
+   * correct at the use case answered 400 and 500 at the boundary.
+   */
+  describe('the candidate list (Sprint 9.14)', () => {
+    it("wins over ':userId' — the literal route, not a malformed id", async () => {
+      // If 'assignable' were captured by @Get(':userId'), the UUID pipe would
+      // answer 400 here instead of the listing's 200.
+      const response = await request(app.getHttpServer())
+        .get('/users/assignable')
+        .set(asBearer(deskManagerToken))
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+    });
+
+    it('answers the narrow key and returns three fields', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/users/assignable')
+        .set(asBearer(deskManagerToken))
+        .expect(200);
+
+      for (const candidate of response.body) {
+        expect(Object.keys(candidate).sort()).toEqual([
+          'email',
+          'name',
+          'userId',
+        ]);
+      }
+    });
+
+    it('refuses the same token everywhere else on this controller', async () => {
+      // The narrowing, proved at the boundary: holding people.read_assignable
+      // opens the candidate list and nothing adjacent to it.
+      await request(app.getHttpServer())
+        .get('/users')
+        .set(asBearer(deskManagerToken))
+        .expect(403);
+      await request(app.getHttpServer())
+        .get(`/users/${USER_ID}`)
+        .set(asBearer(deskManagerToken))
+        .expect(403);
+    });
+
+    it('refuses a member holding neither key (required case 3)', async () => {
+      await request(app.getHttpServer())
+        .get('/users/assignable')
+        .set(asBearer(userToken))
+        .expect(403);
+    });
+
+    it('answers a people.read holder too', async () => {
+      await request(app.getHttpServer())
+        .get('/users/assignable')
+        .set(asBearer(agentToken))
+        .expect(200);
     });
   });
 });

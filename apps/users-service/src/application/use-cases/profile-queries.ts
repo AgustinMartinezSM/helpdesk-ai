@@ -156,6 +156,55 @@ export class ListUserProfilesUseCase {
   }
 }
 
+/**
+ * One person as a candidate: enough to pick them out of a list, and no more.
+ */
+export interface AssignableCandidate {
+  readonly userId: string;
+  /** Preferred name when they set one, otherwise the display name. */
+  readonly name: string;
+  /** Kept so a picker can tell two people with the same name apart. */
+  readonly email: string;
+}
+
+export class ListAssignableCandidatesUseCase {
+  constructor(private readonly profiles: UserProfileRepository) {}
+
+  /**
+   * Who may be named as a candidate — today, put in a support team.
+   *
+   * Deliberately NOT the directory with fewer columns. It reads only the
+   * membership projection this service already keeps, returns ACTIVE members
+   * only, and never touches the field definitions or values: an
+   * organization-defined field is profile data, and a picker has no business
+   * assembling it (Sprint 9.6's one view-filter decides that, and the way to
+   * not get it wrong here is to not ask).
+   *
+   * Active-only is a rule rather than a default, unlike the directory's
+   * `?status=`: a suspended person must not be quietly staffed onto a team,
+   * which is the same reason the directory's default has been active-only
+   * since Sprint 9.10.
+   *
+   * Either key opens it. A `people.read` holder can already list everybody
+   * with more detail, so refusing them a narrower view would be theatre.
+   */
+  async execute(actor: Actor): Promise<AssignableCandidate[]> {
+    if (
+      !hasPermission(actor, PERMISSIONS.PEOPLE_READ_ASSIGNABLE) &&
+      !hasPermission(actor, PERMISSIONS.PEOPLE_READ)
+    ) {
+      throw new ForbiddenProfileActionError();
+    }
+    const organizationId = requireOrganization(actor);
+    const entries = await this.profiles.list(organizationId, ['active']);
+    return entries.map((entry) => ({
+      userId: entry.profile.userId,
+      name: entry.profile.preferredName ?? entry.profile.displayName,
+      email: entry.profile.email,
+    }));
+  }
+}
+
 export class GetUserProfileUseCase {
   constructor(
     private readonly profiles: UserProfileRepository,

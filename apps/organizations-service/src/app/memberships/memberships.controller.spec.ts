@@ -423,4 +423,49 @@ describe('Member administration HTTP API (fakes, real JWT verification)', () => 
         .expect(403);
     });
   });
+
+  /**
+   * Sprint 9.14, D6. Over HTTP through the real guard and pipe, because a
+   * literal segment beside a ':userId' route is the shape this repository has
+   * got wrong before.
+   */
+  describe('the grantable role templates (Sprint 9.14)', () => {
+    it("wins over ':userId' and answers what the caller may grant", async () => {
+      const response = await request(app.getHttpServer())
+        .get('/organizations/memberships/role-templates')
+        .set(asBearer(adminToken))
+        .expect(200);
+
+      // Required case 1: an admin may assign every organization template
+      // except owner, and this is the list the invite form renders.
+      expect(response.body.roleTemplates).toEqual([
+        'organization_admin',
+        'branch_manager',
+        'service_desk_manager',
+        'team_manager',
+        'agent',
+        'requester',
+        'auditor',
+      ]);
+      // Required case 4, at the boundary: nothing platform-shaped, ever.
+      expect(response.body.roleTemplates).not.toContain('owner');
+      expect(response.body.roleTemplates).not.toContain('platform_super_admin');
+    });
+
+    it('answers an empty list to somebody who grants no roles', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/organizations/memberships/role-templates')
+        .set(asBearer(memberToken))
+        .expect(200);
+
+      expect(response.body.roleTemplates).toEqual([]);
+    });
+
+    it('refuses a token with no organization', async () => {
+      await request(app.getHttpServer())
+        .get('/organizations/memberships/role-templates')
+        .set(asBearer(tenantlessAdminToken))
+        .expect(403);
+    });
+  });
 });

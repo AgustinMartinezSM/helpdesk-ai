@@ -269,6 +269,17 @@ describe('PeoplePage member administration', () => {
     ],
   };
 
+  /** What the server answers for an admin: everything except `owner`. */
+  const GRANTABLE = [
+    'organization_admin',
+    'branch_manager',
+    'service_desk_manager',
+    'team_manager',
+    'agent',
+    'requester',
+    'auditor',
+  ];
+
   const SUSPENDED_BOB = {
     userId: 'u8',
     email: 'bob@empresa.com',
@@ -289,6 +300,13 @@ describe('PeoplePage member administration', () => {
       ...extra,
       [/\/organization\/branches$/, { status: 200, body: [] }, 'GET'],
       [/\/people\/invitations$/, { status: 200, body: [] }, 'GET'],
+      // Answered per actor by the server since Sprint 9.14; the page no
+      // longer has a list of its own to offer.
+      [
+        /\/people\/role-templates$/,
+        { status: 200, body: { roleTemplates: GRANTABLE } },
+        'GET',
+      ],
       [/\/people(\?|$)/, { status: 200, body: people }, 'GET'],
     ];
   }

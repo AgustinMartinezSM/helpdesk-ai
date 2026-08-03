@@ -17,6 +17,7 @@ import {
 } from '@helpdesk-ai/security';
 import { ChangeMembershipRoleUseCase } from '../../application/use-cases/change-membership-role';
 import { ChangeMembershipStatusUseCase } from '../../application/use-cases/change-membership-status';
+import { ListGrantableRoleTemplatesUseCase } from '../../application/use-cases/grantable-role-templates';
 import {
   GetMembershipBranchesUseCase,
   SetMembershipBranchesUseCase,
@@ -82,7 +83,23 @@ export class MembershipsController {
     private readonly changeMembershipStatus: ChangeMembershipStatusUseCase,
     private readonly getMembershipBranches: GetMembershipBranchesUseCase,
     private readonly setMembershipBranches: SetMembershipBranchesUseCase,
+    private readonly listGrantableTemplates: ListGrantableRoleTemplatesUseCase,
   ) {}
+
+  // Declared before the ':userId' routes: 'role-templates' is a literal
+  // segment, and the UUID pipe would otherwise refuse it with a 400.
+  @Get('role-templates')
+  @ApiOperation({
+    summary:
+      'Role templates the CALLER may grant, from their stored membership',
+  })
+  async grantableTemplates(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ roleTemplates: string[] }> {
+    return {
+      roleTemplates: await this.listGrantableTemplates.execute(actorOf(req)),
+    };
+  }
 
   @Patch(':userId/role')
   @ApiOperation({ summary: "Change a member's role template." })

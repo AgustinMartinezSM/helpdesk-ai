@@ -7,6 +7,7 @@ import {
 } from '../../domain/errors';
 import type { Membership, RoleTemplate } from '../../domain/membership';
 import { permissionsForTemplate } from '../../domain/permissions';
+import { canGrantRoleTemplate } from '../../domain/role-grants';
 import {
   FakeOrganizationEventPublisher,
   FixedClock,
@@ -333,29 +334,62 @@ describe('routing.manage implies teams.manage (9.13 D4 premise)', () => {
  * Sprint 9.13, D2. Both grants exist because a screen needs them, so both get
  * a line here rather than living only in a comment.
  */
-describe('the service desk manager can work the team editors (9.13 D2)', () => {
+describe('the service desk manager can work the team editors (9.14 D4)', () => {
   it('reads branches, because a team’s reach is a set of them', () => {
     const permissions = permissionsForTemplate('service_desk_manager');
     expect(permissions.has(PERMISSIONS.TEAMS_MANAGE)).toBe(true);
     expect(permissions.has(PERMISSIONS.BRANCHES_READ)).toBe(true);
   });
 
-  it('reads the directory, because a member picker cannot work from own scope', () => {
-    // A marked interim widening of the matrix's ○ cell, not a matrix grant.
-    expect(
-      permissionsForTemplate('service_desk_manager').has(
-        PERMISSIONS.PEOPLE_READ,
-      ),
-    ).toBe(true);
+  it('names candidates WITHOUT reading the directory (required case 2)', () => {
+    const permissions = permissionsForTemplate('service_desk_manager');
+    // The narrow key is what a member picker actually needs.
+    expect(permissions.has(PERMISSIONS.PEOPLE_READ_ASSIGNABLE)).toBe(true);
+    // And the flat directory key Sprint 9.13 granted as an interim widening
+    // is gone. This assertion is that widening's obituary: if it ever comes
+    // back, it comes back on purpose.
+    expect(permissions.has(PERMISSIONS.PEOPLE_READ)).toBe(false);
   });
 
   it('still cannot administer people or branches', () => {
     const permissions = permissionsForTemplate('service_desk_manager');
-    // Reading is what the editors need; the widening stops there.
     expect(permissions.has(PERMISSIONS.PEOPLE_ASSIGN_ROLES)).toBe(false);
     expect(permissions.has(PERMISSIONS.PEOPLE_SUSPEND)).toBe(false);
     expect(permissions.has(PERMISSIONS.PEOPLE_INVITE)).toBe(false);
     expect(permissions.has(PERMISSIONS.BRANCHES_CREATE)).toBe(false);
     expect(permissions.has(PERMISSIONS.BRANCHES_UPDATE)).toBe(false);
+  });
+
+  it('is still grantable by an admin, which the narrowing could have broken', () => {
+    // The failure mode Sprint 9.10 hit with `tickets.read_branch`: give a
+    // template a key the granter's own set does not literally contain, and
+    // nobody can create that template through any surface. The implication
+    // table is what keeps `people.read` counting as `people.read_assignable`.
+    expect(
+      canGrantRoleTemplate('organization_admin', 'service_desk_manager'),
+    ).toBe(true);
+    expect(canGrantRoleTemplate('owner', 'service_desk_manager')).toBe(true);
+  });
+});
+
+/**
+ * Required case 3: a team manager cannot browse people at all. They run a
+ * team's workload; staffing it is the desk manager's act.
+ */
+describe('a team manager cannot browse people (required case 3)', () => {
+  it('holds neither directory key, nor team administration', () => {
+    const permissions = permissionsForTemplate('team_manager');
+    expect(permissions.has(PERMISSIONS.PEOPLE_READ)).toBe(false);
+    expect(permissions.has(PERMISSIONS.PEOPLE_READ_ASSIGNABLE)).toBe(false);
+    expect(permissions.has(PERMISSIONS.TEAMS_MANAGE)).toBe(false);
+  });
+
+  it('and neither does an agent or a requester', () => {
+    expect(
+      permissionsForTemplate('agent').has(PERMISSIONS.PEOPLE_READ_ASSIGNABLE),
+    ).toBe(false);
+    expect(
+      permissionsForTemplate('requester').has(PERMISSIONS.PEOPLE_READ),
+    ).toBe(false);
   });
 });

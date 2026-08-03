@@ -17,7 +17,7 @@ import {
 import { Skeleton } from '../../../components/ui/skeleton';
 import { can, PERMISSIONS } from '../../../lib/permissions';
 import {
-  INVITABLE_ROLE_TEMPLATES,
+  listGrantableRoleTemplates,
   issueInvitation,
   listBranches,
   listInvitations,
@@ -76,6 +76,9 @@ export default function PeoplePage() {
 
   const [email, setEmail] = useState('');
   const [template, setTemplate] = useState<string>('requester');
+  // What the SERVER says this caller may grant, rather than a list this file
+  // used to hardcode. Empty until it loads, and an empty answer is real.
+  const [grantableRoles, setGrantableRoles] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [issued, setIssued] = useState<IssuedInvitation | null>(null);
@@ -131,6 +134,29 @@ export default function PeoplePage() {
     }
   }, [accessToken, canInvite]);
 
+  const loadGrantableRoles = useCallback(async () => {
+    if (!accessToken || (!canInvite && !canAssignRoles)) {
+      return;
+    }
+    try {
+      const templates = await listGrantableRoleTemplates(accessToken);
+      setGrantableRoles(templates);
+      // The default has to be something the server would accept. 'requester'
+      // is the narrowest template and is in every non-empty answer, but
+      // reading the list is what makes that true rather than assumed.
+      if (templates.length > 0) {
+        setTemplate((current) =>
+          templates.includes(current)
+            ? current
+            : templates[templates.length - 1],
+        );
+      }
+    } catch {
+      // The forms simply do not offer a role rather than offering a guess.
+      setGrantableRoles([]);
+    }
+  }, [accessToken, canInvite, canAssignRoles]);
+
   useEffect(() => {
     if (status !== 'authenticated') {
       return;
@@ -138,7 +164,8 @@ export default function PeoplePage() {
     void loadPeople();
     void loadInvitations();
     void loadBranches();
-  }, [status, loadPeople, loadInvitations, loadBranches]);
+    void loadGrantableRoles();
+  }, [status, loadPeople, loadInvitations, loadBranches, loadGrantableRoles]);
 
   async function submitInvite(event: FormEvent) {
     event.preventDefault();
@@ -265,7 +292,7 @@ export default function PeoplePage() {
               value={template}
               onChange={(event) => setTemplate(event.target.value)}
             >
-              {INVITABLE_ROLE_TEMPLATES.map((value) => (
+              {grantableRoles.map((value) => (
                 <option key={value} value={value}>
                   {roleLabel(value)}
                 </option>
@@ -428,6 +455,7 @@ export default function PeoplePage() {
                           canSuspend={canSuspend}
                           canManageBranches={canManageBranches}
                           branches={branches}
+                          grantableRoles={grantableRoles}
                           onChanged={(message) => {
                             setNote(message);
                             void loadPeople();

@@ -36,7 +36,9 @@ const ADMIN_SESSION = {
  */
 const DESK_MANAGER_SESSION = {
   ...BASE_SESSION,
-  permissions: ['teams.manage', 'branches.read', 'people.read'],
+  // The narrow candidate key, not the directory: Sprint 9.14 traded 9.13's
+  // interim `people.read` widening down to this.
+  permissions: ['teams.manage', 'branches.read', 'people.read_assignable'],
 };
 
 /** Holds tickets.read_team and no team administration. */
@@ -61,13 +63,15 @@ const IT_TEAM = {
   status: 'active' as const,
 };
 
+/**
+ * A candidate, not a directory row (Sprint 9.14): id, name and email, and
+ * deliberately no role, status or phone — the desk manager who staffs a team
+ * holds `people.read_assignable` and cannot read those.
+ */
 const PERSON = {
   userId: 'u9',
+  name: 'Dana Tech',
   email: 'tech@company.com',
-  displayName: 'Dana Tech',
-  preferredName: null,
-  phone: null,
-  registeredAt: '2026-07-01T00:00:00.000Z',
 };
 
 interface Scripted {
@@ -129,7 +133,10 @@ function scriptOrganization(
       },
       'GET',
     ],
-    [/\/people(\?|$)/, overrides.people ?? { status: 200, body: [PERSON] }],
+    [
+      /\/people\/assignable$/,
+      overrides.people ?? { status: 200, body: [PERSON] },
+    ],
   ];
 }
 
@@ -370,7 +377,7 @@ describe('the support teams section', () => {
 
     // Not an empty list, which would read as "nobody works here".
     expect(
-      await screen.findByText(/directory could not be loaded/),
+      await screen.findByText(/list of people could not be loaded/),
     ).toBeTruthy();
   });
 

@@ -256,16 +256,51 @@ export function acceptInvitation(
  * both directions: nobody can grant it, and nobody holding it can be
  * administered (ADR 0021).
  */
-export const INVITABLE_ROLE_TEMPLATES = [
-  'organization_admin',
-  'branch_manager',
-  'service_desk_manager',
-  'team_manager',
-  'agent',
-  'requester',
-  'auditor',
-] as const;
+/**
+ * Role templates the signed-in person may hand out, answered per actor by the
+ * server from their stored membership (Sprint 9.14).
+ *
+ * This replaced a hardcoded array here. That array listed everything except
+ * `owner` and matched the server by coincidence, and it was wrong per actor
+ * regardless: somebody whose own template could grant none of them was still
+ * offered all seven and refused on submit, after typing an email address.
+ */
+export function listGrantableRoleTemplates(
+  accessToken: string,
+): Promise<string[]> {
+  return call<{ roleTemplates: string[] }>(
+    accessToken,
+    'GET',
+    '/people/role-templates',
+  ).then((body) => body.roleTemplates);
+}
 
+/**
+ * Active members as candidates for a support team, by the narrow key
+ * (`people.read_assignable`). Deliberately not the directory: no role, no
+ * status, no phone, and suspended people are absent rather than filtered.
+ */
+export interface AssignableCandidate {
+  userId: string;
+  name: string;
+  email: string;
+}
+
+export function listAssignableCandidates(
+  accessToken: string,
+): Promise<AssignableCandidate[]> {
+  return call(accessToken, 'GET', '/people/assignable');
+}
+
+/**
+ * The product's word for each template.
+ *
+ * Separate from the key on purpose, and that separation is what makes these
+ * labels translatable later without touching anything stored: the key is data
+ * in `memberships.role_template`, the label is presentation. Every key in the
+ * shared vocabulary has an entry here, and a spec fails if one is added
+ * without a label rather than letting a raw key leak into the interface.
+ */
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Owner',
   organization_admin: 'Administrator',

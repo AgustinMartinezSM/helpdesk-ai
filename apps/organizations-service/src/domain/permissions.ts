@@ -74,21 +74,22 @@ const DESK_AND_TEAM_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
  * until the branch-coverage editor. A team's reach is a set of branches, and
  * an editor that may not read them can only offer identifiers.
  *
- * `people.read` is the THIRD marked interim widening in this file, and it is
- * a widening rather than a matrix cell: the matrix grants it ○, own scope
- * only. A member picker cannot work from own scope by construction — it exists
- * to add somebody who is NOT in the team yet — and own-scope still has no
- * representation in a flat set of strings. So the flat key goes in, marked,
- * and it shrinks when the scope-qualifier vocabulary lands. The narrower
- * alternative was a picker that takes user ids, which is an operator interface
- * wearing a product's clothes (the argument Sprint 9.11 made for stations).
+ * `people.read_assignable` is where Sprint 9.13's third interim widening went
+ * to die, one sprint after it was made. That sprint gave this template the
+ * FLAT `people.read` so its member picker would have names in it, and marked
+ * the grant as interim because the matrix gives them ○ — own scope only. The
+ * scope-qualifier vocabulary did not turn out to be the answer: a picker
+ * cannot work from own scope by construction, because it exists to add
+ * somebody who is NOT in the team yet. So Sprint 9.14 narrowed the KEY instead
+ * of the scope. A desk manager now names candidates and no longer reaches the
+ * directory, the People screen, or anybody's role, status or phone.
  */
 const SERVICE_DESK_MANAGER_PERMISSIONS: ReadonlySet<string> = new Set([
   ...DESK_AND_TEAM_MANAGER_PERMISSIONS,
   PERMISSIONS.TEAMS_MANAGE,
   PERMISSIONS.ROUTING_MANAGE,
   PERMISSIONS.BRANCHES_READ,
-  PERMISSIONS.PEOPLE_READ,
+  PERMISSIONS.PEOPLE_READ_ASSIGNABLE,
 ]);
 
 /**

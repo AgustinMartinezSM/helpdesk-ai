@@ -54,6 +54,30 @@ export class PeopleController {
     return this.forward(req, 'GET', `/api/users${query}`);
   }
 
+  /**
+   * Active members as candidates, for a picker. A narrower upstream than the
+   * directory above and gated on a narrower key — which is the whole point of
+   * it existing (Sprint 9.14).
+   */
+  @Get('assignable')
+  assignable(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(req, 'GET', '/api/users/assignable');
+  }
+
+  /**
+   * Role templates the CALLER may grant. Answered per actor upstream, which
+   * is why the invite form can no longer offer a choice that gets refused on
+   * submit (Sprint 9.14).
+   */
+  @Get('role-templates')
+  grantableRoleTemplates(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(
+      req,
+      'GET',
+      '/api/organizations/memberships/role-templates',
+    );
+  }
+
   @Get('me')
   myProfile(@Req() req: BrowserRequest): Promise<unknown> {
     return this.forward(req, 'GET', '/api/users/me');
