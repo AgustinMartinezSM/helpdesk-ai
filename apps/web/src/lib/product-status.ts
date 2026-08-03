@@ -166,9 +166,16 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
       {
         name: 'Member administration',
         description:
-          'Changing the role of somebody already here, suspending or removing them.',
-        status: 'planned',
-        note: 'Invitations choose a role when a person joins; changing it afterwards has no product surface yet.',
+          'Change the role of somebody already here, suspend them, remove them, or bring them back.',
+        status: 'available',
+        note: 'A change takes effect the next time the person signs in or their session refreshes, within fifteen minutes. Nobody can administer their own membership, so an organization always keeps an administrator.',
+      },
+      {
+        name: 'Branch assignment',
+        description:
+          'Give a branch manager the branches they are responsible for, and see who covers what.',
+        status: 'available',
+        note: 'Creating and archiving branches themselves is still an operator step, not a product screen.',
       },
       {
         name: 'Ticket ownership',

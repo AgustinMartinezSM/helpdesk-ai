@@ -205,9 +205,10 @@ export default function HowItWorksPage() {
           Requests, conversations, internal notes, history and role-based access
           work today, and so does bringing somebody in: an administrator invites
           a colleague with the role they should have, and hands them a one-time
-          code — nothing is emailed. Changing the role of somebody already here
-          still happens outside the product. Manager dashboards and in-app
-          notifications run behind the API but have no product screens yet. The{' '}
+          code — nothing is emailed. Roles are managed inside the product too:
+          an administrator can change somebody&apos;s role, suspend them, remove
+          them, or bring them back. Manager dashboards and in-app notifications
+          run behind the API but have no product screens yet. The{' '}
           <Link href="/features" className={styles.inlineLink}>
             features page
           </Link>{' '}

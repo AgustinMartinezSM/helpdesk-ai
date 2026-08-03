@@ -1,8 +1,8 @@
 # Sprint 9.10 — Member administration
 
-Status: **Definition of Ready, open (2026-08-02).** Written and checked before
-any code, the pattern the last five sprints set. The outcome record at the end
-gets written against it when the work lands.
+Status: **Implemented and verified locally (2026-08-03).** The Definition of
+Ready below was written and checked before any code; the outcome record at the
+end says what landed against it.
 
 The number is 9.10 rather than 10.0 on purpose: 9.11 is already reserved for
 routing in four places in the code (`create-department.ts`, `ticket.ts`,
@@ -279,3 +279,131 @@ prove it. Everything is additive except the deleted operator routes, which
 nothing calls; there is no migration. The scope is smaller than 9.9 and the
 cuts are taken here rather than in the middle: no branch CRUD, no ownership
 transfer, no import. Proceeding under the standing autonomous authorization.
+
+## Outcome record (2026-08-03)
+
+Three commits: the opening (`9c75a6c` — this DoR and ADR 0021), the services
+(`4694fab`), and the BFF and screen (`4277d8b`).
+
+**Every membership change in the product is now attributable to a person, and
+the path that was not is gone.** The status PATCH, the role PATCH and the
+branch PUT/DELETE left `/internal/*` in the same commit that added
+`organizations/memberships`. A spec asserts what is left: with the service
+credential present and correct, those three paths answer 404 — the guard
+passed and there was no route. The verification walk confirmed it against the
+running service.
+
+**Everything the sprint promised a person could do, they can do.** An
+administrator opens People, sees who is there including suspended and removed
+colleagues, changes somebody's role, suspends and reinstates them, removes
+them and brings them back, and gives a branch manager their branches. Each
+control is gated on the key its own use case checks. Their own row has no
+controls at all, because the server refuses to administer it.
+
+**The three refusals that are security rules, not validation**, each with a
+test named for what it closes: acting on yourself (which is what keeps an
+organization from losing its last administrator — the actor must be active and
+hold the key, and can never be the target, so one always survives), the owner
+as a target (by constant, because the permission map resolves owner and
+organization_admin alike and a subset test cannot tell them apart), and a
+target whose template outreaches the actor's.
+
+### What the implementation decided that the DoR had left open
+
+- **The grant ceiling moved to its own file.** `canGrantRoleTemplate` and the
+  `owner` exclusion lived in `domain/invitation.ts` while invitations were the
+  only caller. A membership use case importing from `invitation.ts` reads like
+  a mistake, so both moved to `domain/role-grants.ts` and
+  `INVITABLE_ROLE_TEMPLATES` became `GRANTABLE_ROLE_TEMPLATES`: one name for
+  one list, because an invitation grants a template exactly as a role change
+  does.
+- **The two branch use cases were deleted, not kept.**
+  `AssignBranchMembershipUseCase` and `RemoveBranchMembershipUseCase` had no
+  caller once the operator routes went, and the replace supersedes both.
+- **`GET /users` validates its filter rather than ignoring an unknown one.**
+  Falling back to the default would answer a narrower question than the one
+  asked, with no way for the caller to tell.
+- **The branch listing returns archived branches too.** The editor sends a
+  full desired set, so a branch it cannot name is a branch it deletes on the
+  next save. Filtering is the caller's, because only the caller knows whether
+  it is drawing a picker or an editor; the screen shows an archived branch
+  exactly when the member already covers it.
+- **The reinstatement edge lands on `active` and nowhere else.** Back into
+  `invited`, or straight into `suspended`, are moves nothing needs.
+- **The panel says the change is not immediate.** An administrator who
+  suspends somebody and watches them keep working for a quarter of an hour
+  would reasonably conclude the product is broken. The sentence is the
+  interface being honest about ADR 0014's bounded staleness, not a disclaimer.
+
+### Verified
+
+organizations-service 213 tests across 8 suites (up from 181), including a new
+controller spec for the five routes and their status codes, and the unit specs
+for each rule in D3–D6. users-service 58, with the status filter's cases —
+including the one that matters most, that the default still means active only.
+web-bff 33, asserting both hops, the route ordering, and that a refusal passes
+through unchanged. apps/web 148 across 20 suites, nine new, with the
+administration controls asserted by swapping the session fixture's permissions.
+
+The full gate — format, lint, typecheck, test, build — ran green across all 15
+projects, and all nine integration suites passed against real PostgreSQL and
+RabbitMQ.
+
+**An end-to-end walk through every process** (browser client → web-bff →
+api-gateway → auth-service / users-service / organizations-service, six
+processes, real JWTs): two accounts registered and signed in; a requester
+refused both writes with 403; the admin promoted **in SQL, which is now the
+only way to make the first one** — the operator endpoint that used to do it is
+deleted; their next token carried `people.suspend`, `people.assign_roles`,
+`branches.read` and `branches.manage_members`; a role change to
+`branch_manager` succeeded, which is the defect fix proving itself; suspend
+removed the person from the default listing and left them in `?status=all`;
+remove-then-reinstate worked; and the refusals answered 403 (self), 400
+(owner, unknown status filter), 409 (template already held) and 404 (unknown
+member, foreign branch).
+
+**In a real browser** against the dev stack: the People screen renders the
+member list with roles, the caller's own row has no Manage button, opening a
+panel shows the role picker, the status actions and the staleness note, the
+first click on Suspend arms the confirmation without firing, the second
+applies it, the row keeps its place with a "Suspended" tag, the live region
+announces it, and Reinstate brings the person back. The network log shows
+`GET /people?status=all`, the branch read on panel open, and both status
+PATCHes at 200, with no console errors.
+
+**One thing the browser check surfaced about the environment, not the code**:
+the local `apps/organizations-service/.env` predated Sprint 9.8 and had no
+`JWT_ACCESS_SECRET`, so the service refused to boot naming the variable —
+which is exactly the intent 9.8 recorded, and exactly how the handoff said it
+would present. Login answered 503 until it was set, the documented fail-closed
+behaviour for "cannot ask" (ADR 0014). Adding the variable fixed it; `.env`
+files are git-ignored, so nothing about it is in the repository.
+
+### Still true after this sprint
+
+Creating, renaming and archiving branches, departments and stations is still
+operator work on `/internal/*` — this sprint's claim is only that no
+_onboarding_ step is unattributable. There is no transfer of ownership, so an
+organization whose only privileged member is its owner cannot change that from
+inside; refusing is the reversible half of a decision not yet made. Suspension
+is not revocation: the person's token keeps working until it expires. Nothing
+compares `mv`. There is still no directory search, filter, sort or pagination,
+no per-person page, no profile field editing, no CSV import, and the platform
+still sends no email.
+
+## Documentation
+
+Meaningfully changed this sprint: ADR 0021 (new — the administration
+boundaries, the four rules, and the five alternatives that lost),
+`product-status.ts` (Member administration from planned to available with the
+staleness caveat stated, and Branch assignment added with the
+creation-is-still-operator-work caveat), the how-it-works roles note (which
+said role changes happen outside the product — true when 9.9 wrote it, false
+now), `SECURITY.md`'s service-credential paragraph (it listed the membership
+lifecycle among what the credential opens; that half is deleted), the
+transition-table and directory-listing comments that had deferred decisions to
+"the people-management sprint" by name, the handoff, and this document. The
+`.claude/launch.json` entries for the five backend dev servers were added
+while verifying, and kept.
+
+No fictional experience, customers, incidents or approvals were introduced.
