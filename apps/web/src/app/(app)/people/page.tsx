@@ -19,6 +19,7 @@ import { can, PERMISSIONS } from '../../../lib/permissions';
 import {
   INVITABLE_ROLE_TEMPLATES,
   issueInvitation,
+  listBranches,
   listInvitations,
   listPeople,
   revokeInvitation,
@@ -26,7 +27,9 @@ import {
   type DirectoryPerson,
   type Invitation,
   type IssuedInvitation,
+  type OrganizationBranch,
 } from '../../../lib/people';
+import { MemberAdmin, statusLabel } from './member-admin';
 import styles from './page.module.css';
 
 function RowSkeletons({ label }: { label: string }) {
@@ -57,9 +60,17 @@ export default function PeoplePage() {
   const { status, session } = useAuth();
   const canRead = can(session, PERMISSIONS.PEOPLE_READ);
   const canInvite = can(session, PERMISSIONS.PEOPLE_INVITE);
+  // One key per control, never one "can manage people" boolean: the approved
+  // matrix separates them and so does the server (ADR 0021).
+  const canAssignRoles = can(session, PERMISSIONS.PEOPLE_ASSIGN_ROLES);
+  const canSuspend = can(session, PERMISSIONS.PEOPLE_SUSPEND);
+  const canManageBranches = can(session, PERMISSIONS.BRANCHES_MANAGE_MEMBERS);
+  const canAdminister = canAssignRoles || canSuspend || canManageBranches;
 
   const [people, setPeople] = useState<DirectoryPerson[] | null>(null);
   const [peopleError, setPeopleError] = useState<string | null>(null);
+  const [branches, setBranches] = useState<OrganizationBranch[] | null>(null);
+  const [managing, setManaging] = useState<string | null>(null);
   const [invitations, setInvitations] = useState<Invitation[] | null>(null);
   const [invitationsError, setInvitationsError] = useState<string | null>(null);
 
@@ -78,12 +89,30 @@ export default function PeoplePage() {
       return;
     }
     try {
-      setPeople(await listPeople(accessToken));
+      // 'all' only for somebody who can act on them. Suspended and removed
+      // people are otherwise noise on a screen that could do nothing about
+      // them — and the server's default is what every picker relies on.
+      setPeople(
+        await listPeople(accessToken, canAdminister ? 'all' : undefined),
+      );
       setPeopleError(null);
     } catch (error) {
       setPeopleError(error instanceof Error ? error.message : 'Load failed');
     }
-  }, [accessToken, canRead]);
+  }, [accessToken, canRead, canAdminister]);
+
+  const loadBranches = useCallback(async () => {
+    if (!accessToken || !canManageBranches) {
+      return;
+    }
+    try {
+      setBranches(await listBranches(accessToken));
+    } catch {
+      // A refused or failed branch listing must not take the directory down
+      // with it: the editor simply does not appear.
+      setBranches(null);
+    }
+  }, [accessToken, canManageBranches]);
 
   const loadInvitations = useCallback(async () => {
     if (!accessToken || !canInvite) {
@@ -108,7 +137,8 @@ export default function PeoplePage() {
     }
     void loadPeople();
     void loadInvitations();
-  }, [status, loadPeople, loadInvitations]);
+    void loadBranches();
+  }, [status, loadPeople, loadInvitations, loadBranches]);
 
   async function submitInvite(event: FormEvent) {
     event.preventDefault();
@@ -345,21 +375,69 @@ export default function PeoplePage() {
             </p>
           ) : (
             <ul className={styles.list}>
-              {people.map((person) => (
-                <li key={person.userId}>
-                  <Card className={styles.row}>
-                    <div className={styles.rowMain}>
-                      <span className={styles.rowTitle}>
-                        {person.preferredName ?? person.displayName}
-                      </span>
-                      <span className={styles.meta}>{person.email}</span>
-                    </div>
-                    <span className={styles.role}>
-                      {roleLabel(person.roleTemplate)}
-                    </span>
-                  </Card>
-                </li>
-              ))}
+              {people.map((person) => {
+                const memberStatus = person.status ?? 'active';
+                const isSelf = person.userId === session.user.id;
+                return (
+                  <li key={person.userId}>
+                    <Card className={styles.memberCard}>
+                      <div className={styles.row}>
+                        <div className={styles.rowMain}>
+                          <span className={styles.rowTitle}>
+                            {person.preferredName ?? person.displayName}
+                          </span>
+                          <span className={styles.meta}>{person.email}</span>
+                        </div>
+                        <div className={styles.rowActions}>
+                          {memberStatus !== 'active' ? (
+                            <span className={styles.statusTag}>
+                              {statusLabel(memberStatus)}
+                            </span>
+                          ) : null}
+                          <span className={styles.role}>
+                            {roleLabel(person.roleTemplate)}
+                          </span>
+                          {/* Your own membership has no controls, because the
+                              server refuses to administer it: that rule is
+                              what guarantees an organization keeps at least
+                              one administrator (ADR 0021). */}
+                          {canAdminister && !isSelf ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-expanded={managing === person.userId}
+                              onClick={() =>
+                                setManaging(
+                                  managing === person.userId
+                                    ? null
+                                    : person.userId,
+                                )
+                              }
+                            >
+                              {managing === person.userId ? 'Close' : 'Manage'}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                      {managing === person.userId ? (
+                        <MemberAdmin
+                          accessToken={session.accessToken}
+                          person={person}
+                          canAssignRoles={canAssignRoles}
+                          canSuspend={canSuspend}
+                          canManageBranches={canManageBranches}
+                          branches={branches}
+                          onChanged={(message) => {
+                            setNote(message);
+                            void loadPeople();
+                          }}
+                        />
+                      ) : null}
+                    </Card>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

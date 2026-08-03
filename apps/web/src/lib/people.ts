@@ -14,6 +14,9 @@
 
 const BFF_URL = process.env.NEXT_PUBLIC_BFF_URL ?? 'http://localhost:3001';
 
+export type MembershipStatus =
+  'active' | 'suspended' | 'deactivated' | 'invited';
+
 export interface DirectoryPerson {
   userId: string;
   email: string;
@@ -23,6 +26,15 @@ export interface DirectoryPerson {
   registeredAt: string;
   /** Which template the membership carries. Display only. */
   roleTemplate?: string;
+  /** Present since the listing can be asked for non-active members. */
+  status?: MembershipStatus;
+}
+
+export interface OrganizationBranch {
+  id: string;
+  code: string;
+  name: string;
+  status: 'active' | 'archived';
 }
 
 export type InvitationStatus = 'pending' | 'accepted' | 'revoked';
@@ -103,8 +115,83 @@ async function call<T>(
   return (await response.json()) as T;
 }
 
-export function listPeople(accessToken: string): Promise<DirectoryPerson[]> {
-  return call(accessToken, 'GET', '/people');
+/**
+ * The directory. Without `status` the server answers ACTIVE members only —
+ * the default every other caller depends on. A management screen asks for
+ * 'all', because a suspended colleague who has vanished cannot be reinstated.
+ */
+export function listPeople(
+  accessToken: string,
+  status?: MembershipStatus | 'all',
+): Promise<DirectoryPerson[]> {
+  const query = status ? `?status=${status}` : '';
+  return call(accessToken, 'GET', `/people${query}`);
+}
+
+/** Templates that may be assigned. Same list the invite form offers. */
+export function changeMemberRole(
+  accessToken: string,
+  userId: string,
+  roleTemplate: string,
+): Promise<{ userId: string; roleTemplate: string; version: number }> {
+  return call(
+    accessToken,
+    'PATCH',
+    `/people/${encodeURIComponent(userId)}/role`,
+    { roleTemplate },
+  );
+}
+
+/**
+ * Suspend, reinstate or remove. Removal is `deactivated` — the row stays, and
+ * since Sprint 9.10 a removed person can be brought back.
+ *
+ * The change is NOT immediate for the person affected: their outstanding
+ * access token keeps working until it expires (ADR 0014). Callers must not
+ * describe this as cutting somebody off.
+ */
+export function changeMemberStatus(
+  accessToken: string,
+  userId: string,
+  status: MembershipStatus,
+): Promise<{ userId: string; status: MembershipStatus; version: number }> {
+  return call(
+    accessToken,
+    'PATCH',
+    `/people/${encodeURIComponent(userId)}/status`,
+    { status },
+  );
+}
+
+export function listBranches(
+  accessToken: string,
+): Promise<OrganizationBranch[]> {
+  return call(accessToken, 'GET', '/people/branches');
+}
+
+export function listMemberBranches(
+  accessToken: string,
+  userId: string,
+): Promise<{ userId: string; branchIds: string[] }> {
+  return call(
+    accessToken,
+    'GET',
+    `/people/${encodeURIComponent(userId)}/branches`,
+  );
+}
+
+/** A replace, not a delta: anything absent from `branchIds` is removed. */
+export function setMemberBranches(
+  accessToken: string,
+  userId: string,
+  branchIds: string[],
+): Promise<{ userId: string; branchIds: string[] }> {
+  return call(
+    accessToken,
+    'PATCH',
+    `/people/${encodeURIComponent(userId)}/branches`,
+    { branchIds },
+  );
 }
 
 export function listInvitations(
@@ -158,7 +245,12 @@ export function acceptInvitation(
   return call(accessToken, 'POST', '/people/invitations/accept', { code });
 }
 
-/** Templates an admin may hand out. `owner` is refused server-side. */
+/**
+ * Templates an admin may hand out, whether by invitation or by changing an
+ * existing membership. `owner` is absent because the server refuses it in
+ * both directions: nobody can grant it, and nobody holding it can be
+ * administered (ADR 0021).
+ */
 export const INVITABLE_ROLE_TEMPLATES = [
   'organization_admin',
   'branch_manager',

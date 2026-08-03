@@ -218,6 +218,103 @@ describe('People endpoints (stub gateway)', () => {
     });
   });
 
+  describe('member administration (Sprint 9.10)', () => {
+    it('passes the directory status filter through', async () => {
+      gateway.respond('GET /api/users?status=all', 200, []);
+
+      await request(app.getHttpServer())
+        .get('/people?status=all')
+        .set('authorization', 'Bearer jwt-access')
+        .expect(200);
+
+      expect(gateway.requests[0].url).toBe('/api/users?status=all');
+    });
+
+    it('routes the three membership writes to organizations-service', async () => {
+      gateway.respond('PATCH /api/organizations/memberships/u1/role', 200, {
+        userId: 'u1',
+        roleTemplate: 'agent',
+        version: 2,
+      });
+      gateway.respond('PATCH /api/organizations/memberships/u1/status', 200, {
+        userId: 'u1',
+        status: 'suspended',
+        version: 3,
+      });
+      gateway.respond('PATCH /api/organizations/memberships/u1/branches', 200, {
+        userId: 'u1',
+        branchIds: ['b1'],
+      });
+
+      await request(app.getHttpServer())
+        .patch('/people/u1/role')
+        .set('authorization', 'Bearer jwt-access')
+        .send({ roleTemplate: 'agent' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch('/people/u1/status')
+        .set('authorization', 'Bearer jwt-access')
+        .send({ status: 'suspended' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch('/people/u1/branches')
+        .set('authorization', 'Bearer jwt-access')
+        .send({ branchIds: ['b1'] })
+        .expect(200);
+
+      expect(gateway.requests.map((entry) => entry.url)).toEqual([
+        '/api/organizations/memberships/u1/role',
+        '/api/organizations/memberships/u1/status',
+        '/api/organizations/memberships/u1/branches',
+      ]);
+      // The bodies pass through unshaped, as everything here does.
+      expect(gateway.requests[2].body).toEqual({ branchIds: ['b1'] });
+    });
+
+    it('matches the branch listing before the member branch route', async () => {
+      gateway.respond('GET /api/organizations/branches', 200, []);
+      gateway.respond('GET /api/organizations/memberships/u1/branches', 200, {
+        userId: 'u1',
+        branchIds: [],
+      });
+
+      await request(app.getHttpServer())
+        .get('/people/branches')
+        .set('authorization', 'Bearer jwt-access')
+        .expect(200);
+      await request(app.getHttpServer())
+        .get('/people/u1/branches')
+        .set('authorization', 'Bearer jwt-access')
+        .expect(200);
+
+      // 'branches' must not be read as a userId.
+      expect(gateway.requests[0].url).toBe('/api/organizations/branches');
+      expect(gateway.requests[1].url).toBe(
+        '/api/organizations/memberships/u1/branches',
+      );
+    });
+
+    it('forwards an administration refusal verbatim', async () => {
+      // 403 for "you may not", 404 for a member of another organization —
+      // both shapes are the service's security design, not this layer's.
+      gateway.respond('PATCH /api/organizations/memberships/u1/status', 403, {
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'you cannot change your own membership',
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch('/people/u1/status')
+        .set('authorization', 'Bearer jwt-access')
+        .send({ status: 'suspended' })
+        .expect(403);
+
+      expect(response.body.message).toBe(
+        'you cannot change your own membership',
+      );
+    });
+  });
+
   it('adds no authorization of its own: an anonymous call still reaches upstream', async () => {
     // The BFF has never decided access and must not start here — the service
     // is the one place that refuses, and a second gate would be a second

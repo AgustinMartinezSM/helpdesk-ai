@@ -92,6 +92,82 @@
   white-space: nowrap;
 }
 
+/* A member row can open an administration panel underneath it, so the Card
+   holds a column while the row itself stays the same shape as before. */
+.memberCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+}
+
+.memberCard .row {
+  padding: 0;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Shown only when it is not 'active': a tag on every row would be noise, and
+   the listing was active-only until there was a screen that could change it. */
+.statusTag {
+  padding: 0.1875rem 0.625rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.adminPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--border);
+}
+
+.adminGroup {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.adminLabel {
+  flex-basis: 100%;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.adminNote {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.branchList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.branchOption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
 .inviteCard {
   display: flex;
   flex-direction: column;

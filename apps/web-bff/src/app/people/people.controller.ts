@@ -44,10 +44,14 @@ export class PeopleController {
     @Inject(GATEWAY_CLIENT) private readonly gateway: GatewayClient,
   ) {}
 
-  /** The organization's active members. */
+  /** The organization's members; ?status=all includes suspended and removed. */
   @Get()
-  directory(@Req() req: BrowserRequest): Promise<unknown> {
-    return this.forward(req, 'GET', '/api/users');
+  directory(
+    @Req() req: BrowserRequest,
+    @Query('status') status?: string,
+  ): Promise<unknown> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return this.forward(req, 'GET', `/api/users${query}`);
   }
 
   @Get('me')
@@ -128,6 +132,74 @@ export class PeopleController {
       req,
       'POST',
       `/api/organizations/invitations/${encodeURIComponent(invitationId)}/revoke`,
+    );
+  }
+
+  /**
+   * The branch picker's source. Declared before ':userId/branches' below —
+   * they do not collide today (different depths), but the ordering is the
+   * habit this controller already keeps for the invitation literals.
+   */
+  @Get('branches')
+  branches(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(req, 'GET', '/api/organizations/branches');
+  }
+
+  // Member administration (Sprint 9.10). Still no policy here: which of these
+  // a caller may perform is three separate permission keys, all checked in
+  // organizations-service, and the refusals pass through untouched.
+
+  @Patch(':userId/role')
+  changeRole(
+    @Req() req: BrowserRequest,
+    @Param('userId') userId: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'PATCH',
+      `/api/organizations/memberships/${encodeURIComponent(userId)}/role`,
+      body,
+    );
+  }
+
+  @Patch(':userId/status')
+  changeStatus(
+    @Req() req: BrowserRequest,
+    @Param('userId') userId: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'PATCH',
+      `/api/organizations/memberships/${encodeURIComponent(userId)}/status`,
+      body,
+    );
+  }
+
+  @Get(':userId/branches')
+  memberBranches(
+    @Req() req: BrowserRequest,
+    @Param('userId') userId: string,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'GET',
+      `/api/organizations/memberships/${encodeURIComponent(userId)}/branches`,
+    );
+  }
+
+  @Patch(':userId/branches')
+  setMemberBranches(
+    @Req() req: BrowserRequest,
+    @Param('userId') userId: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    return this.forward(
+      req,
+      'PATCH',
+      `/api/organizations/memberships/${encodeURIComponent(userId)}/branches`,
+      body,
     );
   }
 

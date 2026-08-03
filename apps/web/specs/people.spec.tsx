@@ -1,5 +1,11 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { AuthProvider } from '../src/components/auth-context';
 import PeoplePage from '../src/app/(app)/people/page';
 
@@ -247,5 +253,350 @@ describe('PeoplePage', () => {
     expect(
       await screen.findByText('you are not allowed to manage invitations here'),
     ).toBeTruthy();
+  });
+});
+
+describe('PeoplePage member administration', () => {
+  const ADMIN = {
+    ...BASE_SESSION,
+    permissions: [
+      'people.read',
+      'people.invite',
+      'people.assign_roles',
+      'people.suspend',
+      'branches.manage_members',
+      'branches.read',
+    ],
+  };
+
+  const SUSPENDED_BOB = {
+    userId: 'u8',
+    email: 'bob@empresa.com',
+    displayName: 'Bob Requester',
+    preferredName: null,
+    phone: null,
+    registeredAt: '2026-01-01T00:00:00.000Z',
+    roleTemplate: 'requester',
+    status: 'suspended',
+  };
+
+  function adminRoutes(
+    people: unknown[],
+    extra: Array<[RegExp, Scripted, string?]> = [],
+  ): Array<[RegExp, Scripted, string?]> {
+    return [
+      [/\/session\/refresh$/, { status: 200, body: ADMIN }],
+      ...extra,
+      [/\/people\/branches$/, { status: 200, body: [] }, 'GET'],
+      [/\/people\/invitations$/, { status: 200, body: [] }, 'GET'],
+      [/\/people(\?|$)/, { status: 200, body: people }, 'GET'],
+    ];
+  }
+
+  it('asks for every membership status, so a suspended colleague is visible', async () => {
+    const calls = mockFetch(
+      adminRoutes([{ ...ADA, status: 'active' }, SUSPENDED_BOB]),
+    );
+    renderPage();
+
+    await screen.findByText('Bob Requester');
+    expect(screen.getByText('Suspended')).toBeTruthy();
+    // Without ?status=all the server answers active members only, and a
+    // suspended person could never be reinstated from this screen.
+    expect(calls.some((call) => call.url.includes('/people?status=all'))).toBe(
+      true,
+    );
+  });
+
+  it('offers no controls on your own membership', async () => {
+    // Not politeness: the server refuses, and that refusal is what keeps an
+    // organization from losing its last administrator (ADR 0021).
+    mockFetch(
+      adminRoutes([
+        { ...ADA, userId: 'u1', displayName: 'Me Myself', status: 'active' },
+      ]),
+    );
+    renderPage();
+
+    await screen.findByText('Me Myself');
+    expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+  });
+
+  it('changes a role through the key the server checks', async () => {
+    const calls = mockFetch(
+      adminRoutes(
+        [{ ...ADA, roleTemplate: 'requester', status: 'active' }],
+        [
+          [
+            /\/people\/u9\/role$/,
+            {
+              status: 200,
+              body: { userId: 'u9', roleTemplate: 'agent', version: 2 },
+            },
+            'PATCH',
+          ],
+          [
+            /\/people\/u9\/branches$/,
+            { status: 200, body: { userId: 'u9', branchIds: [] } },
+            'GET',
+          ],
+        ],
+      ),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }));
+    // Scoped to the members list: the invite form has its own Role picker,
+    // and the two must stay independent.
+    const members = screen.getByLabelText('Members');
+    fireEvent.change(within(members).getByLabelText('Role'), {
+      target: { value: 'agent' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save role' }));
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) =>
+            call.init?.method === 'PATCH' &&
+            call.url.endsWith('/people/u9/role'),
+        ),
+      ).toBe(true),
+    );
+    const patched = calls.find((call) => call.url.endsWith('/people/u9/role'));
+    expect(JSON.parse(String(patched?.init?.body))).toEqual({
+      roleTemplate: 'agent',
+    });
+  });
+
+  it('never suspends on the first click', async () => {
+    const calls = mockFetch(
+      adminRoutes(
+        [{ ...ADA, roleTemplate: 'requester', status: 'active' }],
+        [
+          [
+            /\/people\/u9\/status$/,
+            {
+              status: 200,
+              body: { userId: 'u9', status: 'suspended', version: 2 },
+            },
+            'PATCH',
+          ],
+          [
+            /\/people\/u9\/branches$/,
+            { status: 200, body: { userId: 'u9', branchIds: [] } },
+            'GET',
+          ],
+        ],
+      ),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Suspend — the membership of Ada Lovelace',
+      }),
+    );
+    expect(calls.some((call) => call.url.endsWith('/people/u9/status'))).toBe(
+      false,
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Suspend — the membership of Ada Lovelace',
+      }),
+    );
+    await waitFor(() =>
+      expect(calls.some((call) => call.url.endsWith('/people/u9/status'))).toBe(
+        true,
+      ),
+    );
+  });
+
+  it('offers reinstatement to a removed member, because removal is reversible', async () => {
+    mockFetch(
+      adminRoutes(
+        [{ ...SUSPENDED_BOB, status: 'deactivated' }],
+        [
+          [
+            /\/people\/u8\/branches$/,
+            { status: 200, body: { userId: 'u8', branchIds: [] } },
+            'GET',
+          ],
+        ],
+      ),
+    );
+    renderPage();
+
+    await screen.findByText('Bob Requester');
+    expect(screen.getByText('Removed')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Reinstate' }),
+    ).toBeTruthy();
+    // Already removed: nothing left to remove.
+    expect(
+      screen.queryByRole('button', {
+        name: 'Remove — Bob Requester from the organization',
+      }),
+    ).toBeNull();
+  });
+
+  it('says out loud that a suspension is not immediate', async () => {
+    mockFetch(
+      adminRoutes(
+        [{ ...ADA, status: 'active' }],
+        [
+          [
+            /\/people\/u9\/branches$/,
+            { status: 200, body: { userId: 'u9', branchIds: [] } },
+            'GET',
+          ],
+        ],
+      ),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }));
+    // The token outlives the change by up to fifteen minutes (ADR 0014), and
+    // an admin who is not told that will think the product is broken.
+    expect(await screen.findByText(/up to fifteen minutes/)).toBeTruthy();
+  });
+
+  it('sends the whole desired branch set, archived ones included', async () => {
+    const calls = mockFetch(
+      adminRoutes(
+        [{ ...ADA, roleTemplate: 'branch_manager', status: 'active' }],
+        [
+          [
+            /\/people\/branches$/,
+            {
+              status: 200,
+              body: [
+                {
+                  id: 'b1',
+                  code: 'store-1',
+                  name: 'Store 1',
+                  status: 'active',
+                },
+                {
+                  id: 'b2',
+                  code: 'store-2',
+                  name: 'Store 2',
+                  status: 'active',
+                },
+                {
+                  id: 'b3',
+                  code: 'old',
+                  name: 'Closed store',
+                  status: 'archived',
+                },
+              ],
+            },
+            'GET',
+          ],
+          [
+            /\/people\/u9\/branches$/,
+            { status: 200, body: { userId: 'u9', branchIds: ['b1', 'b3'] } },
+            'GET',
+          ],
+          [
+            /\/people\/u9\/branches$/,
+            {
+              status: 200,
+              body: { userId: 'u9', branchIds: ['b1', 'b3', 'b2'] },
+            },
+            'PATCH',
+          ],
+        ],
+      ),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }));
+    // The archived branch is listed BECAUSE it is covered: a replace that
+    // could not name it would silently drop it.
+    expect(await screen.findByText('Closed store (archived)')).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('Store 2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save branches' }));
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) =>
+            call.init?.method === 'PATCH' &&
+            call.url.endsWith('/people/u9/branches'),
+        ),
+      ).toBe(true),
+    );
+    const saved = calls.find(
+      (call) =>
+        call.init?.method === 'PATCH' &&
+        call.url.endsWith('/people/u9/branches'),
+    );
+    expect(JSON.parse(String(saved?.init?.body))).toEqual({
+      branchIds: ['b1', 'b3', 'b2'],
+    });
+  });
+
+  it('renders an administration refusal as a real message', async () => {
+    // The permission snapshot said yes; the stored membership says no.
+    mockFetch(
+      adminRoutes(
+        [{ ...ADA, roleTemplate: 'requester', status: 'active' }],
+        [
+          [
+            /\/people\/u9\/status$/,
+            {
+              status: 403,
+              body: {
+                message:
+                  'you cannot manage a member whose role template is "owner"',
+              },
+            },
+            'PATCH',
+          ],
+          [
+            /\/people\/u9\/branches$/,
+            { status: 200, body: { userId: 'u9', branchIds: [] } },
+            'GET',
+          ],
+        ],
+      ),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }));
+    const suspend = await screen.findByRole('button', {
+      name: 'Suspend — the membership of Ada Lovelace',
+    });
+    fireEvent.click(suspend);
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Suspend — the membership of Ada Lovelace',
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        'you cannot manage a member whose role template is "owner"',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('hides every administration control from a reader', async () => {
+    mockFetch([
+      [/\/session\/refresh$/, { status: 200, body: READER_SESSION }],
+      [/\/people$/, { status: 200, body: [ADA] }],
+    ]);
+    renderPage();
+
+    await screen.findByText('Ada Lovelace');
+    // Same page, same data, different permission list — the gate is the key
+    // and never the role name.
+    expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
   });
 });
