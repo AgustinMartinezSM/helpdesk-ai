@@ -311,3 +311,154 @@ browser pass over authenticated screens; and the documentation sweep.
 - Full gate, focused Conventional Commits, `--ff-only` to `main`, remote CI
   green on the final HEAD, clean tree, and `CURRENT-HANDOFF.md` naming the next
   exact action.
+
+## Outcome
+
+Suspending somebody lowers `GET /analytics/summary`'s `totalUsers` and
+reactivating them raises it again; auth-service refuses to boot without its
+service credential instead of quietly minting tenant-less tokens; and the
+authenticated screens nobody had ever looked at were looked at, which cost the
+sprint two real defects and a third that was not where anybody expected.
+
+### What was built
+
+`user_snapshots` carries `status` and `last_event_at`; `MetricsConsumer` binds
+`membership.status-changed.v1`; both apply methods are last-writer-wins upserts
+that never delete; `total()` counts `active`. `INTERNAL_SERVICE_TOKEN` is
+required in auth-service and `MembershipResolver` is a required constructor
+parameter. The operator script carries status under the same guard, and its
+orphan report became a real anti-join. ADR 0026 gained a dated amendment.
+
+### The part worth carrying: the check that examined the pairs its author expected
+
+Three separate times this sprint, a check that looked adequate was not, and the
+shape was identical each time — **the test verified the mechanism rather than
+the answer**.
+
+- **The Account screen's raw role keys.** Sprint 10.2 closed this by routing
+  `session.user.roles` through `roleLabel`, and a spec was written that scans
+  every authenticated `.tsx` for a role value rendered without a label call. It
+  passes. It has always passed. What it cannot see is that `roleLabel` answers
+  for role TEMPLATES while those values are the legacy global vocabulary —
+  `user`, `agent`, `admin`. Only `agent` overlaps, so the one case anybody
+  eyeballed looked right, and **every freshly registered account, which is
+  `user`, printed the raw key for two sprints**. A second spec iterating the
+  template vocabulary passed too, because the leaking value was never in the
+  loop.
+- **The orphan report in `backfill-user-snapshots.sh`.** Its header promised
+  "projection rows with no membership behind them"; the query was a `GROUP BY`
+  over the whole table with no filter, directly above a suggested `DELETE`. An
+  operator who trusted the label would have deleted a healthy organization's
+  entire projection. Sprint 10.7 wrote it and nobody ran it.
+- **My own contrast measurement**, twice. See below.
+
+### The defect no suite could have found, and the two false ones on the way to it
+
+**A CSS `transition` on `color` bound to a theme token never lands on the new
+value.** The element keeps the PREVIOUS theme's colour — measured unchanged at
+three seconds, snapping to the correct value the instant the transition is
+removed. Ten rules across the app shell, the public nav and footer, Helpi, the
+landing page, the ticket detail and the theme button itself transition `color`,
+so pressing the theme control left the primary navigation painted in the other
+theme's ink at **2.36:1**, against the 4.5:1 this system holds itself to — on
+the public site as well as the app, which two previous browser passes walked
+without seeing. Fixed by suppressing transitions for the duration of the swap
+rather than deleting them, since they exist for hover and focus. After: 7.31:1
+light, 7.86:1 dark.
+
+**Getting there required rejecting two findings I had already believed.**
+
+The first: `read_page` reported the login page's shared-workstation checkbox as
+`checkbox "on"`, which reads exactly like a missing accessible name. It is not
+— `labels.length === 1` and the name is the full sentence. That was the
+accessibility-tree serialiser, not the page.
+
+The second is the one worth keeping. A contrast sweep reported seven failures
+in the light theme; I concluded they were an artifact of having set
+`data-theme` by hand, and moved on. Then thirty failures appeared in dark. Both
+readings were **half right in a way that averaged out to wrong**: the numbers
+were real, my explanation was not, and the correct explanation — that the
+toggle path and the fresh-load path genuinely differ — was the defect itself. A
+fresh load is correct at either theme; only switching is broken. **Twice I
+nearly wrote up the wrong thing: once a defect that did not exist, once an
+artifact that was a defect.** What settled it was measuring the same element
+four ways — fresh load, after toggle, after three seconds, and with the
+transition removed.
+
+### Both red first, and then checked by mutation
+
+The unit tests failed structurally rather than semantically — `is not a
+constructor` — which is an honest red and a weak one. So after they went green
+they were **mutated**: with `total()` reverted to counting every edge, five of
+the seven fail; with the LWW guard dropped, the stale-replay one fails. The
+auth assertion got the same treatment — deleting `tm` from the issuer, the
+exact defect that hid for four sprints, now fails the integration flow.
+
+That is the answer to the section above: a test that passes proves nothing
+until you have seen it fail for the reason you believe it exists.
+
+### The adversarial pass, and what it was right about
+
+A multi-agent review of the sprint diff returned three confirmed findings after
+refutation. Two were the same real one — README and `local-development.md`
+still said auth-service runs and logs in without the credential — and one was a
+real defect introduced hours earlier: the orphan report's `VALUES` list is
+interpolated into a single `psql -c` argument, which exceeds `MAX_ARG_STRLEN`
+at roughly 1,400 memberships. **Reproduced in the container**: at 276 KB `-f`
+succeeds and `-c` dies with "Argument list too long", and under `set -e` that
+would abort the run before printing the report, making a successful backfill
+look failed. It also correctly refuted several findings, including one blaming
+this sprint for a fail-open removed ten sprints ago.
+
+### Verification
+
+Full gate green: format, lint (0 errors), typecheck across 15 projects, **1347
+unit tests across all 15**, and build.
+
+**Docker was running, so all nine integration suites ran LOCALLY for the first
+time in five sprints** — 103 tests against real PostgreSQL and RabbitMQ.
+Beyond the suites, because a projection change that only ever meets an empty
+test database has not really been tested:
+
+- The migration was applied to a **populated** table (the dev database, still
+  at the pre-10.7 schema) and the reconstruction verified column by column.
+- The operator script was **run**, twice, against the real dev databases: 2
+  rows became 28, status propagated, the anti-join reported zero orphans on a
+  healthy database and found a synthetic one when planted.
+- Its upsert guard was exercised as raw SQL: a stale event changes nothing
+  (`INSERT 0 0`), a newer one applies, and `joined_at` is not rewritten.
+- The browser pass covered `/account`, `/organization`, `/people` and the
+  public site, in both themes, as a real registered account and then as an
+  administrator.
+
+### What this sprint refused to claim
+
+**The number counts active memberships as this database has heard of them.** A
+deployment that has never run the backfill, or that lost a status event with no
+replay, still reports something older than the truth. That is the standing
+property of a projection, stated rather than assumed.
+
+**`tickets-service` was the seventh server against five preview slots**, so the
+ticket listing and ticket detail were not seen in a browser — and the ticket
+detail is one of the ten files that transitions `color`. Its fix is covered by
+the same global rule, but nobody looked at it.
+
+**The Checkbox/Radio/Dialog/Banner/Tooltip primitives were not built**, and
+that is the position rather than an omission: nothing in the product needs one,
+and inventing them ahead of a use case invents their API too.
+
+### Documentation
+
+- **ADR 0026** — dated amendment: which edges count, and how the number falls.
+- **`pilot-readiness.md`** — two items closed, with what remains true beside
+  them.
+- **`SECURITY.md`** — the credential paragraph rewritten as a correction:
+  "degrade open" describes a request that fails, not a configuration that is
+  absent, and the two had been in the same words.
+- **`README.md`**, **`local-development.md`**, **`data-ownership.md`**,
+  `.env.example`, the operator script, and `CURRENT-HANDOFF.md`.
+- **i18n renumbered 10.8 → 10.9** across three live documents and three code
+  comments, in the opening commit.
+
+No fictional experience, customer, testimonial, incident, external approval or
+deployment was introduced.

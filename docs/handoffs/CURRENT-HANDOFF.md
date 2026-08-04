@@ -1146,14 +1146,92 @@ would dead-letter every registration); never prune `user.registered.v1` from
 `retiredBindingKeys` — it is the first entry there that is NOT a deleted
 contract, and three other consumers still want the event.
 
-**The next action is Sprint 10.8.** In rough order of consequence: **nothing
-decrements an organization's headcount** (a new consumer arm, a new port
-method, and its own question — does a suspended member count?);
-**`INTERNAL_SERVICE_TOKEN` becoming required in auth-service**, which needs the
-auth integration suite taught to override the resolver at the boundary first —
-its first failure is an env-validation error in the unit step, so it must not
-ride along with anything else; and the remaining design-system debt in
-`design-system.md`. Open it with its own Definition of Ready.
+## Sprint 10.8 — a headcount that goes down, and a credential that must be there
+
+**Status: complete, remote CI green.** All three items the 10.7 entry named
+were taken. Full record in `docs/progress/SPRINT-010.8.md`.
+
+**`totalUsers` now falls.** `user_snapshots` carries the membership's `status`
+and a `last_event_at` watermark, `MetricsConsumer` binds
+`membership.status-changed.v1`, and the count asks for **`active`** — the same
+question the people directory answers by default, so the dashboard and the
+People screen cannot disagree. **The row is NEVER deleted**: `deactivated`
+stopped being terminal in 9.10, and deleting would throw away the watermark
+that makes a stale replayed suspension harmless instead of destructive. A
+status change for an edge the projection never saw CREATES the row (a lost
+`created` event must not make a live person invisible), and a later `created`
+corrects that placeholder's `joined_at` downward through `LEAST` while the
+guard still refuses to let it touch the status — which is what stops ordinary
+out-of-order delivery from reviving everybody who was suspended. The filter
+names what COUNTS rather than what does not, so a status invented by a later
+sprint fails closed. ADR 0026 carries the amendment.
+
+**`INTERNAL_SERVICE_TOKEN` is required in auth-service, and this was a
+correction rather than a tightening.** Its own env comment had carried the
+condition since 9.2 ("required in the phase that makes the claims decide
+something") and that phase was four sprints past. Unset, the service booted,
+logged one warning, and minted tenant-less tokens forever — so a forgotten
+variable produced a product where every write was refused with a 403 naming
+nothing. `SessionService` takes the resolver at the **type level** too, which
+is the part that makes it structural: the branch handling its absence returned
+`null`, and `null` is the resolver's word for "belongs to no organization", so
+a configuration mistake was indistinguishable from a fact about the account.
+The test that pinned the old behaviour is deleted, deliberately.
+
+**The auth integration suite now answers with a real membership and VERIFIES
+THE SIGNED TOKEN.** That was the sequencing 10.6 asked for, and it earns its
+keep: deleting `tm` from the issuer — the exact defect that granted nothing for
+four sprints — now fails that suite.
+
+**Three checks that examined the pairs their author expected.** This is the
+sprint's lesson and it repeated three times. (1) The Account screen printed a
+raw role key for two sprints after 10.2 "closed" it: the values are the LEGACY
+GLOBAL vocabulary (`user`/`agent`/`admin`), the label map answers for role
+TEMPLATES, only `agent` overlaps — so the one case anybody eyeballed looked
+right while every freshly registered account showed `user`. The spec that
+scans for unlabelled role values passed throughout, because it asserts a screen
+CALLS a label function, not that the function can answer. (2) The orphan report
+in `backfill-user-snapshots.sh` promised an anti-join and was a `GROUP BY` with
+no filter, directly above a suggested `DELETE` — trusting the label would have
+deleted a healthy organization's projection. (3) My own contrast sweep, twice.
+
+**A `transition` on `color` bound to a theme token NEVER LANDS on the new
+value.** Found by pressing the toggle and measuring: the element keeps the
+PREVIOUS theme's colour, unchanged at three seconds, snapping the instant the
+transition is removed. Ten rules transition `color`, so the theme control left
+the primary navigation — and itself — in the other theme's ink at **2.36:1**,
+on the public site as well as the app, past two earlier browser passes. Fixed
+with `[data-theme-switching]` set for the swap and cleared after **two** frames
+(one is not enough); the transitions stay, because they exist for hover and
+focus. After: 7.31:1 / 7.86:1. **A fresh load was always correct — only
+switching was broken**, which is why nothing caught it.
+
+**Docker was up: all nine integration suites ran LOCALLY for the first time in
+five sprints** (103 tests). The migration was applied to a POPULATED table, the
+operator script was actually RUN twice against the dev databases, and its
+upsert guard was exercised as raw SQL.
+
+**An adversarial multi-agent review of the diff found a defect introduced hours
+earlier**: the orphan report's `VALUES` list as a `psql -c` argument exceeds
+`MAX_ARG_STRLEN` at roughly 1,400 memberships. Reproduced in the container at
+276 KB — `-f` succeeds, `-c` dies — and `set -e` would have aborted before
+printing the report, making a successful backfill look failed. It also caught
+README and `local-development.md` still promising the old auth behaviour.
+
+Two things NOT to do: never reach for `roleLabel` on `session.user.roles` (two
+vocabularies, one overlapping key — use `globalRoleLabel`); and never move the
+`[data-theme-switching]` rule inside the reduced-motion block, because it is a
+correctness guard and not motion design.
+
+**The next action is Sprint 10.9 — complete internationalization**, which is
+the number this sprint took and renumbered across three live documents and
+three code comments. Helpi is still the only translated part of the product;
+es-AR is the primary language and en-US the planned second. Read
+`brand-strategy.md` before touching copy. If i18n is not the appetite, the
+standing alternatives are the four projections that still have no
+reconciliation, and Block A's list below — where email delivery remains top by
+consequence and still requires the project owner's approval under ADR 0008.
+Whatever is chosen, open it with its own Definition of Ready.
 
 ## Things that will bite you if you do not know them
 
@@ -1392,8 +1470,8 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-**The next action is Sprint 10.8**, as described at the end of the Sprint 10.7
-entry above. Block B’s multi-tenant story is complete; what remains is listed
+**The next action is Sprint 10.9 — complete internationalization**, as
+described at the end of the Sprint 10.8 entry above. Block B’s multi-tenant story is complete; what remains is listed
 there in order of consequence. The list below is **Block
 A's** candidate list, kept because it is still the right list for whenever
 Block A resumes. Nothing on it is the next thing to do, and email in particular
@@ -1453,8 +1531,8 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ## Suggested continuation prompt
 
 > Continue HelpDesk AI. **Block A is formally closed and Block B is open;
-> Sprints 10.0 through 10.7 are complete, and the next action is Sprint 10.8 —
-> see the Sprint 10.7 entry for the ordered list of what remains.** Read
+> Sprints 10.0 through 10.8 are complete, and the next action is Sprint 10.9,
+> complete internationalization — see the Sprint 10.8 entry.** Read
 > `docs/architecture/design-system.md` before touching a colour and
 > `brand-strategy.md` before touching copy; `apps/web/src/lib/product-status.ts`
 > stays authoritative for what may be claimed (ADR 0009). Do not start email,
@@ -1609,7 +1687,18 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > unit suite asserting semantics the database does not produce. When a double
 > and a repository disagree, a test on one side is not coverage.
 >
-> Open 10.8 with its own Definition of Ready, the pattern the last eighteen
+> **What 10.8 makes true, and the habit it argues for**: `totalUsers` counts
+> ACTIVE memberships and the row is never deleted, `INTERNAL_SERVICE_TOKEN` is
+> required in auth-service, and three separate checks turned out to verify the
+> mechanism rather than the answer — a spec that asserts a screen CALLS a label
+> function cannot see that the function answers for the wrong vocabulary. A
+> test that passes proves nothing until you have watched it fail for the reason
+> you believe it exists; this sprint mutated its own green tests to find out.
+> And the defect nothing could have caught was found by pressing the theme
+> toggle: a `transition` on `color` bound to a theme token never lands on the
+> new value.
+>
+> Open 10.9 with its own Definition of Ready, the pattern the last nineteen
 > sprints set. Block A's candidate list (email delivery top by consequence, and
 > still the project owner's decision under ADR 0008) is kept in "Exact next
 > action" for whenever Block A resumes — it is not the next thing to do.
