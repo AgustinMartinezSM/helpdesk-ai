@@ -12,12 +12,17 @@
 #   4. Do a ticket and its comments and history agree on the organization?
 #   5. Did everything land on the bootstrap organization?
 #
-# Since phase 7 the seven constrained tables carry NOT NULL, so a null there
-# is doubly impossible — check 2 stays as belt and braces. user_snapshots and
-# audit_events are EXEMPT by design (registration is anonymous, and the audit
-# firehose records the tenantless user.registered.v1), so they legitimately
-# accumulate null rows between a registration and its membership event: their
-# counts are printed as informational and never fail the run.
+# Since phase 7 the constrained tables carry NOT NULL, so a null there is
+# doubly impossible — check 2 stays as belt and braces.
+#
+# ONE table is EXEMPT by design: helpdesk_audit.audit_events, because the
+# firehose records the structurally tenantless user.registered.v1 forever. Its
+# count is printed as informational and never fails the run.
+#
+# user_snapshots was the second exemption until Sprint 10.7 (ADR 0026), and
+# is no longer. It stopped recording registrations: it is a projection of the
+# membership edge now, keyed on (user_id, organization_id) with a NOT NULL
+# tenant, so a null there is a real fault and this script must fail on it.
 #
 # USAGE
 #
@@ -53,7 +58,7 @@ audit_service:helpdesk_audit:audit_events
 # Tables whose organization_id is nullable BY DESIGN after phase 7. Check 2
 # reports their null counts but never fails on them; every other table in
 # SCOPED is NOT NULL and fails the run on a single null.
-NULLABLE_BY_DESIGN="helpdesk_analytics.user_snapshots helpdesk_audit.audit_events"
+NULLABLE_BY_DESIGN="helpdesk_audit.audit_events"
 
 # The per-check loops below run in `| while` pipelines, which are subshells:
 # an assignment to FAILED inside them silently vanishes. That bug shipped in
@@ -115,8 +120,9 @@ echo "$SCOPED" | while IFS=: read -r role db tables; do
       -c "SELECT count(*) FROM ${table} WHERE organization_id IS NULL;")
     case " ${NULLABLE_BY_DESIGN} " in
       *" ${db}.${table} "*)
-        # Registrations legitimately leave nulls here until the membership
-        # event stamps them; the count is worth seeing, not worth failing on.
+        # The audit firehose records the structurally tenantless
+        # user.registered.v1 forever, so nulls here are permanent and
+        # correct. The count is worth seeing, not worth failing on.
         echo "   ${db}.${table}: ${n} (nullable by design)"
         ;;
       *)

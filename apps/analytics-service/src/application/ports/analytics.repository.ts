@@ -51,19 +51,28 @@ export const USER_SNAPSHOT_REPOSITORY = Symbol('USER_SNAPSHOT_REPOSITORY');
 export interface ApplyMembershipCreated {
   userId: string;
   organizationId: string;
-  /** Membership creation time — becomes registeredAt on a row seeded here. */
+  /** Membership creation time; becomes `joinedAt` on the row. */
   createdAt: Date;
 }
 
+/**
+ * The membership edge set, projected for counting (Sprint 10.7, ADR 0026).
+ *
+ * There is no `applyRegistered` any more, and its absence is the decision.
+ * A registration is tenantless by construction — the membership that would
+ * supply a tenant is created by consuming that very event — so a row written
+ * from one had no organization, and a row with no organization answers
+ * nothing this projection is asked. Worse, it made the tenant first-come-wins,
+ * and the first to come was always the bootstrap membership.
+ */
 export interface UserSnapshotRepository {
-  /** Idempotent on userId; never overwrites a row that already exists. */
-  applyRegistered(input: { userId: string; registeredAt: Date }): Promise<void>;
   /**
-   * Atomic upsert keyed on userId: stamps the organization on an existing
-   * row, or creates the row when the registration event was lost or is late
-   * — a member the organization can see must never be missing from its
-   * count. On the create path registeredAt is the membership time: the
-   * honest nearby value, since the real registration instant never arrived.
+   * Records that a person belongs to an organization. One row per edge, so
+   * somebody in two organizations is counted in both.
+   *
+   * Idempotent on `(userId, organizationId)`: redelivery inserts nothing and
+   * never rewrites `joinedAt`, which is the only non-key column and which
+   * nothing reads — rewriting it would churn rows to no end.
    */
   applyMembershipCreated(input: ApplyMembershipCreated): Promise<void>;
   total(organizationId: string): Promise<number>;

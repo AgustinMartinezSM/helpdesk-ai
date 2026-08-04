@@ -3,7 +3,6 @@ import {
   requireEnvelopeOrganization,
   ticketCreatedV2,
   ticketStatusChangedV2,
-  userRegisteredV1,
   type MessagingClient,
   type MessagingLogger,
 } from '@helpdesk-ai/messaging';
@@ -11,7 +10,6 @@ import type {
   ApplyMembershipCreatedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
-  ApplyUserRegisteredUseCase,
 } from '../../application/use-cases/apply-events';
 
 /** Durable queue owned by this service (see docs/architecture/messaging.md). */
@@ -28,7 +26,6 @@ export class MetricsConsumer {
     private readonly messaging: MessagingClient,
     private readonly applyCreated: ApplyTicketCreatedUseCase,
     private readonly applyStatusChanged: ApplyTicketStatusChangedUseCase,
-    private readonly applyRegistered: ApplyUserRegisteredUseCase,
     private readonly applyMembershipCreated: ApplyMembershipCreatedUseCase,
     private readonly logger?: MessagingLogger,
   ) {}
@@ -51,19 +48,27 @@ export class MetricsConsumer {
   async start(): Promise<void> {
     await this.messaging.subscribe({
       queue: METRICS_QUEUE,
-      contracts: [
-        ticketCreatedV2,
-        ticketStatusChangedV2,
-        userRegisteredV1,
-        membershipCreatedV1,
-      ],
+      contracts: [ticketCreatedV2, ticketStatusChangedV2, membershipCreatedV1],
       // Historical routing keys, as string literals ON PURPOSE: the v1
       // contracts were deleted in phase 8, so there is no identifier left
       // to reference — only the keys this durable queue was once bound to.
       // Every boot unbinds them (idempotently), which is what allowed the
       // v1 ack-as-no-op arms to leave the handler. Removable once every
       // environment's durable queue has booted past this version.
-      retiredBindingKeys: ['ticket.created.v1', 'ticket.status-changed.v1'],
+      //
+      // `user.registered.v1` joined them in Sprint 10.7, and it is the first
+      // entry here that is NOT a deleted contract: auth-service still
+      // publishes it and three other consumers still want it. Only THIS queue
+      // stopped caring, because user_snapshots became a projection of the
+      // membership edge and a registration says nothing about one (ADR 0026).
+      // Retiring it is not optional bookkeeping — a still-bound registration
+      // arriving after the NOT NULL migration would dead-letter, because the
+      // handler that used to answer it carried no organization at all.
+      retiredBindingKeys: [
+        'ticket.created.v1',
+        'ticket.status-changed.v1',
+        'user.registered.v1',
+      ],
       prefetch: 1,
       handler: async (event) => {
         switch (event.type) {
@@ -92,14 +97,6 @@ export class MetricsConsumer {
             });
             return;
           }
-          case 'user.registered.v1':
-            // Deliberately tenantless: registration is anonymous, and the
-            // membership event that follows stamps the organization.
-            await this.applyRegistered.execute({
-              userId: event.payload.userId,
-              registeredAt: new Date(event.payload.registeredAt),
-            });
-            return;
           case 'membership.created.v1':
             // Guard on the envelope like every tenant-carrying contract;
             // what gets stamped is the payload copy, because a membership

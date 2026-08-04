@@ -13,7 +13,6 @@ import {
   ApplyMembershipCreatedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
-  ApplyUserRegisteredUseCase,
 } from './apply-events';
 import { GetAnalyticsSummaryUseCase } from './get-summary';
 
@@ -62,7 +61,6 @@ function buildContext() {
     clock,
     applyCreated: new ApplyTicketCreatedUseCase(tickets),
     applyStatus: new ApplyTicketStatusChangedUseCase(tickets),
-    applyUser: new ApplyUserRegisteredUseCase(users),
     applyMembership: new ApplyMembershipCreatedUseCase(users),
     summary: new GetAnalyticsSummaryUseCase(tickets, users, clock),
   };
@@ -173,58 +171,94 @@ describe('ticket snapshot projection', () => {
 });
 
 describe('user snapshot projection', () => {
-  it('is idempotent on userId', async () => {
+  it('counts one person in BOTH organizations they belong to', async () => {
+    /**
+     * The defect Sprint 10.7 exists to close, at the level where it is
+     * cheapest to see.
+     *
+     * Written RED, and it fails here for the opposite reason it fails in the
+     * integration suite: the in-memory double unconditionally overwrites the
+     * tenant, so the second membership MOVES the person and the first
+     * organization drops to zero. Prisma refuses the second membership
+     * instead, so the second organization stays at zero there. That asymmetry
+     * is the divergence this sprint closes, and it is why both tests exist.
+     */
+    const ctx = buildContext();
+
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_B,
+      createdAt: new Date('2026-07-29T12:00:00.000Z'),
+    });
+
+    expect(await ctx.users.total(ORG_A)).toBe(1);
+    expect(await ctx.users.total(ORG_B)).toBe(1);
+  });
+
+  it('is a no-op on redelivery, and never rewrites joinedAt', async () => {
+    // At-least-once delivery, unchanged: ON CONFLICT DO NOTHING on the
+    // composite key. Rewriting joinedAt would churn a row to no end — it is
+    // the only non-key column and nothing reads it.
     const ctx = buildContext();
     const input = {
       userId: USER.id,
-      registeredAt: new Date('2026-07-28T12:00:00.000Z'),
+      organizationId: ORG_A,
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
     };
-    await ctx.applyUser.execute(input);
-    await ctx.applyUser.execute(input);
+
+    await ctx.applyMembership.execute(input);
+    await ctx.applyMembership.execute({
+      ...input,
+      createdAt: new Date('2026-08-01T09:00:00.000Z'),
+    });
+
     expect(ctx.users.users.size).toBe(1);
+    expect(await ctx.users.total(ORG_A)).toBe(1);
+    expect([...ctx.users.users.values()][0].joinedAt).toEqual(
+      new Date('2026-07-28T12:00:00.000Z'),
+    );
   });
 
-  it('membership stamps the organization onto an existing registration', async () => {
+  it('records when they joined THAT organization, per row', async () => {
+    // The rename is the point: while one row stood for one person the column
+    // could hold a registration instant, and once a person has several rows
+    // it cannot — each is a different join.
     const ctx = buildContext();
-    await ctx.applyUser.execute({
-      userId: USER.id,
-      registeredAt: new Date('2026-07-28T12:00:00.000Z'),
-    });
-    expect(ctx.users.users.get(USER.id)?.organizationId).toBeNull();
 
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_A,
-      createdAt: new Date('2026-07-28T12:00:01.000Z'),
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_B,
+      createdAt: new Date('2026-07-29T12:00:00.000Z'),
     });
 
-    const row = ctx.users.users.get(USER.id);
-    expect(row?.organizationId).toBe(ORG_A);
-    // The real registration time survives: membership only stamps the tenant.
-    expect(row?.registeredAt).toEqual(new Date('2026-07-28T12:00:00.000Z'));
+    const rows = [...ctx.users.users.values()];
+    expect(rows.find((row) => row.organizationId === ORG_A)?.joinedAt).toEqual(
+      new Date('2026-07-28T12:00:00.000Z'),
+    );
+    expect(rows.find((row) => row.organizationId === ORG_B)?.joinedAt).toEqual(
+      new Date('2026-07-29T12:00:00.000Z'),
+    );
   });
 
-  it('membership creates the row when registration was lost, and a late registration cannot undo it', async () => {
+  it('counts nobody in an organization the person never joined', async () => {
     const ctx = buildContext();
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_A,
-      createdAt: new Date('2026-07-28T12:00:01.000Z'),
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
     });
 
-    // registeredAt is the membership time — the honest nearby value.
-    let row = ctx.users.users.get(USER.id);
-    expect(row?.organizationId).toBe(ORG_A);
-    expect(row?.registeredAt).toEqual(new Date('2026-07-28T12:00:01.000Z'));
-
-    // The registration event finally arriving is DO NOTHING on conflict.
-    await ctx.applyUser.execute({
-      userId: USER.id,
-      registeredAt: new Date('2026-07-28T12:00:00.000Z'),
-    });
-    row = ctx.users.users.get(USER.id);
-    expect(row?.organizationId).toBe(ORG_A);
-    expect(row?.registeredAt).toEqual(new Date('2026-07-28T12:00:01.000Z'));
+    expect(await ctx.users.total(ORG_B)).toBe(0);
   });
 });
 
@@ -273,10 +307,6 @@ describe('GetAnalyticsSummaryUseCase', () => {
       toStatus: 'in_progress',
       changedAt: new Date('2026-07-26T09:00:00.000Z'),
       occurredAt: new Date('2026-07-26T09:00:00.100Z'),
-    });
-    await ctx.applyUser.execute({
-      userId: USER.id,
-      registeredAt: new Date('2026-07-27T12:00:00.000Z'),
     });
     await ctx.applyMembership.execute({
       userId: USER.id,

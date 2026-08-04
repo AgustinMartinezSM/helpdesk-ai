@@ -40,19 +40,34 @@ model TicketSnapshot {
   @@map("ticket_snapshots")
 }
 
+/// One row per MEMBERSHIP EDGE, not per person (Sprint 10.7, ADR 0026).
+///
+/// It was keyed on user_id alone until then, with a nullable tenant that a
+/// registration inserted and the first membership stamped. That made the
+/// holding pen win every time — registration is what creates the bootstrap
+/// membership, so its event always arrived first — and every real
+/// organization counted approximately nobody.
+///
+/// The tenant is NOT NULL now, and the registration write path is gone rather
+/// than adapted: this projection answers "how many people are in this
+/// organization", and a row with no organization answers nothing. That closes
+/// the last non-structural exemption from the phase-7 enforcement; only
+/// helpdesk_audit.audit_events remains, and that one is permanent.
 model UserSnapshot {
-  userId       String   @id @map("user_id") @db.Uuid
-  registeredAt DateTime @map("registered_at") @db.Timestamptz(3)
+  userId String @map("user_id") @db.Uuid
 
-  /// Tenant this user counts under (ADR 0012). Nullable BY DESIGN — the one
-  /// deliberate exemption from the phase-7 NOT NULL alongside audit_events:
-  /// registration is anonymous (user.registered.v1 is structurally
-  /// tenantless — the membership that would supply a tenant is created by
-  /// consuming that very event), so the registration-first write path MUST
-  /// be able to insert a null here, and membership.created stamps it moments
-  /// later. A null row simply falls out of every scoped aggregate until then.
-  organizationId String? @map("organization_id") @db.Uuid
+  /// Tenant this membership belongs to (ADR 0012). An opaque identifier,
+  /// never a foreign key (ADR 0003).
+  organizationId String @map("organization_id") @db.Uuid
 
+  /// When this person joined THIS organization — the membership's createdAt.
+  /// It was called registeredAt while one row stood for one person, which
+  /// stopped being true the moment a person could have several.
+  joinedAt DateTime @map("joined_at") @db.Timestamptz(3)
+
+  /// Kept even though the primary key leads with user_id: every aggregate
+  /// filters on organization_id alone, which the composite key cannot serve.
+  @@id([userId, organizationId])
   @@index([organizationId])
   @@map("user_snapshots")
 }

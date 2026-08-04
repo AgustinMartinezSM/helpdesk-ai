@@ -128,38 +128,34 @@ export class InMemoryTicketSnapshotRepository implements TicketSnapshotRepositor
 }
 
 export class InMemoryUserSnapshotRepository implements UserSnapshotRepository {
+  /**
+   * Keyed on the EDGE, exactly as the table is since Sprint 10.7.
+   *
+   * The previous version of this double was keyed on userId and
+   * unconditionally overwrote the tenant — while Prisma refused to move a
+   * stamped row at all. So the two disagreed about the very behaviour the
+   * repository's comment said must never happen, and nothing pinned either.
+   * That is the R2 lesson for the third time (R2, then 9.12's team predicate,
+   * now this): a double more permissive than the database certifies semantics
+   * production does not produce.
+   */
   readonly users = new Map<string, UserSnapshot>();
 
-  async applyRegistered(input: {
-    userId: string;
-    registeredAt: Date;
-  }): Promise<void> {
-    // Mirrors ON CONFLICT DO NOTHING: never overwrites, in particular not an
-    // organization a membership event already stamped.
-    if (!this.users.has(input.userId)) {
-      this.users.set(input.userId, {
-        userId: input.userId,
-        registeredAt: input.registeredAt,
-        organizationId: null,
-      });
-    }
+  private key(userId: string, organizationId: string): string {
+    return `${userId}:${organizationId}`;
   }
 
   async applyMembershipCreated(input: ApplyMembershipCreated): Promise<void> {
-    const existing = this.users.get(input.userId);
-    if (existing) {
-      this.users.set(input.userId, {
-        ...existing,
-        organizationId: input.organizationId,
-      });
+    // Mirrors ON CONFLICT DO NOTHING on the composite key: a redelivery
+    // changes nothing, including joinedAt.
+    const key = this.key(input.userId, input.organizationId);
+    if (this.users.has(key)) {
       return;
     }
-    // Create path: the registration event was lost or is late, so the
-    // membership time stands in for registeredAt (see the port contract).
-    this.users.set(input.userId, {
+    this.users.set(key, {
       userId: input.userId,
-      registeredAt: input.createdAt,
       organizationId: input.organizationId,
+      joinedAt: input.createdAt,
     });
   }
 

@@ -15,10 +15,17 @@
 #
 # Since phase 7, seven of these tables (tickets, ticket_comments,
 # ticket_history, suggestions, ticket_snapshots, ticket_refs, notifications)
-# carry NOT NULL, so the WHERE-NULL update is a structural no-op there. The
-# script remains meaningful only for legacy rows in the two tables that are
-# nullable by design — user_snapshots and audit_events — where registration
-# legitimately writes tenantless rows that a membership normally stamps.
+# carry NOT NULL, so the WHERE-NULL update is a structural no-op there. Since
+# Sprint 10.7 user_snapshots does too, so it is a no-op there as well.
+#
+# The script remains meaningful only for legacy rows in audit_events, the one
+# table still nullable by design: the firehose records the structurally
+# tenantless user.registered.v1 forever.
+#
+# IT IS NOT THE REPAIR PATH FOR user_snapshots, and reaching for it would be
+# the exact mistake that table was rebuilt to undo — stamping the bootstrap
+# literal onto everything IS the defect ADR 0026 closed. Use
+# backfill-user-snapshots.sh, which reads the memberships that are the truth.
 #
 # SAFETY: assigning the bootstrap organization uniformly is only correct
 # while it is the ONLY organization — with one tenant, every untenanted row

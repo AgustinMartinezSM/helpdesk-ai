@@ -38,21 +38,22 @@ export class ApplyTicketStatusChangedUseCase {
   }
 }
 
-export class ApplyUserRegisteredUseCase {
-  constructor(private readonly users: UserSnapshotRepository) {}
-
-  async execute(input: { userId: string; registeredAt: Date }): Promise<void> {
-    await this.users.applyRegistered(input);
-  }
-}
+/*
+ * `ApplyUserRegisteredUseCase` lived here until Sprint 10.7.
+ *
+ * It wrote a tenantless row that every scoped aggregate then excluded, and
+ * whose only purpose was to hold a registration timestamp nothing read. What
+ * it actually did was make the tenant first-come-wins — and the first to come
+ * was always the bootstrap membership, because organizations-service creates
+ * that one while consuming the same registration event. ADR 0026.
+ */
 
 /**
- * Stamps the tenant onto the user's snapshot when a membership is created.
- * Creating the row when registration never arrived (or is still in flight)
- * is deliberate: a lost registration event must not lose the member from
- * the organization's count. registeredAt is then the membership time — the
- * honest nearby value — and applyRegistered's do-nothing-on-conflict will
- * not overwrite it if the registration event shows up later.
+ * Records that somebody joined an organization.
+ *
+ * One row per edge, so a person in two organizations is counted in both. It
+ * is the ONLY writer of this projection now, which is what removes every
+ * ordering question the previous two-writer design had.
  */
 export class ApplyMembershipCreatedUseCase {
   constructor(private readonly users: UserSnapshotRepository) {}

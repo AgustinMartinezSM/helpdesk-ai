@@ -2,7 +2,7 @@
  * The sprint's key integration for analytics: real broker + real database,
  * exercising the ATOMIC last-writer-wins upsert in actual SQL — the piece
  * the in-memory fake can only imitate. Covers the v2 lifecycle chain under
- * two organizations, the membership stamp on user snapshots, the phase-8
+ * two organizations, one person counted in two organizations, the phase-8
  * unbinding of the retired v1 routing keys, the out-of-order backfill and
  * stale-event rejection.
  *
@@ -25,7 +25,6 @@ import {
   ApplyMembershipCreatedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
-  ApplyUserRegisteredUseCase,
 } from '../../application/use-cases/apply-events';
 import {
   PrismaTicketSnapshotRepository,
@@ -99,7 +98,6 @@ describe('analytics projection (real broker, real database)', () => {
       consumerClient,
       new ApplyTicketCreatedUseCase(snapshots),
       new ApplyTicketStatusChangedUseCase(snapshots),
-      new ApplyUserRegisteredUseCase(userSnapshots),
       new ApplyMembershipCreatedUseCase(userSnapshots),
     );
     await consumer.start();
@@ -187,8 +185,8 @@ describe('analytics projection (real broker, real database)', () => {
       },
       { organizationId: orgB },
     );
-    // No registration for user B: membership.created alone must create the
-    // row (lost-registration tolerance), exercised here against real SQL.
+    // membership.created.v1 is the ONLY writer of user_snapshots since
+    // Sprint 10.7, so this is simply how a row comes to exist.
     await publisherClient.publish(
       membershipCreatedV1,
       {
@@ -219,25 +217,35 @@ describe('analytics projection (real broker, real database)', () => {
       return row ?? null;
     });
 
-    // user_snapshots takes its organization from membership.created.v1: the
-    // stamp on A's registered row, the whole row for B's lost registration.
+    // user_snapshots is written ONLY by membership.created.v1 now, one row
+    // per edge, looked up by the composite key.
     const userRowA = await waitFor(async () => {
       const row = await prisma.userSnapshot.findUnique({
-        where: { userId: userA },
-      });
-      return row && row.organizationId === orgA ? row : null;
-    });
-    expect(userRowA.registeredAt).toEqual(new Date('2026-07-28T12:00:00.000Z'));
-
-    const userRowB = await waitFor(async () => {
-      const row = await prisma.userSnapshot.findUnique({
-        where: { userId: userB },
+        where: {
+          userId_organizationId: { userId: userA, organizationId: orgA },
+        },
       });
       return row ?? null;
     });
-    expect(userRowB.organizationId).toBe(orgB);
-    // registeredAt is the membership time: the honest nearby value.
-    expect(userRowB.registeredAt).toEqual(new Date('2026-07-25T12:00:01.000Z'));
+    expect(userRowA.joinedAt).toEqual(new Date('2026-07-28T12:00:01.000Z'));
+
+    const userRowB = await waitFor(async () => {
+      const row = await prisma.userSnapshot.findUnique({
+        where: {
+          userId_organizationId: { userId: userB, organizationId: orgB },
+        },
+      });
+      return row ?? null;
+    });
+    expect(userRowB.joinedAt).toEqual(new Date('2026-07-25T12:00:01.000Z'));
+
+    // The registration published above wrote NOTHING, and dead-lettered
+    // nothing either — its binding is retired, so it never reaches this
+    // queue. Asserting the absence is what would catch a re-added arm, which
+    // the NOT NULL column would then refuse.
+    expect(await prisma.userSnapshot.count({ where: { userId: userA } })).toBe(
+      1,
+    );
 
     // Each organization's summary sees only its own rows, across all five
     // aggregates, in the real WHERE clauses.
@@ -257,6 +265,83 @@ describe('analytics projection (real broker, real database)', () => {
       { day: '2026-07-25', count: 1 },
     ]);
     expect(await userSnapshots.total(orgB)).toBe(1);
+  });
+
+  it('counts one person in BOTH organizations, against the real composite key', async () => {
+    /**
+     * The defect Sprint 10.7 closed, proved where only a database can prove
+     * it (ADR 0026).
+     *
+     * This was written RED alongside its unit twin, and the two failed in
+     * OPPOSITE directions: the in-memory double overwrote the tenant, so the
+     * first organization dropped to zero there, while Prisma refused the
+     * second membership outright — `updateMany ... WHERE organization_id IS
+     * NULL` matched nothing and the follow-up insert hit the old primary key
+     * — so the second organization stayed at zero here. That asymmetry was
+     * the divergence, and it is why neither test alone was enough.
+     *
+     * It also pins the real-world shape of the bug rather than an abstract
+     * one: the FIRST membership is the bootstrap organization, exactly as
+     * registration produces it, and it used to win forever.
+     */
+    const person = randomUUID();
+    const bootstrapish = randomUUID();
+    const real = randomUUID();
+
+    for (const [organizationId, createdAt] of [
+      [bootstrapish, '2026-07-28T12:00:00.000Z'],
+      [real, '2026-07-29T12:00:00.000Z'],
+    ] as const) {
+      await publisherClient.publish(
+        membershipCreatedV1,
+        {
+          membershipId: randomUUID(),
+          organizationId,
+          userId: person,
+          roleTemplate: 'member',
+          status: 'active',
+          createdAt,
+        },
+        { organizationId },
+      );
+    }
+
+    await waitFor(async () => {
+      const rows = await prisma.userSnapshot.count({
+        where: { userId: person },
+      });
+      return rows === 2 ? rows : null;
+    });
+
+    // Both counts, not one — and asserted through the composite lookup as
+    // well as the aggregate, because a surviving user_id uniqueness would
+    // make the second insert a silent no-op that `total()` alone could not
+    // distinguish from a correct one.
+    expect(await userSnapshots.total(bootstrapish)).toBe(1);
+    expect(await userSnapshots.total(real)).toBe(1);
+    expect(
+      await prisma.userSnapshot.findUnique({
+        where: {
+          userId_organizationId: { userId: person, organizationId: real },
+        },
+      }),
+    ).toMatchObject({ joinedAt: new Date('2026-07-29T12:00:00.000Z') });
+
+    // Redelivery stays a no-op on the composite key.
+    await publisherClient.publish(
+      membershipCreatedV1,
+      {
+        membershipId: randomUUID(),
+        organizationId: real,
+        userId: person,
+        roleTemplate: 'member',
+        status: 'active',
+        createdAt: '2026-08-04T09:00:00.000Z',
+      },
+      { organizationId: real },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await userSnapshots.total(real)).toBe(1);
   });
 
   it('never receives a retired v1 event: the unbind kept it off the queue', async () => {

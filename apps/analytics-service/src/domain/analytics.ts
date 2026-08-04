@@ -22,21 +22,20 @@ export interface TicketSnapshot {
 }
 
 /**
- * One row per registered account. Kept minimal on purpose: the dashboard
- * only ever counts these, so the projection stores exactly what the scoped
- * count needs.
+ * One row per MEMBERSHIP EDGE — not per account (Sprint 10.7, ADR 0026).
+ *
+ * Kept minimal on purpose: the dashboard only ever counts these, so the
+ * projection stores exactly what the scoped count needs. What it does NOT
+ * store any more is a registration: a row with no organization answers
+ * nothing this projection is asked, and keeping one was what let the holding
+ * pen claim every person.
  */
 export interface UserSnapshot {
   readonly userId: string;
-  readonly registeredAt: Date;
-  /**
-   * Null between registering and the membership event arriving — registration
-   * is anonymous by design, so the tenant is stamped by membership.created.
-   * A null row falls out of every scoped count until then. Deliberately
-   * EXEMPT from the phase-7 NOT NULL: the registration-first write path must
-   * stay able to insert a tenantless row.
-   */
-  readonly organizationId: string | null;
+  /** Never null. The tenant is what this row exists to record. */
+  readonly organizationId: string;
+  /** When they joined THIS organization — the membership's creation time. */
+  readonly joinedAt: Date;
 }
 
 export interface DailyCount {

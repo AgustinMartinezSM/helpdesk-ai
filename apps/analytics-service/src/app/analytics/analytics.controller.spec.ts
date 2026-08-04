@@ -46,11 +46,8 @@ describe('Analytics HTTP API (fakes, real JWT verification)', () => {
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
       occurredAt: new Date('2026-07-28T12:00:00.100Z'),
     });
-    await users.applyRegistered({
-      userId: '11111111-1111-4111-8111-111111111111',
-      registeredAt: new Date('2026-07-28T12:00:00.000Z'),
-    });
-    // The membership stamp is what makes the account count under the org.
+    // The membership is what makes the account count under the org — and
+    // since Sprint 10.7 it is the only thing that writes this projection.
     await users.applyMembershipCreated({
       userId: '11111111-1111-4111-8111-111111111111',
       organizationId: ORG,

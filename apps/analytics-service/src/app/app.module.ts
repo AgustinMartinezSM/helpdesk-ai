@@ -17,7 +17,6 @@ import {
   ApplyMembershipCreatedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
-  ApplyUserRegisteredUseCase,
 } from '../application/use-cases/apply-events';
 import { GetAnalyticsSummaryUseCase } from '../application/use-cases/get-summary';
 import { APP_ENV, SERVICE_NAME, type AnalyticsServiceEnv } from '../config/env';
@@ -91,12 +90,6 @@ export class AppModule {
           inject: [TICKET_SNAPSHOT_REPOSITORY],
         },
         {
-          provide: ApplyUserRegisteredUseCase,
-          useFactory: (users: UserSnapshotRepository) =>
-            new ApplyUserRegisteredUseCase(users),
-          inject: [USER_SNAPSHOT_REPOSITORY],
-        },
-        {
           provide: ApplyMembershipCreatedUseCase,
           useFactory: (users: UserSnapshotRepository) =>
             new ApplyMembershipCreatedUseCase(users),
@@ -117,7 +110,6 @@ export class AppModule {
             messaging: MessagingClient,
             applyCreated: ApplyTicketCreatedUseCase,
             applyStatusChanged: ApplyTicketStatusChangedUseCase,
-            applyRegistered: ApplyUserRegisteredUseCase,
             applyMembershipCreated: ApplyMembershipCreatedUseCase,
             logger: Logger,
           ) =>
@@ -125,7 +117,6 @@ export class AppModule {
               messaging,
               applyCreated,
               applyStatusChanged,
-              applyRegistered,
               applyMembershipCreated,
               logger,
             ),
@@ -133,7 +124,6 @@ export class AppModule {
             MessagingClient,
             ApplyTicketCreatedUseCase,
             ApplyTicketStatusChangedUseCase,
-            ApplyUserRegisteredUseCase,
             ApplyMembershipCreatedUseCase,
             Logger,
           ],

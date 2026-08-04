@@ -117,55 +117,31 @@ export class PrismaTicketSnapshotRepository implements TicketSnapshotRepository 
 export class PrismaUserSnapshotRepository implements UserSnapshotRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async applyRegistered(input: {
-    userId: string;
-    registeredAt: Date;
-  }): Promise<void> {
-    // skipDuplicates compiles to ON CONFLICT DO NOTHING on the primary key —
-    // which also means it can never clobber an organization a membership
-    // event already stamped (see applyMembershipCreated).
-    await this.prisma.userSnapshot.createMany({
-      data: [{ userId: input.userId, registeredAt: input.registeredAt }],
-      skipDuplicates: true,
-    });
-  }
-
   async applyMembershipCreated(input: ApplyMembershipCreated): Promise<void> {
-    // The stamp only fills an EMPTY organization; it never moves a snapshot
-    // from one tenant to another.
-    //
-    // This row is keyed on userId alone, which encodes an assumption the
-    // identity model never made: ADR 0013 lets one person belong to several
-    // organizations. Sprint 9.8 is when that starts happening routinely —
-    // accepting an invitation gives someone a second membership — and the
-    // previous unconditional update meant two membership events for one
-    // person MOVED them between tenants, with broker delivery order deciding
-    // whose headcount they landed in. A per-organization count settled by
-    // delivery order is worse than a stale one.
-    //
-    // What this does NOT fix, stated rather than implied: a person in two
-    // organizations is still counted in exactly one — the first to claim
-    // them. Counting them in both needs user_snapshots rekeyed on
-    // (userId, organizationId), which is its own increment (Sprint 9.8, D8).
-    const stamped = await this.prisma.userSnapshot.updateMany({
-      where: { userId: input.userId, organizationId: null },
-      data: { organizationId: input.organizationId },
-    });
-    if (stamped.count > 0) {
-      return;
-    }
-
-    // No row to stamp: either it already carries an organization (leave it),
-    // or the registration event was lost or is late. createMany with
-    // skipDuplicates covers the second case without racing the first —
-    // registeredAt is then the membership time, the honest nearby value (see
-    // the port contract).
+    /**
+     * ONE statement, where there used to be two and a branch (Sprint 10.7,
+     * ADR 0026). skipDuplicates compiles to ON CONFLICT DO NOTHING, which now
+     * resolves against the COMPOSITE key — so a redelivery inserts nothing
+     * while a second organization inserts a second row.
+     *
+     * What this replaced is worth remembering rather than deleting silently.
+     * The row was keyed on userId alone and the tenant was stamped only
+     * `WHERE organization_id IS NULL`, so the first membership won — and the
+     * first membership every account gets is the BOOTSTRAP one, created while
+     * consuming the very registration event that seeded the row. Every real
+     * organization counted approximately nobody, for four sprints.
+     *
+     * The unconditional update that preceded THAT was worse in a different
+     * way: two membership events moved a person between tenants, with broker
+     * delivery order deciding whose headcount they landed in. Neither
+     * ordering problem exists now, because nothing is updated at all.
+     */
     await this.prisma.userSnapshot.createMany({
       data: [
         {
           userId: input.userId,
-          registeredAt: input.createdAt,
           organizationId: input.organizationId,
+          joinedAt: input.createdAt,
         },
       ],
       skipDuplicates: true,
