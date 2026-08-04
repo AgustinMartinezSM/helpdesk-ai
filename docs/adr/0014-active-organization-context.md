@@ -172,6 +172,31 @@ what a null organization means.
 as a mint with a validated request, and there is no endpoint for it. Nothing
 in the platform can select an organization today, because there is only one.
 
+**Built in Sprint 10.6 — see ADR 0025.** `POST /auth/session/organization`
+does exactly what this section describes: a mint with a request validated
+against the stored membership. Two things this record left open had to be
+answered underneath it, and neither was decided here.
+
+**Where a choice is remembered.** The settlement above — a session belongs to a
+person, `refresh_tokens` gains no column — is **not reopened**. The remembered
+choice lives in an httpOnly cookie held by the BFF, and it only ASKS: every
+mint validates it and refuses or falls back. The consequence is that the choice
+is browser state, so a second device starts from the default rule.
+
+**What happens when a remembered choice stops being valid.** The exchange
+refuses (404, blind to why), and a refresh FALLS BACK to the default rule
+rather than failing — being removed from an organization must not sign somebody
+out of the product.
+
+One consequence belongs here rather than only in ADR 0025, because it extends
+the tradeoff this record accepts. The staleness argued above is about a
+membership changing underneath a token. Switching adds a second case: for up to
+one access-token TTL a person holds **two valid tokens naming two different
+organizations**, because nothing revokes an access token. Both are tokens that
+person was entitled to, and neither reaches anything they could not already
+reach — but it is a deliberate context change rather than a stale snapshot, and
+it should not be read as covered by the paragraph above.
+
 ## What this does not solve
 
 A claim tells a service which organization the caller is acting in. It does

@@ -148,6 +148,32 @@ away when token exchange lands. When it does, the boundary here should be
 revisited in the same change: with a selector, "you already belong somewhere"
 stops being a reason to refuse.
 
+### Amendment — Sprint 10.6: the refusal is lifted, and the tiebreak stays
+
+Both halves of the paragraph above were acted on, and one of them was wrong.
+
+**The refusal is gone** (ADR 0025). Its justification was conditional — the
+creator "would own an organization they cannot reach" — and the exchange makes
+one reachable. `AlreadyBelongsToOrganizationError` is deleted rather than
+deprecated, because a refusal nobody can trigger is worse than no refusal.
+
+**Lifting it was not a deletion.** The create flow now exchanges into the
+organization it just made. A plain refresh re-runs the default rule and returns
+the person's OLDEST organization, so for anybody who already belonged somewhere
+the new one would have been invisible and its creator would have owned
+something they never arrive at — this exact hole, reopened with nothing left to
+catch it.
+
+**The tiebreak does NOT go away, and the prediction quoted above was wrong.** A
+selector adds a way to ask; something still has to answer when nobody has
+asked, and that is every login. Deleting it would put every invited account
+back in the migration's holding pen. It is now the documented default rather
+than a stopgap.
+
+Everything else here still holds: `owner` is still written outside the grant
+derivation, the slug is still derived and never reported as taken, and
+`bootstrap` is still reserved.
+
 **Renaming is still not possible**, and the screen says so rather than
 promising it. The slug is derived from the name at creation, so a rename
 without a slug story would leave the two disagreeing.

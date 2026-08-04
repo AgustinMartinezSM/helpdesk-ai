@@ -296,6 +296,15 @@ it. `organization.update` gained a second call site — the organization's own
 display name — beside users-service's profile-field definitions, granted
 exactly as this table has it.
 
+**Choosing an organization has no permission key either, and for a different
+reason** (Sprint 10.6, ADR 0025). `GET /organizations/mine` and the token
+exchange are both keyless: a key gating them would have to be one every
+template holds, which is not a key, and both are deliberately TENANTLESS
+because they exist for the states a tenant claim cannot describe — belonging
+nowhere, or leaving the organization your token names. The listing is the
+platform's first deliberately cross-tenant read; it is scoped by the caller's
+own membership set instead, and returns nothing they could not already read.
+
 **Transferring ownership has no permission key, and should not get one**
 (ADR 0024). It is authorized by reading the actor's stored membership and
 requiring `owner` there. Three reasons, and the third is the one that decides

@@ -210,4 +210,147 @@ tenant-isolation case.
 
 ## Outcome
 
-_Written at the close of the sprint._
+A person can belong to more than one organization and work in each of them.
+The decision is **ADR 0025**; the half of ADR 0014 that had been recorded as
+"Not built" since Sprint 9.1 is built.
+
+### What was built
+
+`POST /auth/session/organization` — the exchange, on the caller's own access
+token. `GET /organizations/mine` — what a switcher offers, keyless and
+tenantless. An optional `organizationId` on refresh. An httpOnly cookie in the
+BFF that remembers the choice and only asks. A switcher in the app shell that
+renders nothing until there is a second place to go.
+
+### The defect the reconnaissance found before the sprint started
+
+**`tm` never reached a signed token.** `SessionService` had assembled the claim
+since Sprint 9.12 and `JwtTokenIssuer` never copied it, because
+`AccessTokenClaims` did not declare one — so `tickets.read_team`, which denies
+on an absent claim, granted **nothing in production for four sprints**. A
+`service_desk_manager` or `team_manager` could see only their own requests,
+which is precisely the hole ADR 0022 was written to close.
+
+Fixed first and alone, so this sprint does not appear to have caused a
+platform-wide visibility change. Two things made it invisible and both are
+worth carrying:
+
+- **TypeScript could not see it.** The claims are added with
+  `...(condition && { tm })`, and a spread is not an object literal, so
+  excess-property checking never fires — passing a field the interface does not
+  declare is silently legal.
+- **The suite asserted the wrong side of the boundary.** Every mint-path test
+  checks what the FAKE issuer was handed rather than what was signed; no test
+  ever passed a non-empty team set through that path; and every `tm`-reading
+  test in tickets-service hand-signs its own JWT. The regression test decodes a
+  real token from the real `JwtService` and lists the claim names, so the next
+  added claim fails loudly instead of vanishing. It was watched failing before
+  the fix.
+
+This is the 9.13 lesson in a new place: a test that does not cross the boundary
+the bug lives on cannot find it.
+
+### The three decisions most likely to be second-guessed
+
+**The choice is a cookie, not a column on `refresh_tokens`** — and I want to be
+straight that this was decided on a documentation property rather than a
+technical one. The column is a decent design: carried forward on rotation the
+way the born window already is, server-side, works for any client. It loses
+because ADR 0014 explicitly settled that table's shape, and reopening that
+settlement in the very sprint that implements the rest of that record is how a
+decision record stops being trustworthy. The cost — a second device starts from
+the default rule — is real and stated rather than hidden.
+
+**The exchange refuses and a refresh falls back**, from the same `null`. It
+looks asymmetric and is the point: somebody who explicitly asked to go
+somewhere must be told they cannot, and somebody whose remembered choice went
+stale must not be signed out of the product because of it. The second half is
+the one that would have been easy to get wrong — 503-on-uncertainty is the
+established habit here, and `AuthProvider` turns any failed refresh into
+`anonymous`, so a refusal would have silently ended a perfectly valid session.
+
+**The 9.8 tiebreak stays, and a code comment told me to delete it.**
+`resolve-active-membership.ts` said it "goes away with" the token exchange.
+Obeying that would have regressed every invited account into the migration's
+holding pen, because registration writes a bootstrap membership unconditionally
+and it is almost always the oldest. A selector adds a way to ask; something
+still has to answer when nobody has asked, and that is every login, forever.
+The comment is corrected and the rule is promoted to "the documented default".
+
+### Lifting ADR 0023's refusal was not a deletion
+
+The refusal of a second organization is gone, which is what ADR 0023 said to do
+here. But its justification was that the creator "would own an organization
+they cannot reach", and deleting nine files' worth of refusal while leaving the
+create page calling `refresh()` would have reproduced exactly that: a refresh
+re-runs the default rule and returns the person's **oldest** organization, so
+for anybody who already belonged somewhere the new one would be invisible —
+with nothing left to catch it, because the refusal's own tests were deleted as
+part of the lift. The create flow exchanges on the created id instead, and a
+web spec pins it.
+
+### Verification
+
+Full gate green: format, lint, typecheck across 15 projects, **1325 unit tests
+across all 15** (up 74 from 1251), and build.
+
+Four levels:
+
+- **Unit**, with a resolver fake that refuses any organization not explicitly
+  listed — a doll that handed out whatever it was asked for would let a use
+  case with no validation pass.
+- **HTTP**, through the real guard, pipe and error filter: 404 for an
+  organization not held, 401 unauthenticated, 400 for a body naming a user, and
+  — the one worth calling out — a 400 when an `organizationId` is sent to
+  **logout**, which shares the other body shape and must not silently accept it.
+- **Integration**, against real PostgreSQL: two memberships for one person; the
+  requested path reading the right row across four separate queries
+  (permissions, version, branches, teams, each of which could pick up the wrong
+  one); a foreign membership unreachable by naming its organization, against the
+  real scoped SQL; and one person owning two organizations, which proves the
+  partial unique index from Sprint 10.5 is scoped per organization rather than
+  per person.
+- **Browser specs**, where the load-bearing one gives the switcher a session
+  that belongs to one organization and asserts it renders nothing.
+
+**Neither the integration suite nor a browser pass ran locally, for the third
+sprint running.** Docker is not running on this machine. The integration suite
+ran on CI and `organization-selection.int.spec.ts` passed there on its first
+execution anywhere. A browser pass would need seven dev servers against five
+preview slots even with Docker.
+
+### What this leaves open
+
+**`analytics-service` still counts a multi-organization person in one
+organization**, and it is already the wrong one — the bootstrap membership
+claims the row first, so every real organization already counts approximately
+nobody. Predates this sprint, deliberately not fixed here: it needs a
+migration, a backfill and a correction to an in-memory double that disagrees
+with Prisma about the behaviour being changed.
+
+**`INTERNAL_SERVICE_TOKEN` is still optional in auth-service**, and its env
+comment says this was the phase to make it required. It was not flipped because
+the auth integration suite runs without organizations-service and would 503 on
+every login. That is a suite change, in a sprint that owns it.
+
+**Nothing compares `mv`**, and making it load-bearing now would validate two
+claims while silently passing three stale ones.
+
+**A second device starts from the default organization.** The consequence of
+the cookie, and the thing a column would have bought.
+
+### Documentation
+
+- **ADR 0025** — new: the decision, the five alternatives rejected, and the
+  consequences.
+- **ADR 0014** — amended where it says "Not built", including the second
+  staleness case it did not argue.
+- **ADR 0023** — amended: the refusal is lifted, and its prediction about the
+  tiebreak was wrong.
+- **ADR 0024** — amended: ownership rules apply per organization, and the
+  partial unique index already allows one person to own two.
+- **`SECURITY.md`**, **`tenancy-target-state.md`**, **`pilot-readiness.md`**,
+  **`product-status.ts`**, **`CURRENT-HANDOFF.md`**.
+
+No fictional experience, customer, testimonial, incident, external approval or
+commercial adoption was introduced.

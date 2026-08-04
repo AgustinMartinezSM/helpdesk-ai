@@ -249,6 +249,15 @@ does not say that signal has to be a permission — and here it must not be,
 because permissions cannot distinguish an owner from an administrator. Read
 fresh per request, it is also strictly less stale than the snapshot beside it.
 
+**Amendment — Sprint 10.6.** The deferral below is closed by ADR 0025, and
+everything this record decides survives it unchanged: ownership rules apply
+**per organization**, exactly as written. One person may now own two
+organizations, which the partial unique index already permits because it is
+scoped per `organization_id` — an index written one column narrower would have
+refused it, and an integration test now proves it does not. The transfer still
+reads the actor's stored membership rather than their token, which matters more
+now that a token's organization is mobile.
+
 **Second-organization creation stays deferred, unchanged.** ADR 0023 refuses it
 because `ResolveActiveMembershipUseCase` picks the oldest non-bootstrap
 membership at every mint and there is no selector, so a second organization

@@ -1,11 +1,13 @@
 # Current handoff
 
 **Date:** 2026-08-04
-**Sprint:** **10.5 complete — an organization can be renamed and can change
-hands (ADR 0024), which makes a single tenant fully self-serve. BLOCK A IS
-CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy), 10.1 (design system), 10.2
-(migration), 10.3 (public copy), 10.4 (creating an organization — ADR 0023) and
-9.4-9.16 complete
+**Sprint:** **10.6 complete — a person can belong to more than one
+organization and choose which one they are working in (ADR 0025), which builds
+the half of ADR 0014 that had been recorded as "Not built" since Sprint 9.1.
+BLOCK A IS CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy), 10.1 (design
+system), 10.2 (migration), 10.3 (public copy), 10.4 (creating an organization —
+ADR 0023), 10.5 (rename and ownership transfer — ADR 0024) and 9.4-9.16
+complete
 **Repository:** `C:\Proyectos\helpdesk-ai`
 **Branch:** `main`. `git log --oneline -20` is the source of truth for the
 tip and for what is pushed; this file is for the things git cannot tell you.
@@ -1013,6 +1015,87 @@ Block B item and the one every deferral now points at. The alternative, if a
 smaller sprint is wanted first, is the remaining design-system debt in
 `design-system.md`. Open whichever with its own Definition of Ready.
 
+## Sprint 10.6 in one breath
+
+Remote CI green on the closing HEAD — the run is recorded in
+`SPRINT-010.6.md`. Full local gate green: **1325 unit tests across 15
+projects**, typecheck, build.
+
+**A person can belong to more than one organization and choose which one they
+are in.** ADR 0025, which builds what ADR 0014 described in Sprint 9.1 and
+recorded as "Not built". Read it before touching any of this.
+
+**A DEFECT WAS FOUND BEFORE THE SPRINT STARTED AND FIXED FIRST, ALONE:**
+`SessionService` had assembled a `tm` claim since 9.12 and `JwtTokenIssuer`
+never copied it, because `AccessTokenClaims` did not declare one — so
+**`tickets.read_team` granted nothing in production for four sprints**. Two
+reasons it was invisible, both worth carrying: `...(cond && { tm })` is a
+SPREAD, so TypeScript's excess-property check never fires and a missing field is
+silently legal; and every mint-path test asserts what the FAKE issuer was
+handed, not what was signed. The regression test decodes a real token.
+
+**Ownership of the design: switching is a token exchange, and the server
+decides.** `POST /auth/session/organization` takes the caller from the verified
+token and the organization from the body, then validates the pair against the
+STORED membership before signing. A requested id is a **request, never a fact** —
+that is why one may safely come from a browser, and why it is not the
+`x-organization-id` header ADR 0014 rejected: it reaches one place, and that
+place asks the database.
+
+**Switching writes NOTHING to `refresh_tokens`.** A session belongs to a person
+(ADR 0014), so a change of context is not a new session — the shared-terminal
+born window and reuse detection are entirely out of the switching path.
+
+**The remembered choice is an httpOnly cookie, not a column, and that was
+decided on a DOCUMENTATION property.** The column is a decent design; it loses
+because ADR 0014 explicitly settled that table's shape, and reopening it in the
+sprint implementing the rest of that record is how a decision record stops being
+trustworthy. Cost, stated: a second device starts from the default rule.
+
+**The exchange REFUSES and a refresh FALLS BACK, from the same null.** Somebody
+who explicitly asked must be told no; somebody whose remembered choice went
+stale must not be signed out. The second half is the easy one to get wrong —
+`AuthProvider` turns any failed refresh into `anonymous`, and 503-on-uncertainty
+is the habit here.
+
+**The 9.8 tiebreak STAYS, and the code comment telling me to delete it was
+wrong.** A selector adds a way to ask; something must still answer when nobody
+has asked, which is every login forever. Deleting it would put every invited
+account back in the holding pen, because registration writes a bootstrap
+membership unconditionally and it is almost always the oldest.
+
+**ADR 0023's second-organization refusal is lifted, and lifting it was not a
+deletion.** The create page now EXCHANGES on the created id instead of
+refreshing: a refresh re-runs the default rule and returns the OLDEST
+organization, so the new one would have been invisible to anybody who already
+belonged somewhere — the stranded organization the refusal existed to prevent,
+with its own tests deleted as part of the lift.
+
+**`GET /organizations/mine` is keyless and tenantless**, the `teams/mine` shape,
+and it is the platform's first deliberately cross-tenant read — scoped by the
+caller's own membership set. **The bootstrap organization is excluded from the
+LISTING and never from the resolver**: applying that filter to resolution would
+lock every legacy account out of the product.
+
+**The authenticated subtree is keyed on the organization**, because screens hold
+per-tenant state a session replace does not clear — a settings field seeded
+once, open-row ids, an issued invitation code no endpoint can reissue.
+
+Three things NOT to do: never decide the active organization from anything but a
+validated stored membership at mint time; never make a refresh REFUSE on a stale
+remembered choice (it signs people out of valid sessions); never apply the
+bootstrap listing exclusion to `ResolveActiveMembershipUseCase`.
+
+**The next action is Sprint 10.7.** Block B's multi-tenant story is complete end
+to end. What is left, in rough order of consequence: **`analytics-service`'s
+`user_snapshots` is keyed on `userId` alone and already counts approximately
+nobody per organization** (a live defect this sprint makes easier to notice and
+did not cause — migration, backfill, and an in-memory double that disagrees with
+Prisma); **`INTERNAL_SERVICE_TOKEN` becoming required in auth-service**, which
+needs the auth integration suite taught to override the resolver first; and the
+remaining design-system debt in `design-system.md`. Open it with its own
+Definition of Ready.
+
 ## Things that will bite you if you do not know them
 
 - **Resolution fails closed on uncertainty only**: cannot-ask → 503,
@@ -1125,10 +1208,12 @@ smaller sprint is wanted first, is the remaining design-system debt in
   cold-start spec added one more file to that pile.
 - **`mv` is minted and bumped but nothing compares it** — narrowed on
   purpose to "cheap staleness signal" (ADR 0014 amendment).
-- **No organization selector / token exchange**; resolution picks the oldest
-  active membership, EXCEPT that a real organization now beats the bootstrap
-  one (9.8, D8 — a tiebreak, not a filter). The selector is what retires that
-  tiebreak.
+- ~~**No organization selector / token exchange**~~ — **closed in 10.6** (ADR
+  0025). Resolution still picks the oldest active membership when nothing is
+  requested, and a real organization still beats the bootstrap
+  one (9.8, D8 — a tiebreak, not a filter). **The selector did NOT retire that
+  tiebreak and the old sentence here predicting it was wrong**: something has to
+  decide when nothing is requested, and that is every login.
 - **analytics counts a multi-organization person in ONE organization** — the
   first to claim them. 9.8 stopped the tenant-move race (the stamp no longer
   overwrites), but `user_snapshots` is still keyed on `userId` alone; counting
@@ -1248,9 +1333,9 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-**The next action is Sprint 10.6**, as described at the end of the Sprint 10.5
-entry above: token exchange and organization selection, which is what both ADR
-0023 and ADR 0024 defer their remaining limits to. The list below is **Block
+**The next action is Sprint 10.7**, as described at the end of the Sprint 10.6
+entry above. Block B’s multi-tenant story is complete; what remains is listed
+there in order of consequence. The list below is **Block
 A's** candidate list, kept because it is still the right list for whenever
 Block A resumes. Nothing on it is the next thing to do, and email in particular
 still requires the project owner's approval under ADR 0008.
@@ -1309,21 +1394,30 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ## Suggested continuation prompt
 
 > Continue HelpDesk AI. **Block A is formally closed and Block B is open;
-> Sprints 10.0 through 10.5 are complete, and the next action is Sprint 10.6 —
-> token exchange and organization selection, which is what ADR 0023 and ADR
-> 0024 both defer their remaining limits to.** Read
+> Sprints 10.0 through 10.6 are complete, and the next action is Sprint 10.7 —
+> see the Sprint 10.6 entry for the ordered list of what remains.** Read
 > `docs/architecture/design-system.md` before touching a colour and
 > `brand-strategy.md` before touching copy; `apps/web/src/lib/product-status.ts`
 > stays authoritative for what may be claimed (ADR 0009). Do not start email,
 > WhatsApp, billing, SSO, SCIM or production-readiness work, and do not reopen
 > Block A.
 >
-> **A single tenant is now fully self-serve** (10.4 + 10.5): somebody can
-> register, create an organization, name it, rename it, invite colleagues,
-> administer them and hand the organization on, without anybody touching a
-> database. What is NOT possible is belonging to two — resolution picks the
-> oldest non-bootstrap membership at every mint and there is no selector, which
-> is exactly what 10.6 exists to fix.
+> **The multi-tenant story is complete end to end** (10.4 + 10.5 + 10.6):
+> somebody can register, create an organization, name it, rename it, invite
+> colleagues, administer them, hand the organization on, create a SECOND one,
+> and switch between them — without anybody touching a database. Which
+> organization a token is minted for is decided by the server from a stored
+> membership, every time.
+>
+> **The lesson 10.6 paid for, and it is the sharpest one in a while**: its
+> reconnaissance found that the `tm` claim had never reached a signed token
+> since Sprint 9.12, so `tickets.read_team` granted NOTHING in production for
+> four sprints. TypeScript could not see it — the claims are added with
+> `...(cond && { tm })`, and a spread is not an object literal, so
+> excess-property checking never fires. Neither could the suite, because every
+> mint-path test asserts what the FAKE issuer was handed rather than what was
+> signed. **When a value has to survive a boundary, assert on the far side of
+> it.**
 >
 > Complete and green on main: the tenancy migration
 > (phases 0-8), Sprint 9.5 (branches/departments/stations with branch-scoped
@@ -1431,7 +1525,19 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > Helpi is the only translated part, and half-translating ahead of the i18n
 > machinery is what 10.1 decided against.
 >
-> Open 10.6 with its own Definition of Ready, the pattern the last sixteen
+> **What 10.6 makes true, and must stay true**: the active organization is
+> decided by the server at mint time from a STORED membership, never from a
+> token's claim and never from a header — a requested id is a request, and the
+> one place it reaches asks the database. Switching writes nothing to
+> `refresh_tokens`, because a session belongs to a person. The exchange refuses
+> an organization you do not hold (404, blind to why); a refresh FALLS BACK
+> instead, because being removed from an organization must not sign you out.
+> The 9.8 tiebreak stays and is now the documented default — a comment
+> scheduling its deletion was wrong, and deleting it would put every invited
+> account back in the holding pen. The bootstrap organization is excluded from
+> the LISTING and never from the resolver.
+>
+> Open 10.7 with its own Definition of Ready, the pattern the last seventeen
 > sprints set. Block A's candidate list (email delivery top by consequence, and
 > still the project owner's decision under ADR 0008) is kept in "Exact next
 > action" for whenever Block A resumes — it is not the next thing to do.

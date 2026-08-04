@@ -263,7 +263,26 @@ suites in parallel against one broker.
   stands — nothing unattributable came back. What remains of the gap is
   narrower and is recorded in the ADR: somebody who already belongs to a real
   organization still cannot create a second one, because there is no
-  organization selector to reach it with.
+  organization selector to reach it with. **That remainder closed in Sprint
+  10.6** (ADR 0025): the selector exists, the refusal is gone, and the create
+  flow switches into what it made.
+- **`analytics-service` counts a person in ONE organization, and it is already
+  the wrong one.** `user_snapshots` is keyed on `userId` alone, so a person
+  active in two organizations gets one row — and because the bootstrap
+  membership claims it first, every real organization already counts
+  approximately nobody. Predates Sprint 10.6 and was not caused by it; that
+  sprint makes it easier to notice rather than worse. Closing it needs a
+  migration, a backfill, and a correction to an in-memory double that currently
+  disagrees with Prisma about the behaviour being changed, so unit and
+  integration suites would not agree about the fix.
+- **`INTERNAL_SERVICE_TOKEN` is still optional in auth-service**, and its own
+  env comment says it should become required "in the phase that makes the
+  claims decide something". Sprint 10.6 was that phase and deliberately did not
+  flip it: the auth integration suite runs without organizations-service, so
+  flipping the schema turns every login in that suite into a 503. The order is
+  to teach the suite to override the resolver at the boundary first — the
+  pattern already exists there for the throttler guard — in a sprint that owns
+  the suite change.
 - **The AI provider notice has no failure path.** If `GET /ai/provider` fails,
   the panel shows an error and no provider notice at all, quietly dropping the
   "No language model is connected" disclosure instead of defaulting to the
