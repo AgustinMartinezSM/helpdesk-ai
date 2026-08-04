@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  chooseOrganizationRequest,
   loginRequest,
   logoutRequest,
   refreshRequest,
@@ -37,6 +38,16 @@ export interface AuthContextValue {
    * than by waiting out the access-token lifetime.
    */
   refresh(): Promise<void>;
+  /**
+   * Acts in another organization from now on (Sprint 10.6, ADR 0025).
+   *
+   * Not a variant of `refresh()`: the server mints a token for the requested
+   * organization and REFUSES if the person cannot act there, so the rejection
+   * has to reach the caller rather than being swallowed into `anonymous` the
+   * way a failed refresh is. On success the whole session is replaced, because
+   * permissions, branch and team scope all change with the organization.
+   */
+  switchOrganization(organizationId: string): Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -85,6 +96,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus(recovered ? 'authenticated' : 'anonymous');
   }, []);
 
+  const switchOrganization = useCallback(
+    async (organizationId: string) => {
+      if (!session) {
+        throw new Error('Sign in before choosing an organization');
+      }
+      // Deliberately NOT wrapped in a try that falls back to anonymous. A
+      // refused switch means "you cannot act there", which the caller has to
+      // be able to show; treating it like a dead session would sign somebody
+      // out of a session that is perfectly valid.
+      const next = await chooseOrganizationRequest(
+        session.accessToken,
+        organizationId,
+      );
+      setSession(next);
+      setStatus('authenticated');
+    },
+    [session],
+  );
+
   const logout = useCallback(async () => {
     await logoutRequest();
     setSession(null);
@@ -92,7 +122,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ status, session, login, logout, refresh }}>
+    <AuthContext.Provider
+      value={{
+        status,
+        session,
+        login,
+        logout,
+        refresh,
+        switchOrganization,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

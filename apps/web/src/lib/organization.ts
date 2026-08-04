@@ -106,6 +106,32 @@ export function createOrganization(
   return call(accessToken, 'POST', '/organization', input);
 }
 
+export interface SelectableOrganization {
+  organizationId: string;
+  slug: string;
+  name: string;
+  /** What the caller is there. Display data, never a decision. */
+  roleTemplate: string;
+}
+
+/**
+ * The organizations the signed-in person can act in (Sprint 10.6).
+ *
+ * Keyless upstream and answered from their own memberships, so it works in the
+ * state it exists for — including with no organization at all, where it
+ * answers an empty list. The bootstrap holding pen is excluded upstream: it is
+ * migration data, not a workspace anybody chooses.
+ */
+export function listMyOrganizations(
+  accessToken: string,
+): Promise<SelectableOrganization[]> {
+  return call<{ organizations: SelectableOrganization[] }>(
+    accessToken,
+    'GET',
+    '/organization/mine',
+  ).then((body) => body.organizations);
+}
+
 export interface OrganizationSettings {
   organizationId: string;
   /** Stable. Nothing in the product changes it — see ADR 0024. */

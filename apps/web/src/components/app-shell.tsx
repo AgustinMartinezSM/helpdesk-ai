@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Mark } from './brand/mark';
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { useAuth } from './auth-context';
+import { OrganizationSwitcher } from './organization-switcher';
 import { can, PERMISSIONS } from '../lib/permissions';
 import { ThemeToggle } from './theme-toggle';
 import { ButtonLink } from './ui/button';
@@ -143,6 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <AppNav />
           <div className={styles.actions}>
+            <OrganizationSwitcher />
             <ThemeToggle />
             <SessionArea />
           </div>

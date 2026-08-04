@@ -212,3 +212,48 @@
 .main:focus {
   outline: none;
 }
+
+/* The organization switcher (Sprint 10.6). Rendered only when there is a
+   second organization to go to, so the header is unchanged for every account
+   that belongs to one. */
+.switcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.switcherSelect {
+  max-width: 12rem;
+  padding: 0.3125rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.switcherSelect:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* Absolute so a refusal cannot change the header's height and shift the page
+   underneath it. */
+.switcherError {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  right: 0;
+  z-index: 20;
+  max-width: 18rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}

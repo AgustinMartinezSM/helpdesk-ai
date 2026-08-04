@@ -108,6 +108,37 @@ export async function refreshRequest(): Promise<BrowserSession | null> {
   return (await response.json()) as BrowserSession;
 }
 
+/**
+ * Swaps the session for one acting in another organization (Sprint 10.6).
+ *
+ * The server decides: it validates the id against the caller's stored
+ * membership and answers 404 if they cannot act there. No new refresh
+ * credential comes back — switching context is not starting a session — so the
+ * shape is the same `BrowserSession` with a different organization inside it.
+ *
+ * `credentials: 'include'` because the BFF records the choice in an httpOnly
+ * cookie on the way through; that is what makes the next page load resume here
+ * instead of falling back to the default organization.
+ */
+export async function chooseOrganizationRequest(
+  accessToken: string,
+  organizationId: string,
+): Promise<BrowserSession> {
+  const response = await fetch(`${BFF_URL}/session/organization`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ organizationId }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return (await response.json()) as BrowserSession;
+}
+
 export async function logoutRequest(): Promise<void> {
   await fetch(`${BFF_URL}/session/logout`, {
     method: 'POST',

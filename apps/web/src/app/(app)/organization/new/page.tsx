@@ -19,13 +19,18 @@ import styles from './page.module.css';
  * for the first person.
  *
  * It follows `/join`'s shape deliberately, including the part `/join` had to
- * learn in Sprint 9.9: **the session is refreshed after the write.** The
- * token that created the organization does not carry it, so without the
- * refresh the person owns something they are not yet inside — and every
- * screen would keep refusing them.
+ * learn in Sprint 9.9: **the session is re-minted after the write.** The token
+ * that created the organization does not carry it, so without that the person
+ * owns something they are not yet inside — and every screen would keep
+ * refusing them.
+ *
+ * Sprint 10.6 changed WHICH re-mint. A refresh re-runs the default rule and
+ * returns the oldest organization the person belongs to, which stopped being
+ * the right answer the moment a second one became creatable — so this
+ * exchanges on the created id instead.
  */
 export default function NewOrganizationPage() {
-  const { status, session, refresh } = useAuth();
+  const { status, session, switchOrganization } = useAuth();
   const [name, setName] = useState('');
   const [created, setCreated] = useState<{ name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,9 +54,14 @@ export default function NewOrganizationPage() {
       const organization = await createOrganization(session.accessToken, {
         name: name.trim(),
       });
-      // Before showing success: the person is not actually inside the
-      // organization until the token says so.
-      await refresh();
+      // SWITCH, not refresh — and this line is load-bearing since Sprint 10.6
+      // lifted the refusal of a second organization. A plain refresh re-runs
+      // the default rule, which returns the OLDEST organization the person
+      // belongs to; for anybody who already belonged somewhere that is not the
+      // one they just made, and they would own something they never arrive at
+      // — the exact stranded organization ADR 0023's refusal existed to
+      // prevent, with the refusal now gone.
+      await switchOrganization(organization.organizationId);
       setCreated({ name: organization.name });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Something went wrong');

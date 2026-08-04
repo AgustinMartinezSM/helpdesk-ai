@@ -196,7 +196,14 @@ export const CAPABILITY_AREAS: CapabilityArea[] = [
         description:
           'Register, name your organization, and be its owner — no database access and nobody else required.',
         status: 'available',
-        note: 'Available to somebody who does not belong to an organization yet. Anyone already in one is refused, because the product cannot yet move a person between organizations.',
+        note: 'You land inside the organization you just created. Somebody who already belongs to one can create another and switch between them.',
+      },
+      {
+        name: 'Belonging to more than one organization',
+        description:
+          'Work in several organizations with one account, and switch between them from the header.',
+        status: 'available',
+        note: 'The server decides: it re-issues your session for the organization you pick and refuses any you do not actively belong to. Each organization keeps its own role, branches and support teams — nothing is shared between them.',
       },
       {
         name: 'Renaming your organization',

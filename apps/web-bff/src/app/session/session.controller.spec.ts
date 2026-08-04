@@ -257,11 +257,10 @@ describe('Session endpoints (stub gateway)', () => {
 
   /* Choosing an organization (Sprint 10.6, ADR 0025). */
 
-  function organizationCookie(response: {
-    headers: Record<string, string[] | undefined>;
-  }): string {
+  function organizationCookie(response: { headers: unknown }): string {
+    const headers = response.headers as Record<string, string[] | undefined>;
     return (
-      (response.headers['set-cookie'] ?? []).find((value) =>
+      (headers['set-cookie'] ?? []).find((value) =>
         value.startsWith('helpdesk_org='),
       ) ?? ''
     );
@@ -422,7 +421,9 @@ describe('Session endpoints (stub gateway)', () => {
       .set('cookie', 'helpdesk_refresh=rt-1.rt-secret; helpdesk_org=org-2')
       .expect(204);
 
-    const cookies = response.headers['set-cookie'] ?? [];
+    const cookies = ((response.headers as Record<string, unknown>)[
+      'set-cookie'
+    ] ?? []) as string[];
     expect(
       cookies.some((value) => value.startsWith('helpdesk_refresh=;')),
     ).toBe(true);
