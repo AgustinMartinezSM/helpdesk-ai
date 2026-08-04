@@ -99,6 +99,21 @@ bootstrap organization stops being derivable then (R4).
   second is the honest cheap option; deciding is part of the phase 7
   approval.
 
+  **Outcome, Sprint 10.7 (ADR 0026): neither option was taken, and the
+  exemption is closed.** The two enumerated here both assumed the
+  registration-first write had to survive. It did not: `user_snapshots`
+  stopped recording registrations altogether and became a projection of the
+  membership edge, so there was no tenantless write left to buffer or to
+  document. The column is `NOT NULL` and the key is
+  `(user_id, organization_id)`.
+
+  The "honest cheap option" chosen here was cheap and was not, in the end,
+  harmless — which is the part worth carrying. Keeping the column nullable
+  kept the tenant first-come-wins, and the first to come was always the
+  bootstrap membership that this very registration event creates. Every real
+  organization counted approximately nobody for four sprints, and nothing
+  tested it.
+
 ## Migration ordering and availability impact
 
 One migration per service, each `ALTER TABLE ... SET NOT NULL` preceded in

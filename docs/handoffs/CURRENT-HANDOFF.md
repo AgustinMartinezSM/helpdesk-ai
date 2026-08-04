@@ -1,7 +1,7 @@
 # Current handoff
 
 **Date:** 2026-08-04
-**Sprint:** **10.6 complete — a person can belong to more than one
+**Sprint:** **10.7 complete — analytics counts people in the organization they are actually in (ADR 0026). 10.6 complete — a person can belong to more than one
 organization and choose which one they are working in (ADR 0025), which builds
 the half of ADR 0014 that had been recorded as "Not built" since Sprint 9.1.
 BLOCK A IS CLOSED; BLOCK B IS OPEN.** 10.0 (brand strategy), 10.1 (design
@@ -1087,15 +1087,72 @@ validated stored membership at mint time; never make a refresh REFUSE on a stale
 remembered choice (it signs people out of valid sessions); never apply the
 bootstrap listing exclusion to `ResolveActiveMembershipUseCase`.
 
-**The next action is Sprint 10.7.** Block B's multi-tenant story is complete end
-to end. What is left, in rough order of consequence: **`analytics-service`'s
-`user_snapshots` is keyed on `userId` alone and already counts approximately
-nobody per organization** (a live defect this sprint makes easier to notice and
-did not cause — migration, backfill, and an in-memory double that disagrees with
-Prisma); **`INTERNAL_SERVICE_TOKEN` becoming required in auth-service**, which
-needs the auth integration suite taught to override the resolver first; and the
-remaining design-system debt in `design-system.md`. Open it with its own
-Definition of Ready.
+**The next action was Sprint 10.7**, which took the analytics defect — see its
+entry below.
+
+## Sprint 10.7 in one breath
+
+Remote CI green on the closing HEAD — the run is recorded in
+`SPRINT-010.7.md`. Full local gate green: **1327 unit tests across 15
+projects**, typecheck, build.
+
+**analytics reported approximately ZERO users for every real organization, and
+had since Sprint 9.8.** `user_snapshots` was keyed on `userId` alone with a
+nullable tenant stamped only `WHERE organization_id IS NULL` — and the first
+membership every account gets is the BOOTSTRAP one, created while consuming the
+very registration event that seeded the row. The holding pen claimed everybody
+and nothing could move them. 9.8 called it "counted in one of two" and 10.6
+repeated that; both were too generous.
+
+**The table is a projection of the MEMBERSHIP EDGE now** (ADR 0026): composite
+key `(user_id, organization_id)`, NOT NULL tenant, one row per membership,
+`registeredAt` → `joinedAt`. The registration write path is deleted and its
+binding retired — a row with no organization answers nothing this projection is
+asked, and keeping one is what made the tenant first-come-wins.
+
+**THE PART TO CARRY: the two red tests failed in OPPOSITE directions.** The
+unit one because the in-memory double **overwrote** the tenant (so the first
+organization went to zero); the integration one because Prisma **refused** the
+second membership (so the second went to zero). The double was more permissive
+than the database in exactly the direction that hid the bug, and nothing pinned
+either behaviour — fixing only the SQL would have left a green unit suite
+certifying semantics production does not produce. **R2's lesson, for the third
+time** (R2, 9.12's team predicate, now this).
+
+**The phase-7 exemption closed by a route the readiness document never
+enumerated.** It offered two — buffer the registration apply, or document the
+null — and both assumed the tenantless write had to survive. It did not.
+`audit_events` is now the ONLY nullable-by-design tenant, and
+`tenancy-migration-plan.md`'s "not scaffolding" classification is explicitly
+superseded for this table, because left standing it would say removing this was
+a mistake.
+
+**TWO THINGS THIS SPRINT REFUSED TO CLAIM.** The number is per-organization,
+**not correct**: nothing consumes `membership.status-changed.v1`, so a removed
+person leaves a permanent row and the count moved from understating to possibly
+overstating. And **the migration repairs nothing** — which organizations a
+person belongs to lives in another database, so every existing environment
+keeps reading the old numbers until an operator runs
+`backfill-user-snapshots.sh`. That script reads `helpdesk_organizations` and
+writes `helpdesk_analytics`, which a script may do and a service may not
+(ADR 0003); it inserts `ON CONFLICT DO NOTHING` and **never deletes**,
+reporting unexplained rows the way 9.16 established for orphans.
+
+Three things NOT to do: never reach for `backfill-tenant-columns.sh` to repair
+this table (stamping the bootstrap literal onto everything IS the defect);
+never re-add a registration arm to the metrics consumer (the NOT NULL column
+would dead-letter every registration); never prune `user.registered.v1` from
+`retiredBindingKeys` — it is the first entry there that is NOT a deleted
+contract, and three other consumers still want the event.
+
+**The next action is Sprint 10.8.** In rough order of consequence: **nothing
+decrements an organization's headcount** (a new consumer arm, a new port
+method, and its own question — does a suspended member count?);
+**`INTERNAL_SERVICE_TOKEN` becoming required in auth-service**, which needs the
+auth integration suite taught to override the resolver at the boundary first —
+its first failure is an env-validation error in the unit step, so it must not
+ride along with anything else; and the remaining design-system debt in
+`design-system.md`. Open it with its own Definition of Ready.
 
 ## Things that will bite you if you do not know them
 
@@ -1334,7 +1391,7 @@ missing variable, which is the intent. Every real `.env` is git-ignored.
 
 ## Exact next action
 
-**The next action is Sprint 10.7**, as described at the end of the Sprint 10.6
+**The next action is Sprint 10.8**, as described at the end of the Sprint 10.7
 entry above. Block B’s multi-tenant story is complete; what remains is listed
 there in order of consequence. The list below is **Block
 A's** candidate list, kept because it is still the right list for whenever
@@ -1395,8 +1452,8 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ## Suggested continuation prompt
 
 > Continue HelpDesk AI. **Block A is formally closed and Block B is open;
-> Sprints 10.0 through 10.6 are complete, and the next action is Sprint 10.7 —
-> see the Sprint 10.6 entry for the ordered list of what remains.** Read
+> Sprints 10.0 through 10.7 are complete, and the next action is Sprint 10.8 —
+> see the Sprint 10.7 entry for the ordered list of what remains.** Read
 > `docs/architecture/design-system.md` before touching a colour and
 > `brand-strategy.md` before touching copy; `apps/web/src/lib/product-status.ts`
 > stays authoritative for what may be claimed (ADR 0009). Do not start email,
@@ -1538,7 +1595,20 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > account back in the holding pen. The bootstrap organization is excluded from
 > the LISTING and never from the resolver.
 >
-> Open 10.7 with its own Definition of Ready, the pattern the last seventeen
+> **What 10.7 makes true**: `user_snapshots` is a projection of the MEMBERSHIP
+> EDGE, keyed on `(user_id, organization_id)` with a NOT NULL tenant, and
+> analytics no longer consumes registrations at all. `audit_events` is the only
+> nullable-by-design tenant left. The headcount is per-organization but nothing
+> decrements it, and an existing database keeps the old numbers until an
+> operator runs `backfill-user-snapshots.sh`.
+>
+> **The lesson 10.7 paid for**: its two red tests failed in OPPOSITE directions
+> — the in-memory double overwrote where Prisma refused — so neither alone
+> would have found the bug, and fixing only the SQL would have left a green
+> unit suite asserting semantics the database does not produce. When a double
+> and a repository disagree, a test on one side is not coverage.
+>
+> Open 10.8 with its own Definition of Ready, the pattern the last eighteen
 > sprints set. Block A's candidate list (email delivery top by consequence, and
 > still the project owner's decision under ADR 0008) is kept in "Exact next
 > action" for whenever Block A resumes — it is not the next thing to do.

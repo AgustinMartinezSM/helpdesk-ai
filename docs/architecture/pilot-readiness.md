@@ -266,15 +266,22 @@ suites in parallel against one broker.
   organization selector to reach it with. **That remainder closed in Sprint
   10.6** (ADR 0025): the selector exists, the refusal is gone, and the create
   flow switches into what it made.
-- **`analytics-service` counts a person in ONE organization, and it is already
-  the wrong one.** `user_snapshots` is keyed on `userId` alone, so a person
-  active in two organizations gets one row — and because the bootstrap
-  membership claims it first, every real organization already counts
-  approximately nobody. Predates Sprint 10.6 and was not caused by it; that
-  sprint makes it easier to notice rather than worse. Closing it needs a
-  migration, a backfill, and a correction to an in-memory double that currently
-  disagrees with Prisma about the behaviour being changed, so unit and
-  integration suites would not agree about the fix.
+- ~~**`analytics-service` counts a person in ONE organization, and it is
+  already the wrong one.**~~ **Closed in Sprint 10.7** (ADR 0026):
+  `user_snapshots` is keyed on `(user_id, organization_id)` with a NOT NULL
+  tenant and records the membership edge, so a person is counted in every
+  organization they belong to. The in-memory double that disagreed with Prisma
+  was corrected in the same change, with both tests written red first.
+  **Two things remain true and are not this item**: an existing database keeps
+  reporting the old numbers until an operator runs
+  `backfill-user-snapshots.sh`, and nothing decrements the count — see below.
+- **Nothing removes a person from an organization's headcount.** Analytics
+  consumes `membership.created.v1` and nothing else, so somebody suspended or
+  removed leaves a permanent row. Before Sprint 10.7 the number understated;
+  now it can overstate, and in a churned organization `totalUsers` means
+  "people who ever joined". It is the immediate next increment and it carries
+  its own question — does a suspended member count? — which is why 10.7 did
+  not smuggle it in.
 - **`INTERNAL_SERVICE_TOKEN` is still optional in auth-service**, and its own
   env comment says it should become required "in the phase that makes the
   claims decide something". Sprint 10.6 was that phase and deliberately did not

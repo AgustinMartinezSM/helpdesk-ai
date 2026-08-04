@@ -198,4 +198,96 @@ deliberate.
 
 ## Outcome
 
-_Written at the close of the sprint._
+`GET /analytics/summary` reports a real organization's headcount instead of
+approximately zero, and a person in several organizations is counted in each.
+The decision is **ADR 0026**.
+
+### What was built
+
+`user_snapshots` keyed on `(user_id, organization_id)` with a NOT NULL tenant;
+one row per membership; `registeredAt` renamed `joinedAt`; the registration
+write path deleted and its binding retired; the in-memory double corrected;
+and `backfill-user-snapshots.sh`, the repair script `data-ownership.md` had
+been naming as missing.
+
+### The part worth carrying: two red tests that failed in opposite directions
+
+The unit test and the integration test were written before any production line
+changed, and they did **not** fail the same way.
+
+- The **unit** test failed because the in-memory double **overwrote** the
+  tenant, so the second membership moved the person and the first
+  organization dropped to zero.
+- The **integration** test failed because Prisma **refused** the second
+  membership — `updateMany ... WHERE organization_id IS NULL` matched nothing
+  and the follow-up insert hit the old primary key — so the second
+  organization stayed at zero.
+
+That asymmetry is the whole finding. The double was more permissive than the
+database, in exactly the direction that hid the defect, and **nothing pinned
+either behaviour**. Fixing only the SQL would have left a green unit suite
+certifying semantics production does not produce. This is the R2 lesson for the
+third time in this repository — R2, then Sprint 9.12's team predicate, now this
+— and it is the first time both sides were written red first.
+
+I could only watch the unit one fail locally; Docker is not running here, so
+the integration red is reasoned rather than observed, and the typecheck failure
+on `findUnique({ where: { userId } })` is the part of it I did see.
+
+### What the exemption turned out to cost
+
+`user_snapshots` was one of two deliberate exemptions from the phase-7 NOT NULL
+enforcement, and the readiness document called keeping it "the honest cheap
+option". It was cheap. It was not harmless: keeping the column nullable kept
+the tenant first-come-wins, and the first to come is always the bootstrap
+membership that the registration event itself creates. Four sprints of every
+real organization counting nobody followed from that one choice, and the two
+sprints that noticed the shape of it both described it too generously.
+
+The exemption closes by a route that document never enumerated. It offered two
+— buffer the apply, or document the null — and both assumed the tenantless
+write had to survive. It did not.
+
+### What this sprint refused to claim
+
+**The number is now per-organization. It is not correct.** Nothing consumes
+`membership.status-changed.v1` and no port method deletes a row, so somebody
+suspended or removed leaves a permanent row in every organization they ever
+joined. The count has moved from understating to potentially overstating, and
+in a churned organization `totalUsers` means "people who ever joined". Named as
+the immediate next increment, in `pilot-readiness.md` and in the ADR.
+
+**And the migration repairs nothing.** Which organizations a person belongs to
+lives in another database, so every existing environment keeps reporting the
+old numbers until an operator runs the script. That is stated in the migration
+header, the script header, the ADR and here, because a fix nobody deploys the
+second half of is not a fix.
+
+### Verification
+
+Full gate green: format, lint, typecheck across 15 projects, **1327 unit tests
+across all 15**, and build.
+
+Three levels: unit with a corrected double; the consumer spec pinning the
+binding list, the retired key and that a registration now writes nothing at
+all; and integration against real PostgreSQL and RabbitMQ — one person, two
+organizations, asserted through the composite lookup as well as the aggregate,
+because a surviving `user_id` uniqueness would make the second insert a silent
+no-op that `total()` alone could not distinguish from a correct answer.
+
+**The integration suite ran on CI, not locally** — Docker is not running on
+this machine, for the fourth sprint running.
+
+### Documentation
+
+- **ADR 0026** — new, and the first record of a decision whose only previous
+  documentation was the comments it reverses.
+- **`tenancy-migration-plan.md`** — the exemption's "not scaffolding"
+  classification is superseded for this table, in those words.
+- **`tenancy-phase-7-readiness.md`** — the outcome appended: neither
+  enumerated option was taken, and what the cheap one cost.
+- **`data-ownership.md`**, **`pilot-readiness.md`**, the two tenancy operations
+  scripts, and **`CURRENT-HANDOFF.md`**.
+
+No fictional experience, customer, testimonial, incident, external approval or
+commercial adoption was introduced.

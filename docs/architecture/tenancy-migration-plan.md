@@ -407,13 +407,28 @@ first irreversible step** — reverting past it requires making columns nullable
 again, which is safe but is a migration rather than a code revert.
 
 **Executed 2026-07-31 (`88b2cd6`), approved.** Seven tables constrained.
-`user_snapshots` and `audit_events` are nullable **by design**, not by
-omission: registration is anonymous, creates the snapshot row before the
-membership event supplies a tenant, and is recorded by the firehose as the
+`user_snapshots` and `audit_events` were nullable **by design**, not by
+omission: registration is anonymous, created the snapshot row before the
+membership event supplied a tenant, and is recorded by the firehose as the
 structurally tenantless `user.registered.v1` forever. The checkpoint holds
 where it can mean anything — every table whose rows are always attributable
-refuses an untenanted one — and the two exempt tables' scoped reads already
+refuses an untenanted one — and the exempt tables' scoped reads already
 exclude nulls. Full record: `tenancy-phase-7-readiness.md`.
+
+**Amended 2026-08-04 (Sprint 10.7, ADR 0026): `user_snapshots` is no longer
+exempt, and `audit_events` is now the only one.** The exemption was not
+"resolved" in either of the two ways this plan and the readiness document
+anticipated — it was removed, because the tenantless WRITE was removed.
+`user_snapshots` stopped recording registrations and became a projection of
+the membership edge, keyed on `(user_id, organization_id)`.
+
+It was not a tidy-up. The nullable tenant was stamped first-come-wins, and the
+first to come was always the bootstrap membership — so every real organization
+counted approximately nobody. **The classification below, which lists this
+exemption under "what deliberately remains, and is not scaffolding", is
+therefore superseded for this table**; leaving it standing would tell the next
+reader that removing it was a mistake. `audit_events` keeps that
+classification, and permanently.
 
 ### Phase 8 — legacy cleanup (9.4) — **done**
 
