@@ -171,3 +171,77 @@ publishes it; organizations-service, users-service and the audit firehose all
 still consume it on their own queues. Only this queue stopped caring, and its
 retired binding key is the first entry in that list which is not a deleted
 contract — worth knowing before somebody prunes the list.
+
+## Amendment — Sprint 10.8: which edges count, and how the number comes back down
+
+The record above says plainly that nothing decrements the headcount and names
+that as the next increment, with its own open question. This amendment answers
+the question and records the mechanism. It is an amendment rather than a new
+ADR because the decision being refined is this one: what the table projects
+was settled here, and "which of those edges count as a person" is a property
+of the same projection, not a separate architecture.
+
+**The answer to the open question: a suspended member does not count.**
+`totalUsers` counts memberships whose status is `active`.
+
+That is not a free choice between equally good readings. The product answered
+it everywhere else first: the people directory lists active members by default
+and takes `?status=all` to widen, assignment re-checks `status = 'active'`
+against the stored row rather than trusting a token, and mint-time resolution
+prefers an active real membership. A dashboard answering a different question
+from the screen listing the same people would be the "two numbers, one
+question" defect — and the People screen is precisely what somebody would
+check the dashboard against.
+
+Rejected: **everything except `deactivated`** (active plus suspended), which
+reads as an HR roster this product does not keep, next to open-ticket counts;
+and **two figures on one dashboard**, which needs vocabulary the product has
+not got, with the wrong one still the prominent one.
+
+**The filter names what counts, not what does not.** The membership contracts
+type `status` as a free string on purpose, so the vocabulary can move without
+a breaking contract change. "Exclude suspended and deactivated" would silently
+count a status invented by a later sprint; "count active" means an unknown
+status is not counted. The constant is exported from the domain and shared by
+the SQL and the in-memory double rather than spelled twice — the last two
+defects in this projection were a double and a repository disagreeing.
+
+**The row carries `status` and `last_event_at`, and is never deleted.**
+Deleting on `deactivated` was the first idea and is wrong three ways: that
+status stopped being terminal in Sprint 9.10, so the delete would have to be
+undone by an insert whose `joinedAt` nobody has any more; it discards the
+watermark, so a stale replayed `deactivated` would remove a row that should
+exist; and it destroys the evidence that explains the number. Both apply
+methods are last-writer-wins upserts on the payload's own timestamp, which is
+what users-service's directory projection uses for the same three contracts —
+two services projecting the same events must order them identically or they
+drift apart under replay.
+
+**A status change for an unseen edge creates the row**, the asymmetry
+users-service already settled: a lost created event must not make a live
+person invisible. This projection has the easier half of it, storing no role
+template, so the placeholder invents nothing — and a later created event
+corrects its `joinedAt` **downward** through `LEAST`, because a membership's
+creation time is by construction the earliest fact about an edge. The same
+guard means that late created event cannot revive somebody suspended after
+they joined, which is the failure ordinary out-of-order delivery would
+otherwise produce.
+
+**The migration reconstructs rather than defaults.** Every row was written by
+`membership.created.v1` and every creation path in the platform creates a
+membership `active`, so `'active'` is what the projection would have stored;
+`last_event_at` would have been that event's timestamp, which `joined_at`
+already holds. What it cannot reconstruct is any status change since — nothing
+ever consumed those events and there is no outbox — so the operator script
+stays the repair, and it now carries `status` under the same guard as the live
+path. **Its orphan report was wrong and is fixed here**: the query written in
+10.7 grouped every row with no filter and labelled them all unexplained,
+directly above a suggested `DELETE`. An operator who trusted the label would
+have deleted a healthy organization's projection. It is a real anti-join now,
+and the suggested statement deletes by the pair rather than by organization.
+
+**What this still does not claim.** The number counts active memberships as
+this database has heard of them. A deployment that has never run the backfill
+since 10.7, or that lost a status event with no replay, is still reporting
+something older than the truth — which is the standing property of a
+projection, stated rather than assumed.

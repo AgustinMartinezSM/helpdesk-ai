@@ -26,7 +26,7 @@ const user: User = {
 };
 
 function buildSessions(
-  memberships?: FakeMembershipResolver,
+  memberships: FakeMembershipResolver,
   logger = new RecordingLogger(),
 ) {
   const tokenIssuer = new FakeTokenIssuer();
@@ -221,14 +221,20 @@ describe('SessionService tenant claims', () => {
     expect(refreshTokens.tokens.size).toBe(0);
   });
 
-  it('mints without tenant claims when no resolver is configured', async () => {
-    const { sessions, tokenIssuer, logger } = buildSessions(undefined);
-
-    await sessions.issueSession(user);
-
-    expect(tokenIssuer.lastClaims?.org).toBeUndefined();
-    expect(logger.warnings).toEqual([]);
-  });
+  /*
+   * `mints without tenant claims when no resolver is configured` stood here
+   * until Sprint 10.8, and DELETING it is part of that decision rather than
+   * fallout from it.
+   *
+   * It pinned the behaviour of a service wired without a membership resolver:
+   * mint anyway, no tenant claims, no warning. That is now unreachable and,
+   * more to the point, unwritable — `SessionService` requires a resolver and
+   * `INTERNAL_SERVICE_TOKEN` is required to boot. The case it described was
+   * never a product state; it was a misconfiguration that looked like the
+   * belongs-nowhere case above, which is exactly why it had to stop being
+   * expressible. Same move as Sprint 10.6 deleting the tests for the
+   * second-organization refusal it lifted.
+   */
 
   it('resolves once per mint, for the user being minted', async () => {
     const memberships = FakeMembershipResolver.resolving({

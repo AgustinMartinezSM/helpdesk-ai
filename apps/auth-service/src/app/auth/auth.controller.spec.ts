@@ -28,6 +28,11 @@ const TEST_ENV = {
   DATABASE_URL: 'postgresql://nobody:nothing@127.0.0.1:59999/unreachable',
   RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
   JWT_ACCESS_SECRET: 'test-secret-0123456789abcdef0123456789abcdef',
+  // Required since Sprint 10.8: the module cannot be built without it. Every
+  // suite below overrides MEMBERSHIP_RESOLVER, so the value is never used to
+  // call anything — ORGANIZATIONS_SERVICE_URL points at a default nobody
+  // serves here.
+  INTERNAL_SERVICE_TOKEN: 'test-internal-0123456789abcdef0123456789',
 };
 
 const PASSWORD = 'long-enough-password';
@@ -51,7 +56,13 @@ async function buildApp(options: { disableThrottling: boolean }): Promise<{
     // Replacing the adapter keeps the suite broker-free: the real one owns
     // a live AMQP connection.
     .overrideProvider(EVENT_PUBLISHER)
-    .useValue(new FakeEventPublisher());
+    .useValue(new FakeEventPublisher())
+    // Belongs-nowhere, and stated rather than inherited. Until Sprint 10.8
+    // this suite got a null resolver for free because the credential was
+    // unset in TEST_ENV; the module now always builds a real HTTP one, which
+    // would reach for localhost:3010 and turn every login into a 503.
+    .overrideProvider(MEMBERSHIP_RESOLVER)
+    .useValue(FakeMembershipResolver.resolvingNothing());
 
   if (options.disableThrottling) {
     builder = builder
@@ -209,10 +220,11 @@ describe('Auth HTTP API (fakes, no database)', () => {
 /**
  * The token exchange over HTTP (Sprint 10.6, ADR 0025).
  *
- * A resolver is wired in here, unlike the suite above: the default build has
- * none, because `INTERNAL_SERVICE_TOKEN` is unset in the test env and the
- * module then mints tenant-less tokens on purpose. Switching organizations is
- * the one flow that cannot be exercised without one.
+ * The resolver here ANSWERS, unlike the suite above, which overrides it with
+ * one that reports belongs-nowhere. Both override it: since Sprint 10.8 the
+ * module always builds a real HTTP resolver, so a suite that wants any other
+ * behaviour has to say so. Switching organizations is the one flow that
+ * cannot be exercised without a resolver that hands out memberships.
  */
 describe('Organization exchange HTTP API', () => {
   const ACME = '00000000-0000-4000-8000-0000000000aa';

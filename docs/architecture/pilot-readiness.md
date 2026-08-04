@@ -272,24 +272,33 @@ suites in parallel against one broker.
   tenant and records the membership edge, so a person is counted in every
   organization they belong to. The in-memory double that disagreed with Prisma
   was corrected in the same change, with both tests written red first.
-  **Two things remain true and are not this item**: an existing database keeps
+  **One thing remains true and is not this item**: an existing database keeps
   reporting the old numbers until an operator runs
-  `backfill-user-snapshots.sh`, and nothing decrements the count — see below.
-- **Nothing removes a person from an organization's headcount.** Analytics
+  `backfill-user-snapshots.sh`. Nothing decremented the count either, which
+  was the next item and closed a sprint later.
+- ~~**Nothing removes a person from an organization's headcount.** Analytics
   consumes `membership.created.v1` and nothing else, so somebody suspended or
-  removed leaves a permanent row. Before Sprint 10.7 the number understated;
-  now it can overstate, and in a churned organization `totalUsers` means
-  "people who ever joined". It is the immediate next increment and it carries
-  its own question — does a suspended member count? — which is why 10.7 did
-  not smuggle it in.
-- **`INTERNAL_SERVICE_TOKEN` is still optional in auth-service**, and its own
-  env comment says it should become required "in the phase that makes the
-  claims decide something". Sprint 10.6 was that phase and deliberately did not
-  flip it: the auth integration suite runs without organizations-service, so
-  flipping the schema turns every login in that suite into a 503. The order is
-  to teach the suite to override the resolver at the boundary first — the
-  pattern already exists there for the throttler guard — in a sprint that owns
-  the suite change.
+  removed leaves a permanent row.~~ **Closed in Sprint 10.8** (ADR 0026's
+  amendment): `user_snapshots` carries the membership's status under a
+  last-writer-wins watermark, `MetricsConsumer` binds
+  `membership.status-changed.v1`, and `totalUsers` counts **active** members —
+  the same question the people directory answers by default, so the dashboard
+  and the People screen cannot disagree. The row is never deleted, because
+  `deactivated` stopped being terminal in 9.10 and deleting would discard the
+  watermark that makes a stale replay harmless. **What remains true and is not
+  this item**: an existing database keeps reporting the old numbers until an
+  operator runs `backfill-user-snapshots.sh`, which is the same residual 10.7
+  left, for the same reason — the events are gone and there is no outbox.
+- ~~**`INTERNAL_SERVICE_TOKEN` is still optional in auth-service**~~ **Closed
+  in Sprint 10.8.** The env field is required, `SessionService` takes a
+  resolver at the type level, and the branch that turned an unconfigured
+  service into "this person belongs to no organization" is deleted rather than
+  unreachable. The sequencing 10.6 named was correct and was followed: the
+  integration suite was taught to override the resolver at the boundary
+  first — it now answers with a real membership and the flow **verifies the
+  signed token's claims**, which is the assertion 10.6's `tm` defect argued
+  for. `apps/auth-service/src/config/env.spec.ts` pins the refusal and that
+  neither credential has a default.
 - **The AI provider notice has no failure path.** If `GET /ai/provider` fails,
   the panel shows an error and no provider notice at all, quietly dropping the
   "No language model is connected" disclosure instead of defaulting to the

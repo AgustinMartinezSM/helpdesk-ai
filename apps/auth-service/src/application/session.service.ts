@@ -109,7 +109,15 @@ export class SessionService {
     private readonly tokenIssuer: TokenIssuer,
     private readonly clock: Clock,
     private readonly refreshTtlSeconds: number,
-    private readonly memberships?: MembershipResolver,
+    /**
+     * REQUIRED since Sprint 10.8. It was optional, and the branch that
+     * handled its absence returned null — the resolver's word for "belongs to
+     * no organization" — so a service wired without one silently claimed a
+     * fact about every account instead of admitting it could not ask. The
+     * type is what makes that unwritable now; the env schema is what makes it
+     * undeployable.
+     */
+    private readonly memberships: MembershipResolver,
     private readonly logger?: SessionLogger,
   ) {}
 
@@ -179,11 +187,14 @@ export class SessionService {
    * `MembershipResolver` keeps those apart on purpose — null for the first,
    * a throw for the second — which is what makes this distinction possible
    * rather than a guess about what an error meant.
+   *
+   * There used to be a THIRD case here, and removing it in Sprint 10.8 is
+   * what made the two above trustworthy: an unconfigured service returned
+   * null, so "nobody ever gave me a credential" came out as "this person
+   * belongs nowhere". Every account on that deployment got a tenant-less
+   * token and every write was refused, from one warning at boot.
    */
   private async resolveMembership(userId: string, organizationId?: string) {
-    if (!this.memberships) {
-      return null;
-    }
     try {
       return await this.memberships.resolveFor(userId, organizationId);
     } catch (error) {

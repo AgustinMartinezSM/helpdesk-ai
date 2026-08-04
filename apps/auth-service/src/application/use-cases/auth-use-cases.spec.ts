@@ -8,6 +8,7 @@ import { parseRefreshToken } from '../refresh-token.codec';
 import { SessionService } from '../session.service';
 import {
   FakeEventPublisher,
+  FakeMembershipResolver,
   FakePasswordHasher,
   FakeTokenIssuer,
   FixedClock,
@@ -33,6 +34,10 @@ function buildContext() {
     new FakeTokenIssuer(),
     clock,
     REFRESH_TTL_SECONDS,
+    // Belongs-nowhere, which is what these cases assumed while the parameter
+    // was optional — but stated rather than inherited from a default. The
+    // tenant claims are session-claims.spec.ts's subject, not this file's.
+    FakeMembershipResolver.resolvingNothing(),
   );
 
   return {

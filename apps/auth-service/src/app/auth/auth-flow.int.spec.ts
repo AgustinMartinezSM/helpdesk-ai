@@ -1,10 +1,15 @@
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
+import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
-import { FakeEventPublisher } from '../../application/testing/fakes';
+import { MEMBERSHIP_RESOLVER } from '../../application/ports/membership-resolver';
+import {
+  FakeEventPublisher,
+  FakeMembershipResolver,
+} from '../../application/testing/fakes';
 import { authServiceEnvSchema } from '../../config/env';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AppModule } from '../app.module';
@@ -20,6 +25,10 @@ if (!databaseUrl) {
 }
 
 const PASSWORD = 'a-perfectly-fine-password';
+const JWT_SECRET = 'integration-secret-0123456789abcdef012345';
+const ORGANIZATION_ID = '00000000-0000-4000-8000-0000000000a1';
+const BRANCH_ID = '00000000-0000-4000-8000-0000000000b1';
+const TEAM_ID = '00000000-0000-4000-8000-0000000000c1';
 
 describe('Auth flow (real database)', () => {
   let app: INestApplication;
@@ -31,7 +40,13 @@ describe('Auth flow (real database)', () => {
       LOG_LEVEL: 'fatal',
       DATABASE_URL: databaseUrl,
       RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
-      JWT_ACCESS_SECRET: 'integration-secret-0123456789abcdef012345',
+      JWT_ACCESS_SECRET: JWT_SECRET,
+      // Required since Sprint 10.8. organizations-service does not run in
+      // this suite, so the resolver is overridden below — which is the work
+      // the handoff said had to come FIRST, before the schema could be
+      // tightened: without it, flipping the field turns every login here
+      // into a 503.
+      INTERNAL_SERVICE_TOKEN: 'integration-internal-0123456789abcdef0123',
     });
 
     const moduleRef = await Test.createTestingModule({
@@ -44,6 +59,24 @@ describe('Auth flow (real database)', () => {
       // users-service integration suites.
       .overrideProvider(EVENT_PUBLISHER)
       .useValue(new FakeEventPublisher())
+      // Answers with a real membership rather than belongs-nowhere, ON
+      // PURPOSE. After 10.8 there is no production configuration in which
+      // auth mints without asking, so a suite over the real stack should
+      // mint what the real stack mints — and it lets the flow below decode
+      // the SIGNED token, which is the assertion this repository learned to
+      // want the hard way (Sprint 10.6: `tm` was missing from every signed
+      // token for four sprints because the tests asserted what a FAKE issuer
+      // received).
+      .overrideProvider(MEMBERSHIP_RESOLVER)
+      .useValue(
+        FakeMembershipResolver.resolving({
+          organizationId: ORGANIZATION_ID,
+          permissions: ['tickets.read_own', 'tickets.read_team'],
+          membershipVersion: 7,
+          branchIds: [BRANCH_ID],
+          teamIds: [TEAM_ID],
+        }),
+      )
       .compile();
 
     app = moduleRef.createNestApplication({ logger: false });
@@ -94,6 +127,35 @@ describe('Auth flow (real database)', () => {
       .get('/auth/me')
       .set('authorization', `Bearer ${login.body.accessToken}`)
       .expect(200);
+
+    // The tenant claims, VERIFIED off the token this flow actually signed.
+    //
+    // jwt-token-issuer.spec.ts already decodes a signed token, and Sprint
+    // 10.6 added it for a good reason: `tm` was assembled by SessionService
+    // from 9.12 and never copied by the issuer, because `AccessTokenClaims`
+    // did not declare it and a spread is not an object literal, so
+    // TypeScript's excess-property check never fired. Every test on the mint
+    // path asserted what a FAKE issuer received, so `tickets.read_team`
+    // granted nothing in production for four sprints.
+    //
+    // What this adds is the other half of that boundary: the issuer spec
+    // proves the issuer signs what it is given, and this proves the wired
+    // module gives it the resolved membership — over real HTTP, through the
+    // real controller, with the signature checked rather than merely decoded.
+    const claims = app
+      .get(JwtService)
+      .verify<Record<string, unknown>>(login.body.accessToken);
+    expect(claims).toMatchObject({
+      sub: register.body.id,
+      org: ORGANIZATION_ID,
+      perms: ['tickets.read_own', 'tickets.read_team'],
+      mv: 7,
+      br: [BRANCH_ID],
+      tm: [TEAM_ID],
+    });
+    // Phase 8 removed this one, and a signed token is where that is true or
+    // not — the response body still carries user.roles, which web reads.
+    expect(claims.roles).toBeUndefined();
 
     const refreshed = await request(app.getHttpServer())
       .post('/auth/refresh')

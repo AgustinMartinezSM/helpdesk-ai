@@ -86,7 +86,11 @@ the membership that would supply one is created by consuming that very event
 — and a single organization column on a profile would assert one-org-per-
 person, which ADR 0013 rejected. The directory is scoped through the
 `directory_memberships` projection instead. `user_snapshots` gained the
-column in Sprint 9.4, fed by `membership.created.v1`.
+column in Sprint 9.4, and since Sprint 10.8 it is fed by
+`membership.created.v1` **and** `membership.status-changed.v1`: the row
+carries the membership's status under a last-writer-wins watermark, and the
+dashboard counts only active members, so a suspension lowers the headcount
+and a reactivation raises it. The row is never deleted.
 
 The consumers now read the tenant-carrying stream (`*.v2` and
 `membership.*.v1`), so rows written going forward carry their organization.

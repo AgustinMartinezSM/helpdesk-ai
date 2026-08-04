@@ -19,6 +19,9 @@ const TEST_ENV = {
   DATABASE_URL: 'postgresql://nobody:nothing@127.0.0.1:59999/unreachable',
   RABBITMQ_URL: 'amqp://nobody:nothing@127.0.0.1:59998',
   JWT_ACCESS_SECRET: 'test-secret-0123456789abcdef0123456789abcdef',
+  // Required since Sprint 10.8. The URL it would be used against is
+  // unreachable here on purpose; health endpoints never mint a token.
+  INTERNAL_SERVICE_TOKEN: 'test-internal-0123456789abcdef0123456789',
 };
 
 describe('Health endpoints (no database)', () => {

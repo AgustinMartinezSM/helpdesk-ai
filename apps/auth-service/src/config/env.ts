@@ -54,16 +54,21 @@ export const authServiceEnvSchema = baseEnvSchema.extend({
   // to forward, so a process credential is unavoidable — but it should not be
   // the same key that signs people's sessions.
   //
-  // Optional, with no default. A default would be a guessable credential
-  // shipped in the repository, which is the reason JWT_ACCESS_SECRET has none
-  // either. Leaving it unset means this service does not attempt resolution
-  // at all and mints tokens without tenant claims — the same outcome as a
-  // failed call, reached without inventing a secret. It has to become
-  // required in the phase that makes the claims decide something.
-  INTERNAL_SERVICE_TOKEN: z
-    .string()
-    .min(32, 'must be at least 32 characters')
-    .optional(),
+  // REQUIRED since Sprint 10.8, and no default — a default would be a
+  // guessable credential shipped in a public repository, which is why
+  // JWT_ACCESS_SECRET has none either.
+  //
+  // It was optional from Sprint 9.2, with this comment promising it would
+  // "become required in the phase that makes the claims decide something".
+  // That phase was four sprints ago: the claims carry the tenant of every
+  // write, the permission set behind every check, and since 10.6 which
+  // organization somebody is working in. What optional actually bought was a
+  // deployment that forgot the variable logging ONE warning at boot and then
+  // minting tenant-less tokens forever — every write refused with a 403 that
+  // names nothing, in the one service whose fail-closed rule is written into
+  // ADR 0014. A missing credential is now a named boot failure, which is what
+  // JWT_ACCESS_SECRET has always got.
+  INTERNAL_SERVICE_TOKEN: z.string().min(32, 'must be at least 32 characters'),
 });
 
 export type AuthServiceEnv = z.infer<typeof authServiceEnvSchema>;

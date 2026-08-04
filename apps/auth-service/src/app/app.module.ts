@@ -108,23 +108,18 @@ export class AppModule {
           inject: [JwtService],
         },
         {
-          // Absent when no service credential is configured: the resolver is
-          // then null rather than a client that would call with nothing, and
-          // tokens are minted without tenant claims.
+          // Always present since Sprint 10.8. The branch that returned null
+          // when no credential was configured is gone rather than unreachable:
+          // null is the resolver's word for "this person belongs to no
+          // organization", so returning it for "I was never given a way to
+          // ask" made a configuration mistake indistinguishable from a fact
+          // about the account.
           provide: MEMBERSHIP_RESOLVER,
-          useFactory: (logger: Logger): MembershipResolver | null => {
-            if (!env.INTERNAL_SERVICE_TOKEN) {
-              logger.warn(
-                'INTERNAL_SERVICE_TOKEN is not set: tokens will be minted without tenant claims',
-              );
-              return null;
-            }
-            return new HttpMembershipResolver(
+          useFactory: (): MembershipResolver =>
+            new HttpMembershipResolver(
               env.ORGANIZATIONS_SERVICE_URL,
               env.INTERNAL_SERVICE_TOKEN,
-            );
-          },
-          inject: [Logger],
+            ),
         },
         {
           provide: SessionService,
@@ -132,7 +127,7 @@ export class AppModule {
             refreshTokens: RefreshTokenRepository,
             tokenIssuer: TokenIssuer,
             clock: Clock,
-            memberships: MembershipResolver | null,
+            memberships: MembershipResolver,
             logger: Logger,
           ) =>
             new SessionService(
@@ -140,7 +135,7 @@ export class AppModule {
               tokenIssuer,
               clock,
               env.JWT_REFRESH_TTL_SECONDS,
-              memberships ?? undefined,
+              memberships,
               logger,
             ),
           inject: [
