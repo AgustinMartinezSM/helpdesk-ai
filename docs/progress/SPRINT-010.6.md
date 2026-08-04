@@ -1,7 +1,14 @@
 # Sprint 10.6 — Choosing which organization you are in
 
-Status: **OPEN (2026-08-04).** The Definition of Ready below was written and
-checked against the repository before any code.
+Status: **CLOSED (2026-08-04).** Remote CI green on the final HEAD: run
+[`30869580026`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30869580026)
+on `d5a6820`, green on its first attempt — preceded by run
+[`30869169958`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30869169958)
+on `20fa4fa`, which is **the run in which this sprint's integration tests
+executed for the first time**, since Docker was not available locally.
+`organization-selection.int.spec.ts` passed there on its first execution
+anywhere. The Definition of Ready below was written and checked against the
+repository before any code.
 
 ## Definition of Ready
 

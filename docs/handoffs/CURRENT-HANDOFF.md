@@ -1017,9 +1017,10 @@ smaller sprint is wanted first, is the remaining design-system debt in
 
 ## Sprint 10.6 in one breath
 
-Remote CI green on the closing HEAD — the run is recorded in
-`SPRINT-010.6.md`. Full local gate green: **1325 unit tests across 15
-projects**, typecheck, build.
+Remote CI green on the closing HEAD: run `30869580026` on `d5a6820`, first
+attempt, preceded by run `30869169958` on `20fa4fa` — **the run in which this
+sprint's integration tests executed for the first time**. Full local gate
+green: **1325 unit tests across 15 projects**, typecheck, build.
 
 **A person can belong to more than one organization and choose which one they
 are in.** ADR 0025, which builds what ADR 0014 described in Sprint 9.1 and
