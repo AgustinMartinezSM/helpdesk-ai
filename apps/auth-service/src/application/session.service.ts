@@ -4,6 +4,7 @@ import type { User } from '../domain/user';
 import type { Clock } from './ports/clock';
 import type {
   MembershipResolver,
+  ResolvedMembership,
   SessionLogger,
 } from './ports/membership-resolver';
 import type { RefreshTokenRepository } from './ports/refresh-token.repository';
@@ -14,14 +15,20 @@ import {
   hashRefreshSecret,
 } from './refresh-token.codec';
 
-export interface Session {
+/**
+ * Everything a caller gets that is derived from ONE membership: the signed
+ * token and the echo of what it asserts.
+ *
+ * Split out from `Session` in Sprint 10.6 because switching organizations
+ * produces exactly this and nothing more — a new access token, no new refresh
+ * credential. The refresh family belongs to the person and is untouched by a
+ * change of context, which is what keeps the shared-terminal born window and
+ * reuse detection out of the switching path entirely (ADR 0025).
+ */
+export interface AccessSession {
   accessToken: string;
   /** Access token lifetime; clients should refresh before this elapses. */
   expiresInSeconds: number;
-  /** Opaque `<id>.<secret>` credential; shown to the client exactly once. */
-  refreshToken: string;
-  /** Storage id of the refresh token, used to link rotations. */
-  refreshTokenId: string;
   /**
    * The same permission keys stamped into the token's `perms` claim, echoed
    * so a client can decide what to RENDER without decoding the token (ADR
@@ -44,6 +51,13 @@ export interface Session {
   user: { id: string; email: string; roles: string[] };
 }
 
+export interface Session extends AccessSession {
+  /** Opaque `<id>.<secret>` credential; shown to the client exactly once. */
+  refreshToken: string;
+  /** Storage id of the refresh token, used to link rotations. */
+  refreshTokenId: string;
+}
+
 /**
  * Issues a complete session (access + refresh pair) for a user.
  * Shared by login and refresh so both paths produce identical sessions,
@@ -57,6 +71,11 @@ export interface Session {
  * this way; picking the alternative would have changed reuse-detection
  * semantics, since revoking a stolen token family would then have to reason
  * about which workspace the family belonged to.
+ *
+ * Sprint 10.6 did not reopen that. A person may now CHOOSE which organization
+ * a token is minted for, and the choice is remembered outside this service —
+ * so the row still describes a person's session and nothing here had to learn
+ * about workspaces (ADR 0025).
  */
 export interface IssueSessionOptions {
   /**
@@ -69,6 +88,19 @@ export interface IssueSessionOptions {
    * created under for its whole life.
    */
   refreshTtlSeconds?: number;
+  /**
+   * The organization this session is being asked for, when the caller
+   * remembers a choice (Sprint 10.6). A REQUEST, validated upstream against
+   * the stored membership.
+   *
+   * If it cannot be honoured the mint FALLS BACK to the default rule instead
+   * of refusing. That is the whole point: somebody removed from the
+   * organization their client remembers must not be signed out of the
+   * product, and "not that one" is an answer rather than the uncertainty
+   * `TenantContextUnavailableError` exists for. The caller learns what
+   * happened by reading `organizationId` off the session it got back.
+   */
+  requestedOrganizationId?: string;
 }
 
 export class SessionService {
@@ -85,33 +117,12 @@ export class SessionService {
     user: User,
     options: IssueSessionOptions = {},
   ): Promise<Session> {
-    const membership = await this.resolveMembership(user.id);
-
-    const { token: accessToken, expiresInSeconds } =
-      await this.tokenIssuer.issueAccessToken({
-        sub: user.id,
-        email: user.email,
-        ...(membership && {
-          org: membership.organizationId,
-          perms: membership.permissions,
-          mv: membership.membershipVersion,
-        }),
-        // `br` only when the membership actually covers branches: an empty
-        // set says nothing an absent claim does not — branch-scoped
-        // visibility denies on absence either way — and omitting it keeps an
-        // unscoped member's token identical to the ones minted before
-        // branches existed.
-        ...(membership &&
-          membership.branchIds.length > 0 && {
-            br: membership.branchIds,
-          }),
-        // `tm` on the same terms as `br`: only when non-empty, because
-        // team-scoped visibility denies on absence either way.
-        ...(membership &&
-          membership.teamIds.length > 0 && {
-            tm: membership.teamIds,
-          }),
-      });
+    const membership = await this.resolveWithFallback(
+      user.id,
+      options.requestedOrganizationId,
+    );
+    const { accessToken, expiresInSeconds, permissions, organizationId } =
+      await this.mint(user, membership);
 
     const now = this.clock.now();
     const id = randomUUID();
@@ -138,18 +149,11 @@ export class SessionService {
     return {
       accessToken,
       expiresInSeconds,
+      permissions,
+      organizationId,
+      user: { id: user.id, email: user.email, roles: [...user.roles] },
       refreshToken: composeRefreshToken(id, secret),
       refreshTokenId: id,
-      // Echoed from the SAME resolution that stamped the claims above, not
-      // resolved again (ADR 0020): one membership read decides both what the
-      // token asserts and what the client may render, so the two cannot
-      // disagree about the moment they describe.
-      permissions: membership ? [...membership.permissions] : [],
-      organizationId: membership?.organizationId ?? null,
-      // `roles` here is response data, not a claim: since phase 8 the token
-      // carries none, but the web still renders the product's role names, so
-      // they come from the user row — the only place they live now.
-      user: { id: user.id, email: user.email, roles: [...user.roles] },
     };
   }
 
@@ -176,12 +180,12 @@ export class SessionService {
    * a throw for the second — which is what makes this distinction possible
    * rather than a guess about what an error meant.
    */
-  private async resolveMembership(userId: string) {
+  private async resolveMembership(userId: string, organizationId?: string) {
     if (!this.memberships) {
       return null;
     }
     try {
-      return await this.memberships.resolveFor(userId);
+      return await this.memberships.resolveFor(userId, organizationId);
     } catch (error) {
       this.logger?.error(
         `refusing to mint a token: tenant context unavailable (${
@@ -190,5 +194,114 @@ export class SessionService {
       );
       throw new TenantContextUnavailableError();
     }
+  }
+
+  /**
+   * The requested organization if it can be honoured, otherwise whatever the
+   * default rule picks (Sprint 10.6, ADR 0025).
+   *
+   * The second call is not a retry of a failure — a failure throws and never
+   * reaches here. It is the deliberate answer to "the organization you
+   * remembered is not one you can act in any more", and falling back is what
+   * stops a removed member being signed out of the whole product by a stale
+   * client. The client discovers the substitution by reading `organizationId`
+   * off the session, which is also what it needs in order to stop asking.
+   */
+  private async resolveWithFallback(userId: string, organizationId?: string) {
+    if (!organizationId) {
+      return this.resolveMembership(userId);
+    }
+    const requested = await this.resolveMembership(userId, organizationId);
+    if (requested) {
+      return requested;
+    }
+    this.logger?.warn(
+      `requested organization ${organizationId} is not available to this account; falling back to the default`,
+    );
+    return this.resolveMembership(userId);
+  }
+
+  /**
+   * Signs one membership into an access token, and echoes what it asserts.
+   *
+   * THE ONLY PLACE CLAIMS ARE ASSEMBLED. Both mint paths — a full session and
+   * a bare organization switch — come through here, because `org`, `perms`,
+   * `mv`, `br` and `tm` all describe a single membership row and a second
+   * assembly site is how they would come to describe two. A token whose
+   * organization is one tenant and whose permissions or team scope are
+   * another's would pass every check downstream: the guard validates a
+   * signature, every `actorOf` copies the claims verbatim, and nothing
+   * compares `mv`.
+   */
+  private async mint(
+    user: User,
+    membership: ResolvedMembership | null,
+  ): Promise<AccessSession> {
+    const { token, expiresInSeconds } = await this.tokenIssuer.issueAccessToken(
+      {
+        sub: user.id,
+        email: user.email,
+        ...(membership && {
+          org: membership.organizationId,
+          perms: membership.permissions,
+          mv: membership.membershipVersion,
+        }),
+        // `br` only when the membership actually covers branches: an empty
+        // set says nothing an absent claim does not — branch-scoped
+        // visibility denies on absence either way — and omitting it keeps an
+        // unscoped member's token identical to the ones minted before
+        // branches existed.
+        ...(membership &&
+          membership.branchIds.length > 0 && {
+            br: membership.branchIds,
+          }),
+        // `tm` on the same terms as `br`: only when non-empty, because
+        // team-scoped visibility denies on absence either way.
+        ...(membership &&
+          membership.teamIds.length > 0 && {
+            tm: membership.teamIds,
+          }),
+      },
+    );
+
+    return {
+      accessToken: token,
+      expiresInSeconds,
+      // Echoed from the SAME resolution that stamped the claims, not resolved
+      // again (ADR 0020): one membership read decides both what the token
+      // asserts and what the client may render, so the two cannot disagree
+      // about the moment they describe.
+      permissions: membership ? [...membership.permissions] : [],
+      organizationId: membership?.organizationId ?? null,
+      // `roles` here is response data, not a claim: since phase 8 the token
+      // carries none, but the web still renders the product's role names, so
+      // they come from the user row — the only place they live now.
+      user: { id: user.id, email: user.email, roles: [...user.roles] },
+    };
+  }
+
+  /**
+   * Mints an access token for a DIFFERENT organization the person belongs to,
+   * or answers null because they do not (Sprint 10.6, ADR 0025).
+   *
+   * No fallback here, unlike a refresh: somebody who explicitly asked to go
+   * somewhere must be told they cannot, not quietly left where they were and
+   * shown a screen that says otherwise.
+   *
+   * No refresh token either, and that is the shape of the decision. Switching
+   * context is not starting a session — the refresh family belongs to the
+   * person (ADR 0014) — so nothing here touches `refresh_tokens`, and the
+   * shared-terminal born window and reuse detection stay entirely out of the
+   * switching path.
+   */
+  async exchangeOrganization(
+    user: User,
+    organizationId: string,
+  ): Promise<AccessSession | null> {
+    const membership = await this.resolveMembership(user.id, organizationId);
+    if (!membership) {
+      return null;
+    }
+    return this.mint(user, membership);
   }
 }

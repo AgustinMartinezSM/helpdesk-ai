@@ -59,10 +59,20 @@ export class HttpMembershipResolver implements MembershipResolver {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  async resolveFor(userId: string): Promise<ResolvedMembership | null> {
+  async resolveFor(
+    userId: string,
+    requestedOrganizationId?: string,
+  ): Promise<ResolvedMembership | null> {
+    // A query parameter rather than a second endpoint: the answer has the
+    // same shape either way, and the upstream applies the same two gates —
+    // asking for an organization by name must not reach anything the default
+    // walk would skip.
+    const query = requestedOrganizationId
+      ? `?organizationId=${encodeURIComponent(requestedOrganizationId)}`
+      : '';
     const url = `${this.baseUrl}/internal/memberships/${encodeURIComponent(
       userId,
-    )}/active`;
+    )}/active${query}`;
 
     let response: Response;
     try {

@@ -30,6 +30,7 @@ import {
   type UserRepository,
 } from '../application/ports/user.repository';
 import { SessionService } from '../application/session.service';
+import { ExchangeOrganizationUseCase } from '../application/use-cases/exchange-organization';
 import { GetIdentityUseCase } from '../application/use-cases/get-identity';
 import { LoginUseCase } from '../application/use-cases/login';
 import { LogoutUseCase } from '../application/use-cases/logout';
@@ -215,6 +216,12 @@ export class AppModule {
           provide: GetIdentityUseCase,
           useFactory: (users: UserRepository) => new GetIdentityUseCase(users),
           inject: [USER_REPOSITORY],
+        },
+        {
+          provide: ExchangeOrganizationUseCase,
+          useFactory: (users: UserRepository, sessions: SessionService) =>
+            new ExchangeOrganizationUseCase(users, sessions),
+          inject: [USER_REPOSITORY, SessionService],
         },
         JwtAccessGuard,
       ],

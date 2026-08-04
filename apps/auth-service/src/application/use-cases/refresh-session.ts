@@ -15,6 +15,13 @@ import { SessionService } from '../session.service';
 
 export interface RefreshSessionInput {
   refreshToken: string;
+  /**
+   * Where the client remembers being (Sprint 10.6, ADR 0025). Validated at
+   * mint time and quietly ignored if it cannot be honoured — a refresh is how
+   * a session survives, and it must not be the thing that ends one because a
+   * membership went away.
+   */
+  organizationId?: string;
 }
 
 export class RefreshSessionUseCase {
@@ -68,6 +75,7 @@ export class RefreshSessionUseCase {
     );
     const session = await this.sessions.issueSession(user, {
       refreshTtlSeconds: bornWindowSeconds,
+      requestedOrganizationId: input.organizationId,
     });
     await this.refreshTokens.revoke(stored.id, now, session.refreshTokenId);
 

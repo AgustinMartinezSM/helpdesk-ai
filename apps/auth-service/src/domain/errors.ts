@@ -61,3 +61,23 @@ export class TenantContextUnavailableError extends AuthDomainError {
     super('Sign-in is temporarily unavailable. Please try again.');
   }
 }
+
+/**
+ * A token was requested for an organization the caller cannot act in
+ * (Sprint 10.6, ADR 0025).
+ *
+ * Deliberately blind to WHICH kind of no it is. An organization the caller
+ * does not belong to, one whose membership is suspended, one that is itself
+ * suspended, and one that does not exist all answer alike — distinguishing
+ * them would make the exchange an oracle for which organizations exist, which
+ * is the cross-tenant leak ADR 0023 closed for names and slugs.
+ *
+ * A 404 rather than a 403, for the same reason every scoped not-found in the
+ * platform is: confirming existence IS the leak. The caller is authenticated
+ * and their session is fine, so it is not a credential failure either.
+ */
+export class OrganizationNotAvailableError extends AuthDomainError {
+  constructor() {
+    super('That organization is not available to this account');
+  }
+}

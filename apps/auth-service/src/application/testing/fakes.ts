@@ -126,16 +126,47 @@ export class FakeTokenIssuer implements TokenIssuer {
 
 export class FakeMembershipResolver implements MembershipResolver {
   calls: string[] = [];
+  /**
+   * What each call ASKED for, alongside `calls`. Kept separate rather than
+   * changing `calls`'s shape so the existing assertions about who was resolved
+   * keep meaning what they meant.
+   */
+  requested: (string | undefined)[] = [];
 
   constructor(
     private readonly outcome:
       | { kind: 'resolved'; membership: ResolvedMembership }
       | { kind: 'none' }
       | { kind: 'fails'; error: Error },
+    /**
+     * Memberships this fake will honour when asked for BY ID (Sprint 10.6).
+     * Anything else answers null, which is how the real resolver reports an
+     * organization the person cannot act in — so a use case that stopped
+     * checking would fail here rather than pass against a doll that hands out
+     * whatever it is asked for.
+     */
+    private readonly byOrganization: ReadonlyMap<
+      string,
+      ResolvedMembership
+    > = new Map(),
   ) {}
 
   static resolving(membership: ResolvedMembership): FakeMembershipResolver {
     return new FakeMembershipResolver({ kind: 'resolved', membership });
+  }
+
+  /**
+   * A default answer plus the organizations that may be asked for by id.
+   * Anything not listed is refused, exactly as the real one refuses.
+   */
+  static withOrganizations(
+    fallback: ResolvedMembership | null,
+    ...selectable: ResolvedMembership[]
+  ): FakeMembershipResolver {
+    return new FakeMembershipResolver(
+      fallback ? { kind: 'resolved', membership: fallback } : { kind: 'none' },
+      new Map(selectable.map((entry) => [entry.organizationId, entry])),
+    );
   }
 
   static resolvingNothing(): FakeMembershipResolver {
@@ -151,10 +182,17 @@ export class FakeMembershipResolver implements MembershipResolver {
     });
   }
 
-  async resolveFor(userId: string): Promise<ResolvedMembership | null> {
+  async resolveFor(
+    userId: string,
+    organizationId?: string,
+  ): Promise<ResolvedMembership | null> {
     this.calls.push(userId);
+    this.requested.push(organizationId);
     if (this.outcome.kind === 'fails') {
       throw this.outcome.error;
+    }
+    if (organizationId) {
+      return this.byOrganization.get(organizationId) ?? null;
     }
     return this.outcome.kind === 'resolved' ? this.outcome.membership : null;
   }

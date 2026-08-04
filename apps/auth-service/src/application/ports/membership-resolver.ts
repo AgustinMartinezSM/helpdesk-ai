@@ -28,9 +28,20 @@ export interface ResolvedMembership {
  * expected answer during the migration: every user who registered before
  * organizations-service existed is in that state until the backfill runs.
  * It is not an error, and it must be distinguishable from one.
+ *
+ * `organizationId` ASKS for a particular one (Sprint 10.6, ADR 0025). It is
+ * validated upstream against the caller's stored membership and is honoured
+ * only if they actively belong to an active organization by that id —
+ * otherwise the answer is the same `null`. That collapsing is deliberate: this
+ * port says what a token could assert, not why it could not, and the two
+ * callers already know what they asked for. The exchange turns null into a
+ * refusal; a refresh turns it into a fallback.
  */
 export interface MembershipResolver {
-  resolveFor(userId: string): Promise<ResolvedMembership | null>;
+  resolveFor(
+    userId: string,
+    organizationId?: string,
+  ): Promise<ResolvedMembership | null>;
 }
 
 /** Structural subset of Nest's LoggerService; console satisfies it too. */

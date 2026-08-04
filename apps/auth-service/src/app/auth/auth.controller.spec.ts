@@ -5,11 +5,13 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import { validateEnv } from '@helpdesk-ai/configuration';
 import { EVENT_PUBLISHER } from '../../application/ports/event-publisher';
+import { MEMBERSHIP_RESOLVER } from '../../application/ports/membership-resolver';
 import { PASSWORD_HASHER } from '../../application/ports/password-hasher';
 import { REFRESH_TOKEN_REPOSITORY } from '../../application/ports/refresh-token.repository';
 import { USER_REPOSITORY } from '../../application/ports/user.repository';
 import {
   FakeEventPublisher,
+  FakeMembershipResolver,
   FakePasswordHasher,
   InMemoryRefreshTokenRepository,
   InMemoryUserRepository,
@@ -201,6 +203,181 @@ describe('Auth HTTP API (fakes, no database)', () => {
       .post('/auth/refresh')
       .send({ refreshToken: refreshed.body.refreshToken })
       .expect(401);
+  });
+});
+
+/**
+ * The token exchange over HTTP (Sprint 10.6, ADR 0025).
+ *
+ * A resolver is wired in here, unlike the suite above: the default build has
+ * none, because `INTERNAL_SERVICE_TOKEN` is unset in the test env and the
+ * module then mints tenant-less tokens on purpose. Switching organizations is
+ * the one flow that cannot be exercised without one.
+ */
+describe('Organization exchange HTTP API', () => {
+  const ACME = '00000000-0000-4000-8000-0000000000aa';
+  const OTHER = '00000000-0000-4000-8000-0000000000bb';
+  const THEIRS = '00000000-0000-4000-8000-0000000000cc';
+
+  let app: INestApplication;
+  let accessToken: string;
+
+  beforeAll(async () => {
+    const env = validateEnv(authServiceEnvSchema, TEST_ENV);
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule.forRoot(env)],
+    })
+      .overrideProvider(USER_REPOSITORY)
+      .useValue(new InMemoryUserRepository())
+      .overrideProvider(REFRESH_TOKEN_REPOSITORY)
+      .useValue(new InMemoryRefreshTokenRepository())
+      .overrideProvider(PASSWORD_HASHER)
+      .useValue(new FakePasswordHasher())
+      .overrideProvider(EVENT_PUBLISHER)
+      .useValue(new FakeEventPublisher())
+      .overrideProvider(MEMBERSHIP_RESOLVER)
+      .useValue(
+        FakeMembershipResolver.withOrganizations(
+          {
+            organizationId: ACME,
+            permissions: ['tickets.read_own'],
+            membershipVersion: 1,
+            branchIds: [],
+            teamIds: [],
+          },
+          {
+            organizationId: ACME,
+            permissions: ['tickets.read_own'],
+            membershipVersion: 1,
+            branchIds: [],
+            teamIds: [],
+          },
+          {
+            organizationId: OTHER,
+            permissions: ['tickets.read_all'],
+            membershipVersion: 4,
+            branchIds: [],
+            teamIds: [],
+          },
+        ),
+      )
+      .overrideGuard(ThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    app = moduleRef.createNestApplication({ logger: false });
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    await app.init();
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email: 'switcher@example.com', password: PASSWORD })
+      .expect(201);
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: 'switcher@example.com', password: PASSWORD })
+      .expect(200);
+    accessToken = login.body.accessToken;
+    expect(login.body.organizationId).toBe(ACME);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('swaps the token for one acting in another held organization', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/session/organization')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ organizationId: OTHER })
+      .expect(200);
+
+    expect(response.body.organizationId).toBe(OTHER);
+    expect(response.body.permissions).toEqual(['tickets.read_all']);
+    // No refresh credential: switching context is not starting a session, and
+    // the client keeps the one it already has (ADR 0025).
+    expect(response.body).not.toHaveProperty('refreshToken');
+    expect(response.body).not.toHaveProperty('refreshTokenId');
+  });
+
+  it('answers 404 for an organization the caller does not hold', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/session/organization')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ organizationId: THEIRS })
+      .expect(404);
+
+    // Blind to which kind of no it is: distinguishing "not yours" from "no
+    // such organization" would make this an oracle for what exists.
+    expect(response.body.message).toMatch(/not available/i);
+  });
+
+  it('answers 401 without a token — the caller is the verified token', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/session/organization')
+      .send({ organizationId: OTHER })
+      .expect(401);
+  });
+
+  it('refuses a body naming a user: who is asking comes from the token', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/session/organization')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ organizationId: OTHER, userId: 'somebody-else' })
+      .expect(400);
+  });
+
+  it.each([
+    ['a missing organization', {}],
+    ['an organization that is not a uuid', { organizationId: 'acme' }],
+    ['an organization that is not a string', { organizationId: 42 }],
+  ])('answers 400 for %s', async (_case, body) => {
+    await request(app.getHttpServer())
+      .post('/auth/session/organization')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(body)
+      .expect(400);
+  });
+
+  it('resumes a remembered organization on refresh, and falls back when it is gone', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: 'switcher@example.com', password: PASSWORD })
+      .expect(200);
+
+    const resumed = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: login.body.refreshToken, organizationId: OTHER })
+      .expect(200);
+    expect(resumed.body.organizationId).toBe(OTHER);
+
+    // An organization that cannot be honoured falls back rather than failing:
+    // a stale client must not be able to sign somebody out.
+    const fellBack = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: resumed.body.refreshToken, organizationId: THEIRS })
+      .expect(200);
+    expect(fellBack.body.organizationId).toBe(ACME);
+  });
+
+  it('refuses an organization id on LOGOUT, which shares the other body shape', async () => {
+    // `forbidNonWhitelisted` is what keeps the refresh DTO's new field from
+    // silently becoming part of every body that looks like it.
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: 'switcher@example.com', password: PASSWORD })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/auth/logout')
+      .send({ refreshToken: login.body.refreshToken, organizationId: OTHER })
+      .expect(400);
   });
 });
 

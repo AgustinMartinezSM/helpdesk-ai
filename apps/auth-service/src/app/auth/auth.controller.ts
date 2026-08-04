@@ -16,13 +16,14 @@ import {
   InvalidCredentialsError,
   RefreshTokenReuseError,
 } from '../../domain/errors';
-import type { Session } from '../../application/session.service';
+import type { AccessSession, Session } from '../../application/session.service';
 import {
   GetIdentityUseCase,
   type IdentityOutput,
 } from '../../application/use-cases/get-identity';
 import { LoginUseCase } from '../../application/use-cases/login';
 import { LogoutUseCase } from '../../application/use-cases/logout';
+import { ExchangeOrganizationUseCase } from '../../application/use-cases/exchange-organization';
 import { RefreshSessionUseCase } from '../../application/use-cases/refresh-session';
 import {
   RegisterUserUseCase,
@@ -31,13 +32,21 @@ import {
 import { JwtAccessGuard, type AccessTokenPayload } from '@helpdesk-ai/security';
 import { AuthDomainErrorFilter } from './auth-domain-error.filter';
 import { LoginDto } from './dto/login.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
+import {
+  ExchangeOrganizationDto,
+  RefreshSessionDto,
+  RefreshTokenDto,
+} from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 
 // Credential endpoints get tight per-IP limits (brute-force mitigation);
 // refresh is a normal client operation and gets a looser one.
 const CREDENTIAL_LIMIT = { default: { limit: 5, ttl: 60_000 } };
 const REFRESH_LIMIT = { default: { limit: 20, ttl: 60_000 } };
+// Switching is a normal client operation, but it also answers 404 for any
+// organization the caller does not hold — so it is bounded rather than left
+// open to somebody walking ids looking for a 200.
+const EXCHANGE_LIMIT = { default: { limit: 20, ttl: 60_000 } };
 
 interface CorrelatedRequest {
   headers: Record<string, string | string[] | undefined>;
@@ -64,6 +73,7 @@ export class AuthController {
     private readonly refreshSession: RefreshSessionUseCase,
     private readonly logoutUseCase: LogoutUseCase,
     private readonly getIdentity: GetIdentityUseCase,
+    private readonly exchange: ExchangeOrganizationUseCase,
     private readonly logger: Logger,
   ) {}
 
@@ -104,7 +114,7 @@ export class AuthController {
   @HttpCode(200)
   @Throttle(REFRESH_LIMIT)
   @ApiOperation({ summary: 'Rotate the refresh token and get a new session' })
-  async refresh(@Body() dto: RefreshTokenDto): Promise<Session> {
+  async refresh(@Body() dto: RefreshSessionDto): Promise<Session> {
     try {
       return await this.refreshSession.execute(dto);
     } catch (error) {
@@ -113,6 +123,47 @@ export class AuthController {
       }
       throw error;
     }
+  }
+
+  /**
+   * The token exchange ADR 0014 described in Sprint 9.1 and left unbuilt.
+   *
+   * Guarded by the access token rather than the refresh credential, because
+   * switching context is not starting a session: nothing here touches
+   * `refresh_tokens`, so the born window and reuse detection stay out of the
+   * switching path (ADR 0025). The response is a session MINUS the refresh
+   * credential, and the client keeps the one it already has.
+   *
+   * Its own throttle. Inheriting the refresh limit would let a burst of
+   * switches consume a person's refresh budget, and inheriting nothing would
+   * leave a membership-probing endpoint unlimited — it answers 404 for
+   * anything not held, so an unbounded caller could walk organization ids
+   * looking for a 200.
+   */
+  @Post('session/organization')
+  @HttpCode(200)
+  @UseGuards(JwtAccessGuard)
+  @Throttle(EXCHANGE_LIMIT)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Swap your token for one acting in another organization you hold',
+  })
+  async exchangeOrganization(
+    @Req() request: { user: AccessTokenPayload },
+    @Body() dto: ExchangeOrganizationDto,
+  ): Promise<AccessSession> {
+    // The caller is the VERIFIED token. A body field naming a user would let
+    // anybody holding an account mint a token for somebody else.
+    const exchanged = await this.exchange.execute({
+      userId: request.user.sub,
+      organizationId: dto.organizationId,
+    });
+    this.logger.log({
+      event: 'auth.organization_exchanged',
+      userId: request.user.sub,
+      organizationId: exchanged.organizationId,
+    });
+    return exchanged;
   }
 
   @Post('logout')

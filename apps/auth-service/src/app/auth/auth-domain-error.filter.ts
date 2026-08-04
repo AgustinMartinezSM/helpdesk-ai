@@ -7,6 +7,7 @@ import {
 import {
   AuthDomainError,
   EmailAlreadyRegisteredError,
+  OrganizationNotAvailableError,
   TenantContextUnavailableError,
 } from '../../domain/errors';
 
@@ -49,6 +50,12 @@ function describe(exception: AuthDomainError): {
       status: HttpStatus.SERVICE_UNAVAILABLE,
       error: 'Service Unavailable',
     };
+  }
+  if (exception instanceof OrganizationNotAvailableError) {
+    // 404, not 401 and not 403: the caller's session is fine, so it is not a
+    // credential failure, and confirming that an organization exists but is
+    // somebody else's is exactly the leak this refusal is blind to avoid.
+    return { status: HttpStatus.NOT_FOUND, error: 'Not Found' };
   }
   return { status: HttpStatus.UNAUTHORIZED, error: 'Unauthorized' };
 }
