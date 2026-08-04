@@ -29,6 +29,9 @@ export interface TicketSnapshot {
  * store any more is a registration: a row with no organization answers
  * nothing this projection is asked, and keeping one was what let the holding
  * pen claim every person.
+ *
+ * Since Sprint 10.8 the edge carries its liveness, which is what lets the
+ * headcount go down. The row is never deleted — see the port contract.
  */
 export interface UserSnapshot {
   readonly userId: string;
@@ -36,7 +39,25 @@ export interface UserSnapshot {
   readonly organizationId: string;
   /** When they joined THIS organization — the membership's creation time. */
   readonly joinedAt: Date;
+  /**
+   * Membership status as last projected. A free string, matching the
+   * contract: only `'active'` is counted, so a status this projection has
+   * never heard of fails closed instead of inflating a headcount.
+   */
+  readonly status: string;
+  /** Payload timestamp of the newest applied membership fact — the LWW guard. */
+  readonly lastEventAt: Date;
 }
+
+/**
+ * The one membership status that counts as a person on the dashboard.
+ *
+ * Exported so the SQL and the in-memory double literally share it. That is
+ * not tidiness: the last two defects in this projection were a double and a
+ * repository disagreeing about the same rule (R2, then Sprint 10.7), and a
+ * string spelled twice is where the third one would start.
+ */
+export const COUNTED_MEMBERSHIP_STATUS = 'active';
 
 export interface DailyCount {
   /** UTC calendar day, YYYY-MM-DD. */

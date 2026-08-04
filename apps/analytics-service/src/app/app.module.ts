@@ -15,6 +15,7 @@ import {
 } from '../application/ports/analytics.repository';
 import {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipStatusChangedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
 } from '../application/use-cases/apply-events';
@@ -96,6 +97,12 @@ export class AppModule {
           inject: [USER_SNAPSHOT_REPOSITORY],
         },
         {
+          provide: ApplyMembershipStatusChangedUseCase,
+          useFactory: (users: UserSnapshotRepository) =>
+            new ApplyMembershipStatusChangedUseCase(users),
+          inject: [USER_SNAPSHOT_REPOSITORY],
+        },
+        {
           provide: GetAnalyticsSummaryUseCase,
           useFactory: (
             tickets: TicketSnapshotRepository,
@@ -111,6 +118,7 @@ export class AppModule {
             applyCreated: ApplyTicketCreatedUseCase,
             applyStatusChanged: ApplyTicketStatusChangedUseCase,
             applyMembershipCreated: ApplyMembershipCreatedUseCase,
+            applyMembershipStatusChanged: ApplyMembershipStatusChangedUseCase,
             logger: Logger,
           ) =>
             new MetricsConsumer(
@@ -118,6 +126,7 @@ export class AppModule {
               applyCreated,
               applyStatusChanged,
               applyMembershipCreated,
+              applyMembershipStatusChanged,
               logger,
             ),
           inject: [
@@ -125,6 +134,7 @@ export class AppModule {
             ApplyTicketCreatedUseCase,
             ApplyTicketStatusChangedUseCase,
             ApplyMembershipCreatedUseCase,
+            ApplyMembershipStatusChangedUseCase,
             Logger,
           ],
         },

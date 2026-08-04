@@ -17,12 +17,14 @@ import {
   deadLetterQueueOf,
   defineEvent,
   membershipCreatedV1,
+  membershipStatusChangedV1,
   ticketCreatedV2,
   ticketStatusChangedV2,
   userRegisteredV1,
 } from '@helpdesk-ai/messaging';
 import {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipStatusChangedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
 } from '../../application/use-cases/apply-events';
@@ -99,6 +101,7 @@ describe('analytics projection (real broker, real database)', () => {
       new ApplyTicketCreatedUseCase(snapshots),
       new ApplyTicketStatusChangedUseCase(snapshots),
       new ApplyMembershipCreatedUseCase(userSnapshots),
+      new ApplyMembershipStatusChangedUseCase(userSnapshots),
     );
     await consumer.start();
 
@@ -342,6 +345,193 @@ describe('analytics projection (real broker, real database)', () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(await userSnapshots.total(real)).toBe(1);
+  });
+
+  it('lowers the headcount on a suspension and raises it again, in real SQL', async () => {
+    /**
+     * The defect Sprint 10.8 closes, proved where only a database can prove
+     * it: the guard is a CASE inside ON CONFLICT, and an in-memory double can
+     * only imitate it.
+     *
+     * Written RED with its unit twin. The unit one failed on a missing
+     * constructor; this one failed on the column — `status` did not exist, so
+     * the insert was rejected by PostgreSQL rather than by an assertion. Both
+     * are honest reds and neither is the interesting one; the interesting
+     * assertions are the two below that the fake cannot make: that the stale
+     * replay is refused by SQL, and that a late created event does not revive
+     * a suspended member.
+     */
+    const org = randomUUID();
+    const person = randomUUID();
+    const membershipId = randomUUID();
+
+    await publisherClient.publish(
+      membershipCreatedV1,
+      {
+        membershipId,
+        organizationId: org,
+        userId: person,
+        roleTemplate: 'member',
+        status: 'active',
+        createdAt: '2026-08-05T10:00:00.000Z',
+      },
+      { organizationId: org },
+    );
+    await waitFor(async () =>
+      (await userSnapshots.total(org)) === 1 ? true : null,
+    );
+
+    // Down.
+    await publisherClient.publish(
+      membershipStatusChangedV1,
+      {
+        membershipId,
+        organizationId: org,
+        userId: person,
+        fromStatus: 'active',
+        toStatus: 'suspended',
+        version: 2,
+        changedAt: '2026-08-05T11:00:00.000Z',
+      },
+      { organizationId: org },
+    );
+    await waitFor(async () =>
+      (await userSnapshots.total(org)) === 0 ? true : null,
+    );
+
+    // The row survives the suspension: never deleted, so joinedAt is intact
+    // and a reactivation has something to reactivate.
+    expect(
+      await prisma.userSnapshot.findUnique({
+        where: {
+          userId_organizationId: { userId: person, organizationId: org },
+        },
+      }),
+    ).toMatchObject({
+      status: 'suspended',
+      joinedAt: new Date('2026-08-05T10:00:00.000Z'),
+    });
+
+    // A STALE replay — older than the stored watermark — is refused by the
+    // CASE inside the upsert, not by anything in TypeScript.
+    await publisherClient.publish(
+      membershipStatusChangedV1,
+      {
+        membershipId,
+        organizationId: org,
+        userId: person,
+        fromStatus: 'suspended',
+        toStatus: 'active',
+        version: 3,
+        changedAt: '2026-08-05T10:30:00.000Z',
+      },
+      { organizationId: org },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await userSnapshots.total(org)).toBe(0);
+
+    // A late CREATED event must not revive them either: it is older than the
+    // suspension by construction, so ordinary out-of-order delivery would
+    // otherwise put every suspended member back in the count.
+    await publisherClient.publish(
+      membershipCreatedV1,
+      {
+        membershipId,
+        organizationId: org,
+        userId: person,
+        roleTemplate: 'member',
+        status: 'active',
+        createdAt: '2026-08-05T10:00:00.000Z',
+      },
+      { organizationId: org },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await userSnapshots.total(org)).toBe(0);
+
+    // Up again, for real this time.
+    await publisherClient.publish(
+      membershipStatusChangedV1,
+      {
+        membershipId,
+        organizationId: org,
+        userId: person,
+        fromStatus: 'suspended',
+        toStatus: 'active',
+        version: 4,
+        changedAt: '2026-08-05T12:00:00.000Z',
+      },
+      { organizationId: org },
+    );
+    await waitFor(async () =>
+      (await userSnapshots.total(org)) === 1 ? true : null,
+    );
+    expect(await prisma.userSnapshot.count({ where: { userId: person } })).toBe(
+      1,
+    );
+  });
+
+  it('projects a status change for an edge it never saw, and corrects joinedAt later', async () => {
+    // The lost-created-event path. users-service settled the same asymmetry
+    // for these contracts: a live person must not be invisible because one
+    // event went missing (publishing is best-effort, ADR 0006).
+    const org = randomUUID();
+    const person = randomUUID();
+    const membershipId = randomUUID();
+
+    await publisherClient.publish(
+      membershipStatusChangedV1,
+      {
+        membershipId,
+        organizationId: org,
+        userId: person,
+        fromStatus: 'suspended',
+        toStatus: 'active',
+        version: 2,
+        changedAt: '2026-08-05T11:00:00.000Z',
+      },
+      { organizationId: org },
+    );
+    await waitFor(async () =>
+      (await userSnapshots.total(org)) === 1 ? true : null,
+    );
+
+    // The placeholder's joinedAt is the change's own timestamp — a guess, and
+    // the only one this projection makes.
+    expect(
+      await prisma.userSnapshot.findUnique({
+        where: {
+          userId_organizationId: { userId: person, organizationId: org },
+        },
+      }),
+    ).toMatchObject({ joinedAt: new Date('2026-08-05T11:00:00.000Z') });
+
+    // A created event that arrives afterwards corrects it DOWNWARD through
+    // LEAST, because a membership's creation time is by construction the
+    // earliest fact about the edge — while the status guard still refuses to
+    // let that same older event touch the status.
+    await publisherClient.publish(
+      membershipCreatedV1,
+      {
+        membershipId,
+        organizationId: org,
+        userId: person,
+        roleTemplate: 'member',
+        status: 'invited',
+        createdAt: '2026-08-05T09:00:00.000Z',
+      },
+      { organizationId: org },
+    );
+    await waitFor(async () => {
+      const row = await prisma.userSnapshot.findUnique({
+        where: {
+          userId_organizationId: { userId: person, organizationId: org },
+        },
+      });
+      return row?.joinedAt.toISOString() === '2026-08-05T09:00:00.000Z'
+        ? row
+        : null;
+    });
+    expect(await userSnapshots.total(org)).toBe(1);
   });
 
   it('never receives a retired v1 event: the unbind kept it off the queue', async () => {

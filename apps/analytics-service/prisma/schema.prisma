@@ -65,9 +65,28 @@ model UserSnapshot {
   /// stopped being true the moment a person could have several.
   joinedAt DateTime @map("joined_at") @db.Timestamptz(3)
 
-  /// Kept even though the primary key leads with user_id: every aggregate
-  /// filters on organization_id alone, which the composite key cannot serve.
+  /// Membership status as last projected (Sprint 10.8). A free string, never
+  /// an enum, for the reason the contracts give: the vocabulary is unfrozen,
+  /// so freezing it here would turn settling it into a migration. The count
+  /// asks for 'active' and anything else simply does not count, which is what
+  /// makes an unknown status fail closed.
+  ///
+  /// NO DEFAULT on purpose. A default would let a row nobody meant to write
+  /// count as a person.
+  status String
+
+  /// Payload timestamp of the newest applied membership fact — the LWW guard,
+  /// the same role last_event_at plays for ticket_snapshots and updated_at
+  /// plays for users-service's directory projection. It is what makes a
+  /// replayed suspension harmless and why the row is never deleted.
+  lastEventAt DateTime @map("last_event_at") @db.Timestamptz(3)
+
+  /// Leads with organization_id even though the primary key leads with
+  /// user_id: every aggregate filters on the tenant, which the composite key
+  /// cannot serve. status trails it because the only query is
+  /// "count active in this organization", and a leading-column index still
+  /// serves the tenant-only grouping the operator script does.
   @@id([userId, organizationId])
-  @@index([organizationId])
+  @@index([organizationId, status])
   @@map("user_snapshots")
 }

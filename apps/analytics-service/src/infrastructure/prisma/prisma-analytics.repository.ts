@@ -1,6 +1,10 @@
-import type { DailyCount } from '../../domain/analytics';
+import {
+  COUNTED_MEMBERSHIP_STATUS,
+  type DailyCount,
+} from '../../domain/analytics';
 import type {
   ApplyMembershipCreated,
+  ApplyMembershipStatusChanged,
   ApplyTicketCreated,
   ApplyTicketStatusChanged,
   TicketSnapshotRepository,
@@ -117,38 +121,92 @@ export class PrismaTicketSnapshotRepository implements TicketSnapshotRepository 
 export class PrismaUserSnapshotRepository implements UserSnapshotRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * ONE statement, with the last-writer-wins guard evaluated INSIDE Postgres
+   * — the same shape the ticket snapshots have used since Sprint 7, and for
+   * the same reason: two events for one edge applied concurrently must not
+   * both read a stale watermark, and the row lock on DO UPDATE serializes
+   * them. Ties resolve to the later arrival, which on a prefetch=1 queue is
+   * publication order.
+   *
+   * What this replaced is worth remembering rather than deleting silently.
+   * Until Sprint 10.7 the row was keyed on userId alone and the tenant was
+   * stamped only `WHERE organization_id IS NULL`, so the first membership won
+   * — and the first membership every account gets is the BOOTSTRAP one,
+   * created while consuming the very registration event that seeded the row.
+   * Every real organization counted approximately nobody, for four sprints.
+   * 10.7 fixed that with `ON CONFLICT DO NOTHING`, which was right while the
+   * only non-key column was a timestamp nothing read; a status has to be
+   * updated, so the guard came with it.
+   */
   async applyMembershipCreated(input: ApplyMembershipCreated): Promise<void> {
     /**
-     * ONE statement, where there used to be two and a branch (Sprint 10.7,
-     * ADR 0026). skipDuplicates compiles to ON CONFLICT DO NOTHING, which now
-     * resolves against the COMPOSITE key — so a redelivery inserts nothing
-     * while a second organization inserts a second row.
+     * `joined_at` takes LEAST, not the incoming value and not a plain keep.
      *
-     * What this replaced is worth remembering rather than deleting silently.
-     * The row was keyed on userId alone and the tenant was stamped only
-     * `WHERE organization_id IS NULL`, so the first membership won — and the
-     * first membership every account gets is the BOOTSTRAP one, created while
-     * consuming the very registration event that seeded the row. Every real
-     * organization counted approximately nobody, for four sprints.
+     * A membership's creation time is by construction the EARLIEST fact about
+     * an edge, so LEAST converges on the truth without the row having to
+     * remember whether it was a placeholder written by a status change — which
+     * is the one case where the stored value is a guess. It cannot move the
+     * column forward, so the property that mattered before still holds.
      *
-     * The unconditional update that preceded THAT was worse in a different
-     * way: two membership events moved a person between tenants, with broker
-     * delivery order deciding whose headcount they landed in. Neither
-     * ordering problem exists now, because nothing is updated at all.
+     * The status guard is what stops ordinary out-of-order delivery from
+     * reviving somebody suspended after they joined: a created event is older
+     * than any change to that membership, so it loses.
      */
-    await this.prisma.userSnapshot.createMany({
-      data: [
-        {
-          userId: input.userId,
-          organizationId: input.organizationId,
-          joinedAt: input.createdAt,
-        },
-      ],
-      skipDuplicates: true,
-    });
+    await this.prisma.$executeRaw`
+      INSERT INTO user_snapshots
+        (user_id, organization_id, joined_at, status, last_event_at)
+      VALUES
+        (${input.userId}::uuid, ${input.organizationId}::uuid,
+         ${input.createdAt}, ${input.status}, ${input.createdAt})
+      ON CONFLICT (user_id, organization_id) DO UPDATE SET
+        joined_at = LEAST(user_snapshots.joined_at, EXCLUDED.joined_at),
+        status = CASE
+          WHEN user_snapshots.last_event_at <= EXCLUDED.last_event_at
+          THEN EXCLUDED.status ELSE user_snapshots.status END,
+        last_event_at = GREATEST(
+          user_snapshots.last_event_at, EXCLUDED.last_event_at)
+    `;
   }
 
+  /**
+   * The write that makes the headcount go down (Sprint 10.8).
+   *
+   * An unseen edge INSERTS rather than skipping: a lost created event must not
+   * make a live person invisible, and this projection stores no role template,
+   * so the placeholder invents nothing — it records the status the event
+   * carries and takes the change's own timestamp as `joined_at`, which a later
+   * created event corrects downward through LEAST above.
+   *
+   * It never deletes, including on `deactivated`. That status stopped being
+   * terminal in Sprint 9.10, and a delete would also throw away the watermark
+   * that makes a replayed suspension harmless.
+   */
+  async applyMembershipStatusChanged(
+    input: ApplyMembershipStatusChanged,
+  ): Promise<void> {
+    await this.prisma.$executeRaw`
+      INSERT INTO user_snapshots
+        (user_id, organization_id, joined_at, status, last_event_at)
+      VALUES
+        (${input.userId}::uuid, ${input.organizationId}::uuid,
+         ${input.changedAt}, ${input.status}, ${input.changedAt})
+      ON CONFLICT (user_id, organization_id) DO UPDATE SET
+        status = CASE
+          WHEN user_snapshots.last_event_at <= EXCLUDED.last_event_at
+          THEN EXCLUDED.status ELSE user_snapshots.status END,
+        last_event_at = GREATEST(
+          user_snapshots.last_event_at, EXCLUDED.last_event_at)
+    `;
+  }
+
+  /**
+   * Active members, never every edge ever recorded. The status this asks for
+   * is shared with the in-memory double rather than spelled twice.
+   */
   async total(organizationId: string): Promise<number> {
-    return this.prisma.userSnapshot.count({ where: { organizationId } });
+    return this.prisma.userSnapshot.count({
+      where: { organizationId, status: COUNTED_MEMBERSHIP_STATUS },
+    });
   }
 }

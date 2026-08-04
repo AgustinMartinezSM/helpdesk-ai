@@ -11,6 +11,7 @@ import {
 } from '../testing/fakes';
 import {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipStatusChangedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
 } from './apply-events';
@@ -62,6 +63,7 @@ function buildContext() {
     applyCreated: new ApplyTicketCreatedUseCase(tickets),
     applyStatus: new ApplyTicketStatusChangedUseCase(tickets),
     applyMembership: new ApplyMembershipCreatedUseCase(users),
+    applyMembershipStatus: new ApplyMembershipStatusChangedUseCase(users),
     summary: new GetAnalyticsSummaryUseCase(tickets, users, clock),
   };
 }
@@ -188,11 +190,13 @@ describe('user snapshot projection', () => {
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_A,
+      status: 'active',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
     });
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_B,
+      status: 'active',
       createdAt: new Date('2026-07-29T12:00:00.000Z'),
     });
 
@@ -208,12 +212,14 @@ describe('user snapshot projection', () => {
     const input = {
       userId: USER.id,
       organizationId: ORG_A,
+      status: 'active',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
     };
 
     await ctx.applyMembership.execute(input);
     await ctx.applyMembership.execute({
       ...input,
+      status: 'active',
       createdAt: new Date('2026-08-01T09:00:00.000Z'),
     });
 
@@ -233,11 +239,13 @@ describe('user snapshot projection', () => {
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_A,
+      status: 'active',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
     });
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_B,
+      status: 'active',
       createdAt: new Date('2026-07-29T12:00:00.000Z'),
     });
 
@@ -255,10 +263,184 @@ describe('user snapshot projection', () => {
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_A,
+      status: 'active',
       createdAt: new Date('2026-07-28T12:00:00.000Z'),
     });
 
     expect(await ctx.users.total(ORG_B)).toBe(0);
+  });
+});
+
+/**
+ * The headcount moves in both directions (Sprint 10.8).
+ *
+ * Until this sprint the projection consumed membership.created.v1 and nothing
+ * else, so `totalUsers` counted everybody who had ever joined and no event
+ * could lower it. What counts is now `status = 'active'` — the same question
+ * the people directory answers by default
+ * (users-service `prisma-user-profile.repository.ts`, `statuses = ['active']`)
+ * — and the row is never deleted, because `deactivated` stopped being terminal
+ * in Sprint 9.10 and a delete would throw away the LWW watermark that makes a
+ * stale replay harmless.
+ */
+describe('headcount, up and down', () => {
+  it('drops somebody suspended and counts them again when reactivated', async () => {
+    const ctx = buildContext();
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+    expect(await ctx.users.total(ORG_A)).toBe(1);
+
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'suspended',
+      changedAt: new Date('2026-07-28T13:00:00.000Z'),
+    });
+    expect(await ctx.users.total(ORG_A)).toBe(0);
+
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      changedAt: new Date('2026-07-28T14:00:00.000Z'),
+    });
+    expect(await ctx.users.total(ORG_A)).toBe(1);
+  });
+
+  it('keeps the row rather than deleting it, so joinedAt survives a round trip', async () => {
+    const ctx = buildContext();
+    const joined = new Date('2026-07-28T12:00:00.000Z');
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      createdAt: joined,
+    });
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'deactivated',
+      changedAt: new Date('2026-07-29T12:00:00.000Z'),
+    });
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      changedAt: new Date('2026-07-30T12:00:00.000Z'),
+    });
+
+    const rows = [...ctx.users.users.values()];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].joinedAt).toEqual(joined);
+    expect(await ctx.users.total(ORG_A)).toBe(1);
+  });
+
+  it('projects the status the created event carries, never a hardcoded active', async () => {
+    const ctx = buildContext();
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'invited',
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+
+    // Every creation path in the platform writes 'active' today, so this is
+    // not a case production produces. It pins that the projection stores what
+    // the event says: the contract types status as a free string precisely so
+    // the vocabulary can move, and an unknown status must not be counted.
+    expect(await ctx.users.total(ORG_A)).toBe(0);
+  });
+
+  it('creates the row for a status change on an edge it never saw', async () => {
+    const ctx = buildContext();
+    const changedAt = new Date('2026-07-28T13:00:00.000Z');
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      changedAt,
+    });
+
+    // A lost created event must not make a live person invisible — the same
+    // asymmetry users-service's directory projection settled for these events.
+    // joinedAt takes the change's own timestamp: the honest nearby value, and
+    // nothing reads it.
+    expect(await ctx.users.total(ORG_A)).toBe(1);
+    expect([...ctx.users.users.values()][0].joinedAt).toEqual(changedAt);
+  });
+
+  it('does not count a placeholder row created by a non-active change', async () => {
+    const ctx = buildContext();
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'suspended',
+      changedAt: new Date('2026-07-28T13:00:00.000Z'),
+    });
+
+    // The other direction of the placeholder, and the one that would turn a
+    // suspension into a headcount increase if it were missed.
+    expect(await ctx.users.total(ORG_A)).toBe(0);
+    expect([...ctx.users.users.values()]).toHaveLength(1);
+  });
+
+  it('refuses a stale status event and lets a newer one through', async () => {
+    const ctx = buildContext();
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'suspended',
+      changedAt: new Date('2026-07-28T15:00:00.000Z'),
+    });
+
+    // Older than what is stored: a DLQ replay, refused by the guard.
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      changedAt: new Date('2026-07-28T14:00:00.000Z'),
+    });
+    expect(await ctx.users.total(ORG_A)).toBe(0);
+
+    // Newer than what is stored: applied.
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      changedAt: new Date('2026-07-28T16:00:00.000Z'),
+    });
+    expect(await ctx.users.total(ORG_A)).toBe(1);
+  });
+
+  it('does not let a late created event resurrect a suspended member', async () => {
+    const ctx = buildContext();
+    await ctx.applyMembershipStatus.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'suspended',
+      changedAt: new Date('2026-07-28T15:00:00.000Z'),
+    });
+    // The created event is older than the suspension by construction, so the
+    // same guard that refuses a stale status change refuses this. Without it,
+    // ordinary out-of-order delivery would revive every suspended member.
+    await ctx.applyMembership.execute({
+      userId: USER.id,
+      organizationId: ORG_A,
+      status: 'active',
+      createdAt: new Date('2026-07-28T12:00:00.000Z'),
+    });
+
+    expect(await ctx.users.total(ORG_A)).toBe(0);
   });
 });
 
@@ -311,6 +493,7 @@ describe('GetAnalyticsSummaryUseCase', () => {
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_A,
+      status: 'active',
       createdAt: new Date('2026-07-27T12:00:01.000Z'),
     });
 
@@ -350,6 +533,7 @@ describe('GetAnalyticsSummaryUseCase', () => {
     await ctx.applyMembership.execute({
       userId: USER.id,
       organizationId: ORG_A,
+      status: 'active',
       createdAt: new Date('2026-07-27T12:00:00.000Z'),
     });
 
@@ -375,6 +559,7 @@ describe('GetAnalyticsSummaryUseCase', () => {
       await ctx.applyMembership.execute({
         userId,
         organizationId: ORG_B,
+        status: 'active',
         createdAt: new Date('2026-07-25T12:00:00.000Z'),
       });
     }

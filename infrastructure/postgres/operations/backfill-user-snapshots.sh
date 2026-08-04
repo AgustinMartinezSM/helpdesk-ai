@@ -33,12 +33,21 @@
 # SAFETY
 #
 # Idempotent by construction: INSERT ... ON CONFLICT (user_id,
-# organization_id) DO NOTHING, so a second run converges to the same state.
+# organization_id) DO UPDATE under the SAME last-writer-wins guard the live
+# write path uses, so a second run converges to the same state and a run that
+# races a live membership event cannot regress it.
 #
-# DO NOTHING rather than DO UPDATE, which is the one place this deliberately
-# differs from backfill-directory-memberships.sh: the only non-key column here
-# is joined_at, nothing reads it, and rewriting it would churn every row on
-# every run to no end.
+# It used to be DO NOTHING, and Sprint 10.8 is why that changed. While the only
+# non-key column was joined_at — which nothing reads — updating was pure churn.
+# The projection now carries `status`, the headcount counts only active
+# members, and this script is the only thing that can repair a status this
+# database never heard about. joined_at is still never rewritten.
+#
+# ONE ASYMMETRY WORTH KNOWING: memberships.updated_at is bumped by ROLE changes
+# too, so the watermark this script writes can sit slightly ahead of the last
+# status transition. The consequence is that an in-flight status event older
+# than it is refused — correctly, because the status this script just read is
+# the newer truth.
 #
 # IT NEVER DELETES. Rows stamped with the bootstrap organization by the old
 # write path (and by 20260731120000_scope_analytics_to_organization) survive
@@ -75,16 +84,19 @@ ANALYTICS_DB_URL="${ANALYTICS_DB_URL:-postgresql://analytics_service:helpdesk_lo
 echo "Reading memberships from helpdesk_organizations..."
 
 # One row per membership edge, which is exactly what the projection now
-# stores. created_at travels as psql's timestamptz text form, which Postgres
+# stores. Timestamps travel as psql's timestamptz text form, which Postgres
 # parses back losslessly on insert.
 #
-# EVERY membership, including suspended and deactivated ones: this projection
-# has never distinguished them — nothing consumes membership.status-changed.v1
-# — so filtering here would make the script disagree with the live write path
-# and the counts would drift the moment somebody was suspended. Making the
-# headcount active-only is a separate change, in both places at once.
+# EVERY membership, whatever its status, and the status TRAVELS WITH IT. That
+# is the change Sprint 10.8 made, and the previous version of this comment
+# named it in advance: the projection could not distinguish a suspended member
+# from an active one, so the script could not either without disagreeing with
+# the live write path. Both moved together. Filtering to active here instead
+# would be wrong in a way that is easy to miss — a suspension would never
+# reach the projection, so reactivating somebody later would leave them
+# uncounted until an unrelated event happened to arrive.
 MEMBERSHIPS=$(psql "$ORGANIZATIONS_DB_URL" -v ON_ERROR_STOP=1 --tuples-only --no-align --field-separator='|' -c "
-  SELECT user_id, organization_id, created_at
+  SELECT user_id, organization_id, created_at, status, updated_at
   FROM memberships
   ORDER BY organization_id, user_id;
 ")
@@ -94,20 +106,32 @@ if [ -z "$MEMBERSHIPS" ]; then
   exit 0
 fi
 
-echo "$MEMBERSHIPS" | while IFS='|' read -r USER_ID ORG_ID CREATED_AT; do
+echo "$MEMBERSHIPS" | while IFS='|' read -r USER_ID ORG_ID CREATED_AT STATUS UPDATED_AT; do
   [ -z "$USER_ID" ] && continue
   psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 --quiet -c "
-    INSERT INTO user_snapshots (user_id, organization_id, joined_at)
-    VALUES ('${USER_ID}', '${ORG_ID}', '${CREATED_AT}')
-    ON CONFLICT (user_id, organization_id) DO NOTHING;
+    INSERT INTO user_snapshots
+      (user_id, organization_id, joined_at, status, last_event_at)
+    VALUES
+      ('${USER_ID}', '${ORG_ID}', '${CREATED_AT}', '${STATUS}', '${UPDATED_AT}')
+    ON CONFLICT (user_id, organization_id) DO UPDATE
+      SET status = EXCLUDED.status,
+          last_event_at = EXCLUDED.last_event_at
+      WHERE user_snapshots.last_event_at <= EXCLUDED.last_event_at;
   "
 done
 
 # Verification the operator should actually read. The two sides must agree
 # per organization; a difference means this run did not finish.
+#
+# BOTH totals are printed, and the ACTIVE one is the one that matters:
+# GET /analytics/summary reports active members, so comparing "all edges"
+# against the dashboard would look like a discrepancy in any organization that
+# has ever suspended anybody.
 echo "Done. Source counts per organization (helpdesk_organizations.memberships):"
 psql "$ORGANIZATIONS_DB_URL" -v ON_ERROR_STOP=1 -c "
-  SELECT organization_id, count(*)
+  SELECT organization_id,
+         count(*) AS all_memberships,
+         count(*) FILTER (WHERE status = 'active') AS active_memberships
   FROM memberships
   GROUP BY organization_id
   ORDER BY count(*) DESC;
@@ -115,7 +139,9 @@ psql "$ORGANIZATIONS_DB_URL" -v ON_ERROR_STOP=1 -c "
 
 echo "Projection counts per organization (helpdesk_analytics.user_snapshots):"
 psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 -c "
-  SELECT organization_id, count(*)
+  SELECT organization_id,
+         count(*) AS all_rows,
+         count(*) FILTER (WHERE status = 'active') AS counted_on_the_dashboard
   FROM user_snapshots
   GROUP BY organization_id
   ORDER BY count(*) DESC;
@@ -125,17 +151,55 @@ psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 -c "
 # first-claimer path and is backed by no membership — almost always the
 # bootstrap organization, holding every account the platform ever registered.
 # Printed, never removed: see SAFETY.
+#
+# THIS IS A REAL ANTI-JOIN, and Sprint 10.8 had to make it one. The query
+# written in 10.7 grouped user_snapshots with NO filter at all, so it labelled
+# EVERY row "unexplained" — including the ones this very run had just inserted
+# from a live membership — directly above a suggested DELETE. An operator who
+# trusted the label would have deleted a healthy organization's entire
+# projection. Found by running the script, not by reading it.
+#
+# The two databases cannot be joined by the server, so the source keys are
+# carried over as a VALUES list. That is why this reads the pairs out of the
+# rows already fetched above rather than querying again: the answer must be
+# the same set the loop just wrote, or the report describes a different run.
+SOURCE_PAIRS=$(echo "$MEMBERSHIPS" | awk -F'|' '$1 != "" {
+  printf "%s(\047%s\047::uuid,\047%s\047::uuid)", sep, $1, $2; sep=","
+}')
+
 echo ""
-echo "Projection rows with no membership behind them (organization ids):"
+echo "Projection rows with no membership behind them:"
 echo "These are left in place. Removing one is a decision for a person."
 psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 -c "
-  SELECT organization_id, count(*) AS unexplained_rows
-  FROM user_snapshots
-  GROUP BY organization_id
+  WITH src (user_id, organization_id) AS (VALUES ${SOURCE_PAIRS})
+  SELECT snap.organization_id, count(*) AS unexplained_rows
+  FROM user_snapshots snap
+  LEFT JOIN src
+    ON src.user_id = snap.user_id
+   AND src.organization_id = snap.organization_id
+  WHERE src.user_id IS NULL
+  GROUP BY snap.organization_id
   ORDER BY count(*) DESC;
 "
+
+echo "The first of those rows, named individually:"
+psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 -c "
+  WITH src (user_id, organization_id) AS (VALUES ${SOURCE_PAIRS})
+  SELECT snap.organization_id, snap.user_id, snap.status
+  FROM user_snapshots snap
+  LEFT JOIN src
+    ON src.user_id = snap.user_id
+   AND src.organization_id = snap.organization_id
+  WHERE src.user_id IS NULL
+  ORDER BY snap.organization_id, snap.user_id
+  LIMIT 20;
+"
+
 echo ""
-echo "Compare the two listings above. To remove the rows of one organization"
-echo "once you have decided they are stale, run against helpdesk_analytics:"
+echo "An EMPTY listing above is the healthy result: every projection row is"
+echo "backed by a membership. To remove one you have decided is stale, run"
+echo "against helpdesk_analytics — by the PAIR, never by organization alone,"
+echo "because an organization's other rows are the live ones:"
 echo ""
-echo "  DELETE FROM user_snapshots WHERE organization_id = '<organization-id>';"
+echo "  DELETE FROM user_snapshots"
+echo "   WHERE organization_id = '<organization-id>' AND user_id = '<user-id>';"

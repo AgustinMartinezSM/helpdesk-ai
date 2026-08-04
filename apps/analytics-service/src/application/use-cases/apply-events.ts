@@ -51,9 +51,11 @@ export class ApplyTicketStatusChangedUseCase {
 /**
  * Records that somebody joined an organization.
  *
- * One row per edge, so a person in two organizations is counted in both. It
- * is the ONLY writer of this projection now, which is what removes every
- * ordering question the previous two-writer design had.
+ * One row per edge, so a person in two organizations is counted in both.
+ * Sprint 10.8 gave this projection a second writer — the status arm below —
+ * but not the ordering problem the pre-10.7 pair had: both write the same
+ * row under one last-writer-wins guard, rather than two writers racing for a
+ * column only one of them could fill.
  */
 export class ApplyMembershipCreatedUseCase {
   constructor(private readonly users: UserSnapshotRepository) {}
@@ -61,8 +63,29 @@ export class ApplyMembershipCreatedUseCase {
   async execute(input: {
     userId: string;
     organizationId: string;
+    status: string;
     createdAt: Date;
   }): Promise<void> {
     await this.users.applyMembershipCreated(input);
+  }
+}
+
+/**
+ * Records that somebody's membership changed status — which is how the
+ * headcount goes DOWN (Sprint 10.8).
+ *
+ * Nothing consumed this contract here until now, so `totalUsers` counted
+ * everybody who had ever joined and no event could lower it.
+ */
+export class ApplyMembershipStatusChangedUseCase {
+  constructor(private readonly users: UserSnapshotRepository) {}
+
+  async execute(input: {
+    userId: string;
+    organizationId: string;
+    status: string;
+    changedAt: Date;
+  }): Promise<void> {
+    await this.users.applyMembershipStatusChanged(input);
   }
 }

@@ -1,10 +1,12 @@
-import type {
-  DailyCount,
-  TicketSnapshot,
-  UserSnapshot,
+import {
+  COUNTED_MEMBERSHIP_STATUS,
+  type DailyCount,
+  type TicketSnapshot,
+  type UserSnapshot,
 } from '../../domain/analytics';
 import type {
   ApplyMembershipCreated,
+  ApplyMembershipStatusChanged,
   ApplyTicketCreated,
   ApplyTicketStatusChanged,
   Clock,
@@ -145,23 +147,74 @@ export class InMemoryUserSnapshotRepository implements UserSnapshotRepository {
     return `${userId}:${organizationId}`;
   }
 
+  /**
+   * Mirrors the SQL statement by statement, including the parts that are easy
+   * to approximate: LEAST on joinedAt, GREATEST on lastEventAt, and the `<=`
+   * tie-break that lets an equal timestamp win. The temptation is to write
+   * "close enough" here — that is exactly what produced the defect this class
+   * carries in its own comment.
+   */
   async applyMembershipCreated(input: ApplyMembershipCreated): Promise<void> {
-    // Mirrors ON CONFLICT DO NOTHING on the composite key: a redelivery
-    // changes nothing, including joinedAt.
     const key = this.key(input.userId, input.organizationId);
-    if (this.users.has(key)) {
+    const existing = this.users.get(key);
+    if (!existing) {
+      this.users.set(key, {
+        userId: input.userId,
+        organizationId: input.organizationId,
+        joinedAt: input.createdAt,
+        status: input.status,
+        lastEventAt: input.createdAt,
+      });
       return;
     }
+    const wins = existing.lastEventAt <= input.createdAt;
     this.users.set(key, {
-      userId: input.userId,
-      organizationId: input.organizationId,
-      joinedAt: input.createdAt,
+      ...existing,
+      // LEAST: a membership's creation time is the earliest fact about the
+      // edge, so a late created event corrects a placeholder's guess downward
+      // and can never move the column forward.
+      joinedAt: new Date(
+        Math.min(existing.joinedAt.getTime(), input.createdAt.getTime()),
+      ),
+      status: wins ? input.status : existing.status,
+      lastEventAt: new Date(
+        Math.max(existing.lastEventAt.getTime(), input.createdAt.getTime()),
+      ),
+    });
+  }
+
+  async applyMembershipStatusChanged(
+    input: ApplyMembershipStatusChanged,
+  ): Promise<void> {
+    const key = this.key(input.userId, input.organizationId);
+    const existing = this.users.get(key);
+    if (!existing) {
+      // Inserts rather than skipping — see the port contract. joinedAt takes
+      // the change's own timestamp, and nothing here is ever deleted.
+      this.users.set(key, {
+        userId: input.userId,
+        organizationId: input.organizationId,
+        joinedAt: input.changedAt,
+        status: input.status,
+        lastEventAt: input.changedAt,
+      });
+      return;
+    }
+    const wins = existing.lastEventAt <= input.changedAt;
+    this.users.set(key, {
+      ...existing,
+      status: wins ? input.status : existing.status,
+      lastEventAt: new Date(
+        Math.max(existing.lastEventAt.getTime(), input.changedAt.getTime()),
+      ),
     });
   }
 
   async total(organizationId: string): Promise<number> {
     return [...this.users.values()].filter(
-      (user) => user.organizationId === organizationId,
+      (user) =>
+        user.organizationId === organizationId &&
+        user.status === COUNTED_MEMBERSHIP_STATUS,
     ).length;
   }
 }

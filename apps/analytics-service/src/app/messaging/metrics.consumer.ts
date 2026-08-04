@@ -1,5 +1,6 @@
 import {
   membershipCreatedV1,
+  membershipStatusChangedV1,
   requireEnvelopeOrganization,
   ticketCreatedV2,
   ticketStatusChangedV2,
@@ -8,6 +9,7 @@ import {
 } from '@helpdesk-ai/messaging';
 import type {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipStatusChangedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
 } from '../../application/use-cases/apply-events';
@@ -27,6 +29,7 @@ export class MetricsConsumer {
     private readonly applyCreated: ApplyTicketCreatedUseCase,
     private readonly applyStatusChanged: ApplyTicketStatusChangedUseCase,
     private readonly applyMembershipCreated: ApplyMembershipCreatedUseCase,
+    private readonly applyMembershipStatusChanged: ApplyMembershipStatusChangedUseCase,
     private readonly logger?: MessagingLogger,
   ) {}
 
@@ -48,7 +51,15 @@ export class MetricsConsumer {
   async start(): Promise<void> {
     await this.messaging.subscribe({
       queue: METRICS_QUEUE,
-      contracts: [ticketCreatedV2, ticketStatusChangedV2, membershipCreatedV1],
+      contracts: [
+        ticketCreatedV2,
+        ticketStatusChangedV2,
+        membershipCreatedV1,
+        // Sprint 10.8. Bound here for the first time: until this arm existed
+        // the headcount could only go up, because joining was the only
+        // membership fact this projection ever heard.
+        membershipStatusChangedV1,
+      ],
       // Historical routing keys, as string literals ON PURPOSE: the v1
       // contracts were deleted in phase 8, so there is no identifier left
       // to reference — only the keys this durable queue was once bound to.
@@ -106,7 +117,22 @@ export class MetricsConsumer {
             await this.applyMembershipCreated.execute({
               userId: event.payload.userId,
               organizationId: event.payload.organizationId,
+              status: event.payload.status,
               createdAt: new Date(event.payload.createdAt),
+            });
+            return;
+          case 'membership.status-changed.v1':
+            // The arm that lets the number go down. `toStatus` is the fact;
+            // `fromStatus` is deliberately ignored, because a projection that
+            // checked it would be asserting an ordering the guard already
+            // enforces from the timestamp, and would then have to decide what
+            // to do when a replay disagreed.
+            requireEnvelopeOrganization(event);
+            await this.applyMembershipStatusChanged.execute({
+              userId: event.payload.userId,
+              organizationId: event.payload.organizationId,
+              status: event.payload.toStatus,
+              changedAt: new Date(event.payload.changedAt),
             });
             return;
         }

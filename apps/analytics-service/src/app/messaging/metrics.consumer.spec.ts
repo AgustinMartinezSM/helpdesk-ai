@@ -6,6 +6,7 @@ import type {
 } from '@helpdesk-ai/messaging';
 import {
   ApplyMembershipCreatedUseCase,
+  ApplyMembershipStatusChangedUseCase,
   ApplyTicketCreatedUseCase,
   ApplyTicketStatusChangedUseCase,
 } from '../../application/use-cases/apply-events';
@@ -42,6 +43,7 @@ function buildConsumer() {
     new ApplyTicketCreatedUseCase(tickets),
     new ApplyTicketStatusChangedUseCase(tickets),
     new ApplyMembershipCreatedUseCase(users),
+    new ApplyMembershipStatusChangedUseCase(users),
   );
   return { messaging, tickets, users, consumer };
 }
@@ -69,6 +71,9 @@ describe('MetricsConsumer', () => {
       'ticket.created.v2',
       'ticket.status-changed.v2',
       'membership.created.v1',
+      // Sprint 10.8: the first membership fact besides joining that this
+      // projection has ever heard, and the only reason the count can fall.
+      'membership.status-changed.v1',
     ]);
     // Pinned too: dropping a retired key before every environment's durable
     // queue has booted past this version would leave a stale binding
