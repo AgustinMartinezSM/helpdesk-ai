@@ -1,6 +1,11 @@
 # Sprint 10.7 — Counting people in the organization they are actually in
 
-Status: **OPEN (2026-08-04).** The Definition of Ready below was written and
+Status: **CLOSED (2026-08-04).** Remote CI green on the final HEAD: run
+[`30876633036`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30876633036)
+on `b8b13fc`, first attempt — the run in which the migration was applied and
+the new integration case executed for the first time anywhere, since Docker was
+not available locally. `counts one person in BOTH organizations, against the
+real composite key` passed there. The Definition of Ready below was written and
 checked against the repository before any code.
 
 ## Definition of Ready

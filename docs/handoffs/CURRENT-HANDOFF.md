@@ -1092,9 +1092,10 @@ entry below.
 
 ## Sprint 10.7 in one breath
 
-Remote CI green on the closing HEAD — the run is recorded in
-`SPRINT-010.7.md`. Full local gate green: **1327 unit tests across 15
-projects**, typecheck, build.
+Remote CI green on the closing HEAD: run `30876633036` on `b8b13fc`, first
+attempt — the run in which the migration applied and the new integration case
+ran for the first time anywhere. Full local gate green: **1327 unit tests
+across 15 projects**, typecheck, build.
 
 **analytics reported approximately ZERO users for every real organization, and
 had since Sprint 9.8.** `user_snapshots` was keyed on `userId` alone with a
