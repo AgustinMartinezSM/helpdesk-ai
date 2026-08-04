@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { NoOrganizationContextError } from '@helpdesk-ai/security';
 import {
-  AlreadyBelongsToOrganizationError,
   BranchNotFoundError,
   DepartmentNotFoundError,
   DuplicateBranchCodeError,
@@ -98,10 +97,6 @@ function describe(
     exception instanceof DuplicateStationCodeError ||
     exception instanceof DuplicatePendingInvitationError ||
     exception instanceof InvitationNotRedeemableError ||
-    // Creating a second organization: the caller's own membership state
-    // refuses it, and re-reading is exactly what they should do — the
-    // product will tell them which organization they are already in.
-    exception instanceof AlreadyBelongsToOrganizationError ||
     // Ownership transfer, all three for the same reason: the rows exist and
     // the caller may act on them, but the state they are in right now refuses
     // the move. The conflict one is the lost race, where re-reading is not

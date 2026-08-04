@@ -1,19 +1,12 @@
 import type { Actor } from '@helpdesk-ai/security';
-import { AlreadyBelongsToOrganizationError } from '../../domain/errors';
+import { OWNER_ROLE_TEMPLATE, type Membership } from '../../domain/membership';
 import {
-  grantsAccess,
-  OWNER_ROLE_TEMPLATE,
-  type Membership,
-} from '../../domain/membership';
-import {
-  BOOTSTRAP_ORGANIZATION_SLUG,
   isReservedSlug,
   normalizeOrganizationName,
   slugFromName,
   type Organization,
 } from '../../domain/organization';
 import type { MembershipEventPublisher } from '../ports/event-publisher';
-import type { MembershipRepository } from '../ports/membership.repository';
 import type {
   Clock,
   IdGenerator,
@@ -52,23 +45,27 @@ export interface CreatedOrganization {
  * excludes `owner` by constant precisely so no grant path can produce one.
  * This is not a grant path. Reusing the helper would have meant weakening it.
  *
- * WHY THE CALLER MUST NOT ALREADY BELONG SOMEWHERE REAL. There is no
- * organization selector and no token exchange (ADR 0014 defers both), so
- * `ResolveActiveMembershipUseCase` picks the OLDEST non-bootstrap membership
- * at every mint. Somebody who already belongs to a real organization and
- * created a second one would keep resolving to the first, and nothing in the
- * product could take them to the new one — they would own an organization
- * they cannot reach. Refusing is the honest shape of that limit.
+ * ANYBODY AUTHENTICATED MAY CREATE ONE, INCLUDING SOMEBODY WHO ALREADY
+ * BELONGS SOMEWHERE. Until Sprint 10.6 this refused a caller who held any
+ * non-bootstrap membership, and the refusal was conditional by construction:
+ * there was no selector, so `ResolveActiveMembershipUseCase` picked the oldest
+ * non-bootstrap membership at every mint and a second organization would have
+ * been one its own creator could never reach. ADR 0023 said in those words to
+ * revisit it in the change that adds token exchange. That change is ADR 0025,
+ * and the condition is gone: an organization is reachable now, so refusing to
+ * create one would be a limit with nothing behind it.
  *
- * The check is "holds no NON-BOOTSTRAP membership", never "holds no
- * membership": registration puts everybody in the bootstrap holding pen
- * unconditionally, so the second reading would refuse every caller that has
- * ever registered, which is all of them.
+ * **What replaced the refusal is not nothing.** A created organization is
+ * reachable only if something takes the creator there, and the default rule
+ * would keep resolving to their OLDEST real membership — so the caller of this
+ * use case is responsible for switching into what it just made. The web does
+ * that by exchanging on the created id rather than plainly refreshing; a spec
+ * pins it. Deleting the refusal without that would have reproduced the exact
+ * stranded organization it existed to prevent, with nothing left to catch it.
  */
 export class CreateOrganizationUseCase {
   constructor(
     private readonly organizations: OrganizationRepository,
-    private readonly memberships: MembershipRepository,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
     private readonly events: MembershipEventPublisher,
@@ -78,8 +75,6 @@ export class CreateOrganizationUseCase {
     actor: Actor,
     input: CreateOrganizationInput,
   ): Promise<CreatedOrganization> {
-    await this.refuseIfAlreadyPlaced(actor.id);
-
     const now = this.clock.now();
     // The same normaliser renaming uses (Sprint 10.5). It was a bare trim()
     // while this was the only path that wrote the column; a second writer is
@@ -126,24 +121,6 @@ export class CreateOrganizationUseCase {
     );
 
     return created;
-  }
-
-  private async refuseIfAlreadyPlaced(userId: string): Promise<void> {
-    const held = await this.memberships.listByUser(userId);
-    for (const membership of held) {
-      if (!grantsAccess(membership)) {
-        continue;
-      }
-      const organization = await this.organizations.findById(
-        membership.organizationId,
-      );
-      if (!organization) {
-        continue;
-      }
-      if (organization.slug !== BOOTSTRAP_ORGANIZATION_SLUG) {
-        throw new AlreadyBelongsToOrganizationError();
-      }
-    }
   }
 
   /**

@@ -164,7 +164,11 @@ describe('Organization creation HTTP API (fakes, real JWT verification)', () => 
       .expect(201);
   });
 
-  it('answers 409 when the caller already belongs to a real organization', async () => {
+  it('creates a SECOND organization for somebody who already belongs to one', async () => {
+    // 409 from Sprint 10.4 until 10.6. The refusal's justification was that a
+    // second organization would be unreachable; token exchange made it
+    // reachable, so the refusal went (ADR 0025) rather than being kept as a
+    // limit with nothing behind it.
     organizations.add({
       id: REAL_ORG_ID,
       slug: 'acme',
@@ -185,12 +189,13 @@ describe('Organization creation HTTP API (fakes, real JWT verification)', () => 
       .post('/organizations')
       .set('Authorization', `Bearer ${placedToken}`)
       .send({ name: 'Second' })
-      .expect(409);
+      .expect(201);
 
-    // The message has to be actionable: a refusal somebody cannot act on
-    // reads as a bug, and this one is a platform limit they should be told
-    // about rather than left to guess at.
-    expect(response.body.message).toMatch(/already belong/i);
+    expect(response.body.name).toBe('Second');
+    // Still true, and still what the browser has to act on: the token that
+    // made this request names the OTHER organization, so the screen has to
+    // exchange into the new one or its creator never arrives.
+    expect(response.body.sessionRefreshRequired).toBe(true);
   });
 
   it('takes the creator from the token and refuses a body that names one', async () => {
@@ -402,6 +407,51 @@ describe('Organization identity HTTP API (fakes, real JWT verification)', () => 
       await request(app.getHttpServer())
         .get('/organizations/current')
         .expect(401);
+    });
+  });
+
+  describe('GET /organizations/mine', () => {
+    it('answers the organizations the caller holds', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/organizations/mine')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+
+      expect(response.body.organizations).toEqual([
+        {
+          organizationId: REAL_ORG_ID,
+          slug: 'ferreteria-sur',
+          name: 'Ferretería Sur',
+          roleTemplate: 'owner',
+        },
+      ]);
+    });
+
+    it('is reachable with NO tenant claim and answers an empty list', async () => {
+      // The state the endpoint exists for. Requiring a tenant would break it
+      // exactly where it is needed — somebody who belongs nowhere, or who is
+      // trying to leave the organization their token names.
+      const response = await request(app.getHttpServer())
+        .get('/organizations/mine')
+        .set('Authorization', `Bearer ${tenantlessToken}`)
+        .expect(200);
+
+      expect(response.body.organizations).toEqual([]);
+    });
+
+    it('answers a member holding no organization permission at all', async () => {
+      // Keyless on purpose: the people who need it hold no key that would
+      // gate it. An agent gets their own list like anybody else.
+      const response = await request(app.getHttpServer())
+        .get('/organizations/mine')
+        .set('Authorization', `Bearer ${agentToken}`)
+        .expect(200);
+
+      expect(response.body.organizations).toHaveLength(1);
+    });
+
+    it('answers 401 unauthenticated', async () => {
+      await request(app.getHttpServer()).get('/organizations/mine').expect(401);
     });
   });
 

@@ -1,6 +1,5 @@
 import type { Actor } from '@helpdesk-ai/security';
 import { CreateOrganizationUseCase } from './create-organization';
-import { AlreadyBelongsToOrganizationError } from '../../domain/errors';
 import {
   BOOTSTRAP_ORGANIZATION_SLUG,
   isReservedSlug,
@@ -64,7 +63,6 @@ function build() {
   let n = 0;
   const useCase = new CreateOrganizationUseCase(
     organizations,
-    memberships,
     { now: () => NOW },
     { next: () => `id-${(n += 1)}` },
     events,
@@ -108,9 +106,8 @@ describe('creating an organization', () => {
   });
 
   it('is allowed for somebody who only holds the bootstrap membership', async () => {
-    // Registration puts EVERYBODY in the holding pen unconditionally, so
-    // "holds no membership" would refuse every caller that has ever
-    // registered — which is all of them.
+    // Registration puts EVERYBODY in the holding pen unconditionally, so this
+    // is the ordinary case rather than an edge one.
     const { useCase, memberships } = build();
     memberships.memberships.push(membership());
 
@@ -119,11 +116,19 @@ describe('creating an organization', () => {
     ).resolves.toBeDefined();
   });
 
-  it('refuses somebody who already belongs to a real organization', async () => {
+  it('is allowed for somebody who ALREADY belongs to a real organization', async () => {
     /**
-     * Not a policy — a platform limit. Resolution picks the OLDEST
-     * non-bootstrap membership at every mint and there is no selector, so a
-     * second organization would be one its own creator could never reach.
+     * This was refused from Sprint 10.4 until 10.6, and the refusal was
+     * conditional by construction: resolution picked the oldest non-bootstrap
+     * membership at every mint and there was no selector, so a second
+     * organization would have been unreachable by its own creator. ADR 0023
+     * said to revisit it in the change that added token exchange, and ADR 0025
+     * is that change.
+     *
+     * What makes this safe is NOT here: the caller has to switch into what it
+     * just created, or the organization is stranded exactly as the refusal
+     * warned. `organization/new/page.tsx` exchanges on the created id and a web
+     * spec pins it.
      */
     const { useCase, organizations, memberships } = build();
     const real: Organization = { ...BOOTSTRAP, id: 'org-real', slug: 'acme' };
@@ -133,28 +138,20 @@ describe('creating an organization', () => {
       membership({ id: 'm-real', organizationId: real.id }),
     );
 
-    await expect(
-      useCase.execute(actor(), { name: 'Second' }),
-    ).rejects.toBeInstanceOf(AlreadyBelongsToOrganizationError);
+    const created = await useCase.execute(actor(), { name: 'Second' });
+
+    expect(created.organization.name).toBe('Second');
+    // And they own it, exactly as the first one's creator does.
+    expect(created.membership.roleTemplate).toBe('owner');
+    expect(created.membership.userId).toBe('user-1');
   });
 
-  it('ignores a membership that grants no access when deciding', async () => {
-    // A deactivated membership in a real organization is not a place the
-    // person can act, so it must not block them from creating one.
-    const { useCase, organizations, memberships } = build();
-    const real: Organization = { ...BOOTSTRAP, id: 'org-real', slug: 'acme' };
-    organizations.add(real);
-    memberships.memberships.push(
-      membership({
-        id: 'm-real',
-        organizationId: real.id,
-        status: 'deactivated',
-      }),
-    );
-
-    await expect(
-      useCase.execute(actor(), { name: 'Fresh start' }),
-    ).resolves.toBeDefined();
+  it('does not read the caller memberships at all any more', async () => {
+    // The use case stopped taking a membership repository when the refusal was
+    // lifted. Pinned because an unused dependency creeping back would be the
+    // first sign somebody reintroduced a placement check here rather than in
+    // the resolution that actually decides where a person lands.
+    expect(CreateOrganizationUseCase.length).toBe(4);
   });
 });
 

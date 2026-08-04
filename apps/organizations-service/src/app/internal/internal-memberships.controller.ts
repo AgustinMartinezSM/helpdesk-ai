@@ -3,6 +3,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
@@ -48,11 +49,28 @@ export class InternalMembershipsController {
     private readonly resolveActiveMembership: ResolveActiveMembershipUseCase,
   ) {}
 
+  /**
+   * `?organizationId=` asks for a specific one (Sprint 10.6, ADR 0025).
+   *
+   * Absent, the default rule runs and nothing about this endpoint's behaviour
+   * changes. Present, it is a REQUEST that is validated against the stored
+   * membership — an id the caller cannot honour answers with the same nulls a
+   * person who belongs nowhere gets, and auth-service decides what that means
+   * (the exchange refuses; a refresh falls back). The response shape does not
+   * grow a "why" field on purpose: auth-service already knows what it asked
+   * for and can compare, and a reason here would be a second vocabulary for
+   * a decision the caller is making anyway.
+   */
   @Get(':userId/active')
   async active(
     @Param('userId', new ParseUUIDPipe()) userId: string,
+    @Query('organizationId', new ParseUUIDPipe({ optional: true }))
+    organizationId?: string,
   ): Promise<ActiveMembershipResponse> {
-    const resolved = await this.resolveActiveMembership.execute(userId);
+    const resolved = await this.resolveActiveMembership.execute(
+      userId,
+      organizationId,
+    );
 
     if (!resolved) {
       return {

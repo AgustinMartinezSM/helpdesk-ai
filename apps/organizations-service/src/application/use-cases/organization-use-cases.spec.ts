@@ -36,6 +36,8 @@ import { ResolveActiveMembershipUseCase } from './resolve-active-membership';
 
 const BOOTSTRAP_ID = '00000000-0000-4000-8000-000000000001';
 const OTHER_ORG_ID = '00000000-0000-4000-8000-0000000000ff';
+/** Somebody else's, or nobody's — the two must be indistinguishable. */
+const THIRD_ORG_ID = '00000000-0000-4000-8000-0000000000fe';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const ADMIN_ID = '22222222-2222-4222-8222-222222222222';
 
@@ -769,5 +771,152 @@ describe('ResolveActiveMembershipUseCase', () => {
     // by the backfill has exactly this membership and nothing else.
     const resolved = await ctx.resolveActiveMembership.execute(USER_ID);
     expect(resolved?.organizationId).toBe(BOOTSTRAP_ID);
+  });
+
+  it('keeps the tiebreak when nothing is requested — it is the default, not a stopgap', async () => {
+    // The comment that used to live on this use case scheduled the tiebreak's
+    // deletion for the sprint that added a selector. Sprint 10.6 corrected it
+    // instead of obeying it: a selector adds a way to ask, and something still
+    // has to answer when nobody has asked, which is every login forever.
+    const ctx = buildContext();
+    ctx.organizations.add(organization());
+    ctx.organizations.add(
+      organization({ id: OTHER_ORG_ID, slug: 'other', name: 'Other' }),
+    );
+    const bootstrap = await ctx.ensureMembership.execute({
+      userId: USER_ID,
+      roles: ['user'],
+    });
+    ctx.memberships.memberships.push({
+      ...bootstrap,
+      id: 'later-membership',
+      organizationId: OTHER_ORG_ID,
+      createdAt: new Date('2026-07-30T13:00:00.000Z'),
+    });
+
+    expect(
+      (await ctx.resolveActiveMembership.execute(USER_ID))?.organizationId,
+    ).toBe(OTHER_ORG_ID);
+    // …and undefined must behave exactly like "not passed", not like a
+    // request for nothing.
+    expect(
+      (await ctx.resolveActiveMembership.execute(USER_ID, undefined))
+        ?.organizationId,
+    ).toBe(OTHER_ORG_ID);
+  });
+});
+
+describe('ResolveActiveMembershipUseCase, with an organization requested', () => {
+  /** Two real organizations, both held, so a choice is meaningful. */
+  async function twoOrganizations() {
+    const ctx = buildContext();
+    ctx.organizations.add(organization());
+    ctx.organizations.add(
+      organization({ id: OTHER_ORG_ID, slug: 'other', name: 'Other' }),
+    );
+    const bootstrap = await ctx.ensureMembership.execute({
+      userId: USER_ID,
+      roles: ['user'],
+    });
+    ctx.memberships.memberships.push({
+      ...bootstrap,
+      id: 'other-membership',
+      organizationId: OTHER_ORG_ID,
+      roleTemplate: 'organization_admin',
+      version: 4,
+      createdAt: new Date('2026-07-30T13:00:00.000Z'),
+    });
+    return ctx;
+  }
+
+  it('honours a held organization, ahead of what the default rule would pick', async () => {
+    const ctx = await twoOrganizations();
+
+    const resolved = await ctx.resolveActiveMembership.execute(
+      USER_ID,
+      BOOTSTRAP_ID,
+    );
+
+    // The default rule prefers the real organization; the request wins over
+    // it. That is the whole point — otherwise choosing would do nothing.
+    expect(resolved?.organizationId).toBe(BOOTSTRAP_ID);
+  });
+
+  it('resolves permissions and version FROM the requested membership', async () => {
+    // The claims must describe one row. A token whose org is one tenant and
+    // whose perms are another's would be undetectable downstream: the guard
+    // checks a signature, every actorOf copies claims verbatim, and nothing
+    // compares mv.
+    const ctx = await twoOrganizations();
+
+    const resolved = await ctx.resolveActiveMembership.execute(
+      USER_ID,
+      OTHER_ORG_ID,
+    );
+
+    expect(resolved?.organizationId).toBe(OTHER_ORG_ID);
+    expect(resolved?.membershipVersion).toBe(4);
+    expect(resolved?.permissions).toEqual([
+      ...permissionsForTemplate('organization_admin'),
+    ]);
+  });
+
+  it('answers null for an organization the person does not belong to', async () => {
+    const ctx = await twoOrganizations();
+    ctx.organizations.add(
+      organization({ id: THIRD_ORG_ID, slug: 'theirs', name: 'Theirs' }),
+    );
+
+    // Null rather than a thrown error: the caller decides what it means. The
+    // exchange refuses; a refresh carrying a stale choice falls back.
+    expect(
+      await ctx.resolveActiveMembership.execute(USER_ID, THIRD_ORG_ID),
+    ).toBeNull();
+  });
+
+  it('answers null for an organization that does not exist', async () => {
+    // Indistinguishable from the case above, deliberately: a caller must not
+    // be able to tell "not yours" from "no such organization".
+    const ctx = await twoOrganizations();
+
+    expect(
+      await ctx.resolveActiveMembership.execute(USER_ID, THIRD_ORG_ID),
+    ).toBeNull();
+  });
+
+  it.each(['suspended', 'deactivated', 'invited'] as const)(
+    'answers null when the membership is %s',
+    async (status) => {
+      // Asking for an organization by name must not reach what the default
+      // path would skip. Same two gates, same order.
+      const ctx = await twoOrganizations();
+      const index = ctx.memberships.memberships.findIndex(
+        (row) => row.organizationId === OTHER_ORG_ID,
+      );
+      ctx.memberships.memberships[index] = {
+        ...ctx.memberships.memberships[index],
+        status,
+      };
+
+      expect(
+        await ctx.resolveActiveMembership.execute(USER_ID, OTHER_ORG_ID),
+      ).toBeNull();
+    },
+  );
+
+  it('answers null when the organization itself is suspended', async () => {
+    const ctx = await twoOrganizations();
+    ctx.organizations.add(
+      organization({
+        id: OTHER_ORG_ID,
+        slug: 'other',
+        name: 'Other',
+        status: 'suspended',
+      }),
+    );
+
+    expect(
+      await ctx.resolveActiveMembership.execute(USER_ID, OTHER_ORG_ID),
+    ).toBeNull();
   });
 });

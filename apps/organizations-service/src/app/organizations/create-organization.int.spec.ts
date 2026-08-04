@@ -12,9 +12,7 @@ import { randomUUID } from 'node:crypto';
 import type { Actor } from '@helpdesk-ai/security';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { PrismaOrganizationRepository } from '../../infrastructure/prisma/prisma-organization.repository';
-import { PrismaMembershipRepository } from '../../infrastructure/prisma/prisma-membership.repository';
 import { CreateOrganizationUseCase } from '../../application/use-cases/create-organization';
-import { AlreadyBelongsToOrganizationError } from '../../domain/errors';
 import { BOOTSTRAP_ORGANIZATION_SLUG } from '../../domain/organization';
 import type { MembershipEventPublisher } from '../../application/ports/event-publisher';
 import { SystemClock } from '../../application/ports/organization.repository';
@@ -51,7 +49,6 @@ describe('creating an organization (real PostgreSQL)', () => {
 
     useCase = new CreateOrganizationUseCase(
       new PrismaOrganizationRepository(prisma),
-      new PrismaMembershipRepository(prisma),
       new SystemClock(),
       new UuidGenerator(),
       events,
@@ -195,15 +192,28 @@ describe('creating an organization (real PostgreSQL)', () => {
     expect(b.organization.slug.startsWith('panaderia-central')).toBe(true);
   });
 
-  it('refuses a second organization once the person belongs to a real one', async () => {
+  it('lets one person own two organizations, each with its own owner row', async () => {
+    // Refused from Sprint 10.4 until 10.6, when token exchange made a second
+    // organization reachable (ADR 0025). Worth proving against the database
+    // rather than the fakes: the partial unique index that makes a second
+    // owner unrepresentable is scoped per organization_id, so the SAME person
+    // holding `owner` twice has to be legal — and an index written one column
+    // narrower would refuse it.
     const actor = await newcomer();
 
     const first = await useCase.execute(actor, { name: 'First' });
     createdOrganizations.push(first.organization.id);
+    const second = await useCase.execute(actor, { name: 'Second' });
+    createdOrganizations.push(second.organization.id);
 
-    await expect(
-      useCase.execute(actor, { name: 'Second' }),
-    ).rejects.toBeInstanceOf(AlreadyBelongsToOrganizationError);
+    expect(second.organization.id).not.toBe(first.organization.id);
+    const owned = await prisma.membership.findMany({
+      where: { userId: actor.id, roleTemplate: 'owner' },
+    });
+    expect(owned).toHaveLength(2);
+    expect(owned.map((row) => row.organizationId).sort()).toEqual(
+      [first.organization.id, second.organization.id].sort(),
+    );
   });
 
   it('never takes the bootstrap slug, whatever it is asked for', async () => {

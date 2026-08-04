@@ -22,6 +22,10 @@ import {
 } from '../../domain/organization';
 import { CreateOrganizationUseCase } from '../../application/use-cases/create-organization';
 import {
+  ListMyOrganizationsUseCase,
+  type SelectableOrganization,
+} from '../../application/use-cases/list-my-organizations';
+import {
   GetOrganizationUseCase,
   RenameOrganizationUseCase,
 } from '../../application/use-cases/organization-identity';
@@ -155,12 +159,34 @@ export class OrganizationsController {
     private readonly getOrganization: GetOrganizationUseCase,
     private readonly renameOrganization: RenameOrganizationUseCase,
     private readonly transferOwnership: TransferOrganizationOwnershipUseCase,
+    private readonly listMyOrganizations: ListMyOrganizationsUseCase,
   ) {}
+
+  /**
+   * The organizations the caller can act in — what a switcher offers.
+   *
+   * Keyless and TENANTLESS, like `POST /organizations` above it and
+   * `GET /organizations/teams/mine`: the people who need it hold no key that
+   * would gate it, and requiring a tenant would break it in the state it
+   * exists for. It answers only rows the caller holds, so it is not a
+   * directory of organizations and reopens no existence oracle (ADR 0023).
+   */
+  @Get('mine')
+  @ApiOperation({
+    summary: 'Organizations you can act in. Keyless — being you is enough.',
+  })
+  async mine(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ organizations: SelectableOrganization[] }> {
+    return {
+      organizations: await this.listMyOrganizations.execute(actorOf(req)),
+    };
+  }
 
   @Post()
   @ApiOperation({
     summary:
-      'Create an organization and become its owner. Refused if you already belong to one.',
+      'Create an organization and become its owner. Switch into it afterwards.',
   })
   async create(
     @Req() req: AuthenticatedRequest,

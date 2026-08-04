@@ -307,24 +307,17 @@ export class SameRoleTemplateError extends OrganizationDomainError {
   }
 }
 
-/**
- * Raised when somebody who already belongs to a real organization tries to
- * create another one.
+/*
+ * `AlreadyBelongsToOrganizationError` lived here from Sprint 10.4 to 10.6.
  *
- * The reason is a platform limit rather than a policy: there is no
- * organization selector and no token exchange (ADR 0014 defers both), so
- * membership resolution picks the oldest non-bootstrap membership at every
- * mint. A second organization would be one its own creator could never
- * reach. The message says that, because a refusal a person cannot act on
- * reads as a bug.
+ * It refused a caller who already held a real membership, because resolution
+ * picked the oldest one at every mint and a second organization would have
+ * been unreachable by its own creator. ADR 0023 wrote the refusal down as
+ * conditional and said to revisit it in the change that added token exchange.
+ * ADR 0025 is that change, so the error is deleted rather than deprecated —
+ * the condition it stood on is gone, and a refusal nobody can trigger is worse
+ * than no refusal at all.
  */
-export class AlreadyBelongsToOrganizationError extends OrganizationDomainError {
-  constructor() {
-    super(
-      'you already belong to an organization, and the product cannot yet move you between them',
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // The organization's own identity and ownership (Sprint 10.5, ADR 0024).

@@ -1,4 +1,4 @@
-import { grantsAccess } from '../../domain/membership';
+import { grantsAccess, type Membership } from '../../domain/membership';
 import { permissionsForTemplate } from '../../domain/permissions';
 import {
   BOOTSTRAP_ORGANIZATION_SLUG,
@@ -55,9 +55,23 @@ export interface ResolvedMembership {
  * Resolution happens here, once per mint, rather than per request: that is
  * what keeps the other services free of a synchronous dependency on this one.
  *
- * There is no organization selector yet, so the rule is the oldest eligible
- * membership — with ONE exception, added in Sprint 9.8: a real organization
- * always beats the bootstrap one.
+ * ## Two paths, and the requested one wins
+ *
+ * Since Sprint 10.6 a caller may name the organization it wants (ADR 0025).
+ * The request is validated here against the STORED membership and is honoured
+ * only if the person actively belongs to an active organization by that id —
+ * the id is a request, never a fact, which is what makes it safe for it to
+ * have come from a browser at all.
+ *
+ * An unhonourable request answers `null`, exactly like "belongs nowhere". The
+ * caller decides what that means: the exchange refuses, and a refresh carrying
+ * a remembered choice falls back to the default path rather than signing
+ * anybody out.
+ *
+ * ## The default path, when nothing was requested
+ *
+ * The rule is the oldest eligible membership — with ONE exception, added in
+ * Sprint 9.8: a real organization always beats the bootstrap one.
  *
  * The exception is not a preference, it is what makes invitations work.
  * Everyone who registers gets a bootstrap membership from the registration
@@ -66,16 +80,13 @@ export interface ResolvedMembership {
  * alone would hand them a token for the migration's holding pen and their
  * acceptance would be invisible — the feature would not demonstrate at all.
  *
- * Nothing is retired to achieve this. The bootstrap membership stays: it is
- * migration data, `deactivated` is terminal, and the real answer to "which
- * organization am I acting in" is the selector ADR 0014 already defers. This
- * is the smallest change that makes the common case right, and it is
- * deliberately a tiebreak rather than a filter — someone whose ONLY
- * membership is the bootstrap one still resolves to it.
- *
- * When switching organizations becomes a token exchange, this is where the
- * requested organization gets validated against the caller's memberships
- * instead of being chosen for them, and this tiebreak goes away with it.
+ * **This tiebreak is permanent, and the comment that used to sit here was
+ * wrong to schedule its deletion for the selector's arrival.** A selector adds
+ * a way to ask; it does not remove the need for an answer when nobody has
+ * asked, and that is every login, forever — a person signing in on a new
+ * device has expressed no choice. Deleting it would regress every invited
+ * account back into the holding pen. It stays a tiebreak rather than a filter,
+ * so someone whose ONLY membership is the bootstrap one still resolves to it.
  */
 export class ResolveActiveMembershipUseCase {
   constructor(
@@ -85,10 +96,52 @@ export class ResolveActiveMembershipUseCase {
     private readonly teams: SupportTeamRepository,
   ) {}
 
-  async execute(userId: string): Promise<ResolvedMembership | null> {
+  async execute(
+    userId: string,
+    requestedOrganizationId?: string,
+  ): Promise<ResolvedMembership | null> {
+    if (requestedOrganizationId) {
+      return this.resolveRequested(userId, requestedOrganizationId);
+    }
+    return this.resolveDefault(userId);
+  }
+
+  /**
+   * One lookup rather than a walk. The requested path is the one a switcher
+   * hits on every refresh, and it is also the path whose candidate count grows
+   * as people join more organizations, so it reads the row directly instead of
+   * scanning every membership the person holds.
+   *
+   * The gates are deliberately the SAME two the default path applies, in the
+   * same order: an inactive membership and a suspended organization must not
+   * become reachable by asking for them by name.
+   */
+  private async resolveRequested(
+    userId: string,
+    organizationId: string,
+  ): Promise<ResolvedMembership | null> {
+    const membership = await this.memberships.findByOrganizationAndUser(
+      organizationId,
+      userId,
+    );
+    if (!membership || !grantsAccess(membership)) {
+      return null;
+    }
+    const organization = await this.organizations.findById(organizationId);
+    if (!organization || !isActive(organization)) {
+      return null;
+    }
+    return this.describe(membership);
+  }
+
+  private async resolveDefault(
+    userId: string,
+  ): Promise<ResolvedMembership | null> {
     const candidates = await this.memberships.listByUser(userId);
 
-    let fallback: ResolvedMembership | null = null;
+    // The bootstrap membership held back, so the walk can prefer any real
+    // organization over it without re-ordering the candidates.
+    let fallback: Membership | null = null;
     for (const membership of candidates) {
       if (!grantsAccess(membership)) {
         continue;
@@ -101,23 +154,35 @@ export class ResolveActiveMembershipUseCase {
         continue;
       }
 
-      const resolved: ResolvedMembership = {
-        organizationId: membership.organizationId,
-        permissions: [...permissionsForTemplate(membership.roleTemplate)],
-        membershipVersion: membership.version,
-        branchIds: await this.branchMemberships.listBranchIds(membership.id),
-        teamIds: await this.teams.listActiveTeamIdsForMembership(membership.id),
-      };
-
       if (organization.slug !== BOOTSTRAP_ORGANIZATION_SLUG) {
         // Candidates arrive oldest-first, so the first real organization is
         // also the oldest real one — the original rule, with the holding pen
         // skipped rather than a new ordering invented.
-        return resolved;
+        return this.describe(membership);
       }
-      fallback ??= resolved;
+      fallback ??= membership;
     }
 
-    return fallback;
+    return fallback ? this.describe(fallback) : null;
+  }
+
+  /**
+   * The claims for one membership, built in ONE place.
+   *
+   * Both paths go through here on purpose. `org`, `perms`, `mv`, `br` and `tm`
+   * describe a single membership row, and a second assembly site is how they
+   * would come to describe two — a token whose organization is one tenant and
+   * whose permissions or team scope are another's. Nothing downstream could
+   * detect that: the guard checks the signature, every `actorOf` copies the
+   * claims verbatim, and nothing compares `mv`.
+   */
+  private async describe(membership: Membership): Promise<ResolvedMembership> {
+    return {
+      organizationId: membership.organizationId,
+      permissions: [...permissionsForTemplate(membership.roleTemplate)],
+      membershipVersion: membership.version,
+      branchIds: await this.branchMemberships.listBranchIds(membership.id),
+      teamIds: await this.teams.listActiveTeamIdsForMembership(membership.id),
+    };
   }
 }

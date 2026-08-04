@@ -37,6 +37,7 @@ import {
   type OperationalStationRepository,
 } from '../application/ports/structure.repository';
 import { CreateOrganizationUseCase } from '../application/use-cases/create-organization';
+import { ListMyOrganizationsUseCase } from '../application/use-cases/list-my-organizations';
 import {
   GetOrganizationUseCase,
   RenameOrganizationUseCase,
@@ -620,25 +621,24 @@ export class AppModule {
           provide: CreateOrganizationUseCase,
           useFactory: (
             organizations: OrganizationRepository,
-            memberships: MembershipRepository,
             clock: Clock,
             ids: IdGenerator,
             events: OrganizationEventPublisher,
-          ) =>
-            new CreateOrganizationUseCase(
-              organizations,
-              memberships,
-              clock,
-              ids,
-              events,
-            ),
+          ) => new CreateOrganizationUseCase(organizations, clock, ids, events),
           inject: [
             ORGANIZATION_REPOSITORY,
-            MEMBERSHIP_REPOSITORY,
             CLOCK,
             ID_GENERATOR,
             EVENT_PUBLISHER,
           ],
+        },
+        {
+          provide: ListMyOrganizationsUseCase,
+          useFactory: (
+            memberships: MembershipRepository,
+            organizations: OrganizationRepository,
+          ) => new ListMyOrganizationsUseCase(memberships, organizations),
+          inject: [MEMBERSHIP_REPOSITORY, ORGANIZATION_REPOSITORY],
         },
         {
           provide: GetOrganizationUseCase,
