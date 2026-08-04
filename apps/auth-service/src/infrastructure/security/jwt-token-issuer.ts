@@ -14,6 +14,14 @@ import type {
  * context" without having to decide what a null organization means, and the
  * tokens minted before this sprint stay indistinguishable from the ones
  * minted for a user who belongs nowhere yet.
+ *
+ * EVERY CLAIM THE MINT PATH ASSEMBLES MUST BE COPIED HERE, and `tm` is the
+ * reason that is worth saying: it was assembled in `SessionService` from
+ * Sprint 9.12 and never copied, so `tickets.read_team` — which denies on an
+ * absent claim — granted nothing at all until Sprint 10.6 found it. Nothing
+ * failed: the fake issuer records what it was handed rather than what was
+ * signed, and the consumers' tests hand-sign their own tokens. The regression
+ * test for this decodes a real one.
  */
 export class JwtTokenIssuer implements TokenIssuer {
   constructor(
@@ -31,6 +39,7 @@ export class JwtTokenIssuer implements TokenIssuer {
         ...(claims.perms !== undefined && { perms: claims.perms }),
         ...(claims.mv !== undefined && { mv: claims.mv }),
         ...(claims.br !== undefined && { br: claims.br }),
+        ...(claims.tm !== undefined && { tm: claims.tm }),
       },
       { subject: claims.sub },
     );

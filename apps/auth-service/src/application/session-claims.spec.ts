@@ -13,6 +13,8 @@ const REFRESH_TTL_SECONDS = 3600;
 const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
 const BRANCH_A = '00000000-0000-4000-8000-00000000000a';
 const BRANCH_B = '00000000-0000-4000-8000-00000000000b';
+const TEAM_A = '00000000-0000-4000-8000-00000000000c';
+const TEAM_B = '00000000-0000-4000-8000-00000000000d';
 
 const user: User = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -98,6 +100,43 @@ describe('SessionService tenant claims', () => {
     // like the other tenant claims are for a user who belongs nowhere.
     expect('br' in (tokenIssuer.lastClaims ?? {})).toBe(false);
     expect(tokenIssuer.lastClaims?.org).toBe(ORGANIZATION_ID);
+  });
+
+  it('mints tm when the membership belongs to support teams', async () => {
+    // No test passed a non-empty team set through this path until Sprint 10.6,
+    // which is half of why the dropped `tm` claim survived four sprints. The
+    // other half — that this asserts what the issuer was HANDED rather than
+    // what it signed — is covered by jwt-token-issuer.spec.ts, which decodes.
+    const { sessions, tokenIssuer } = buildSessions(
+      FakeMembershipResolver.resolving({
+        organizationId: ORGANIZATION_ID,
+        permissions: ['tickets.read_team'],
+        membershipVersion: 3,
+        branchIds: [],
+        teamIds: [TEAM_A, TEAM_B],
+      }),
+    );
+
+    await sessions.issueSession(user);
+
+    expect(tokenIssuer.lastClaims?.tm).toEqual([TEAM_A, TEAM_B]);
+  });
+
+  it('omits tm for a membership in no team', async () => {
+    const { sessions, tokenIssuer } = buildSessions(
+      FakeMembershipResolver.resolving({
+        organizationId: ORGANIZATION_ID,
+        permissions: ['tickets.read_team'],
+        membershipVersion: 3,
+        branchIds: [],
+        teamIds: [],
+      }),
+    );
+
+    await sessions.issueSession(user);
+
+    // Same terms as `br`: team-scoped visibility denies on absence either way.
+    expect('tm' in (tokenIssuer.lastClaims ?? {})).toBe(false);
   });
 
   it('mints no roles claim, while the session response keeps user.roles', async () => {

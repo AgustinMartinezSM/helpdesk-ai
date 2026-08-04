@@ -23,6 +23,19 @@ export interface AccessTokenClaims {
    * branch-scoped visibility reads as "deny".
    */
   br?: string[];
+  /**
+   * Support team ids the active membership belongs to, on exactly the same
+   * terms as `br` (Sprint 9.12, ADR 0022): minted only when non-empty,
+   * because team-scoped visibility also denies on absence.
+   *
+   * THIS FIELD WAS MISSING UNTIL SPRINT 10.6, and its absence was the whole
+   * defect: `SessionService` assembled the claim and `JwtTokenIssuer` had
+   * nothing to copy it from, so `tickets.read_team` granted nothing for four
+   * sprints. Adding a claim here is not optional bookkeeping — this interface
+   * is the contract the issuer copies from, and a claim the mint path builds
+   * without declaring here is a claim that is silently dropped.
+   */
+  tm?: string[];
 }
 
 export interface IssuedAccessToken {
