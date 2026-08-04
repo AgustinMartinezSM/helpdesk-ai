@@ -1,7 +1,13 @@
 # Sprint 10.8 — A headcount that goes down, and a credential that must be there
 
-Status: **OPEN.** The Definition of Ready below was written and checked against
-the repository before any code.
+Status: **CLOSED (2026-08-04).** Remote CI green on the final HEAD: run
+[`30927729551`](https://github.com/AgustinMartinezSM/helpdesk-ai/actions/runs/30927729551)
+on `9ddff4d`, first attempt; earlier, run `30925206921` on `ddc0b6c`, also
+first attempt. **Unlike the last four sprints, every integration suite had
+already run locally against real PostgreSQL and RabbitMQ before the push** —
+Docker was available on this machine — so CI confirmed a result rather than
+producing it for the first time. The Definition of Ready below was written and
+checked against the repository before any code.
 
 ## Definition of Ready
 

@@ -1148,7 +1148,9 @@ contract, and three other consumers still want the event.
 
 ## Sprint 10.8 — a headcount that goes down, and a credential that must be there
 
-**Status: complete, remote CI green.** All three items the 10.7 entry named
+**Status: complete, remote CI green** (run `30927729551` on `9ddff4d`,
+first attempt; and `30925206921` on `ddc0b6c` before it). All three items the
+10.7 entry named
 were taken. Full record in `docs/progress/SPRINT-010.8.md`.
 
 **`totalUsers` now falls.** `user_snapshots` carries the membership's `status`
