@@ -191,7 +191,7 @@ dot-track-stop is the product; yellow field plus compass is the guide.
 
 **The language.** Helpi speaks es-AR with voseo. It is the first and only
 part of the product to do so, deliberately: es-AR is the primary language
-and full internationalization is Sprint 10.8, so Helpi moves first because
+and full internationalization is Sprint 10.9, so Helpi moves first because
 it is the voice in its most concentrated form, it is one file, and its specs
 guard it — the cheapest place to find out what the voice sounds like before
 committing every screen to it.

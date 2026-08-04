@@ -788,7 +788,7 @@ than copywriting.
 **The scope was settled by the project owner at the start of Sprint 10.1, and
 this paragraph records the answer rather than the question.** **es-AR is the
 product's primary language.** en-US remains a planned supported language, and
-**complete internationalization is Sprint 10.8** — so 10.1 made the system
+**complete internationalization is Sprint 10.9** — so 10.1 made the system
 structurally safe to localize and translated only Helpi, which is the voice in
 its most concentrated form, one file, and spec-guarded. The rest of the product
 stays English until the machinery exists to keep two languages in step;

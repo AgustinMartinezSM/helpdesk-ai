@@ -711,7 +711,7 @@ icon. The wordmark stopped colouring "AI".
 
 **Helpi speaks es-AR with voseo and is the ONLY translated part of the
 product.** That is deliberate: es-AR is the primary language, full i18n is
-**Sprint 10.8**, and half-translating ahead of the machinery that keeps two
+**Sprint 10.9**, and half-translating ahead of the machinery that keeps two
 languages in step is how a half-translated interface happens. Its silhouette
 is now a rounded square with the mark's corner ratio, because a floating
 circle in a corner is the universal sign for the one thing Helpi is not. Four
@@ -987,7 +987,7 @@ organization — is what the test asserts now.
 
 **The new UI is in English, and that was a deliberate refusal.** The sprint
 brief asked for es-AR copy. 10.1 decided Helpi is the only translated part and
-full i18n is **10.8**, so writing one screen in Spanish would create exactly the
+full i18n is **10.9**, so writing one screen in Spanish would create exactly the
 half-translated interface that decision prevents. Helpi's `/organization` and
 `/organization/new` hints are es-AR, and one of them had to change: it claimed
 the name could never be changed.
@@ -1561,7 +1561,7 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > colour in the same rule; the section-band test derives its pairs from the
 > tone sequence the page renders, because checking the pairs I expected passed
 > while the page carried a 1.9 L* join. Helpi speaks es-AR with voseo and is
-> the only translated part of the product — full i18n is 10.8.
+> the only translated part of the product — full i18n is 10.9.
 >
 > **The lesson 10.1 paid for**: three real defects were found by measuring the
 > RENDERED page and none of them could have been found by the unit suite — a
@@ -1580,7 +1580,7 @@ pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 > "Exactly one owner" is a PARTIAL unique index in raw SQL, which also fixes
 > the statement order — demote, then promote. A rename moves the display name
 > and never the slug, and the repository port has no slug parameter so the
-> careless version is unwritable. The product UI stays ENGLISH until 10.8;
+> careless version is unwritable. The product UI stays ENGLISH until 10.9;
 > Helpi is the only translated part, and half-translating ahead of the i18n
 > machinery is what 10.1 decided against.
 >

@@ -14,7 +14,7 @@
  *
  * WHY THIS FILE IS IN SPANISH AND THE REST OF THE PRODUCT IS NOT.
  * es-AR is the product's primary language (Sprint 10.1's owner decision) and
- * full internationalization is Sprint 10.8. Translating the whole product
+ * full internationalization is Sprint 10.9. Translating the whole product
  * ahead of the machinery that would keep two languages in step is how a
  * half-translated interface happens. Helpi moves first because it is the
  * product's voice in its most concentrated form, it is one file, and its

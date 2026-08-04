@@ -16,7 +16,7 @@ export interface UserProfile {
   /** Person-level fields (D1): null until the person sets them. */
   readonly preferredName: string | null;
   readonly phone: string | null;
-  /** Interface language preference, e.g. 'es-AR'. Free text until i18n (10.8). */
+  /** Interface language preference, e.g. 'es-AR'. Free text until i18n (10.9). */
   readonly language: string | null;
   readonly timezone: string | null;
   /** When the user registered, as stated by the event. */

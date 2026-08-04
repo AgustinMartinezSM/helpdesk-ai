@@ -41,7 +41,7 @@ export interface FieldDefinition {
   /** Identifier issued by organizations-service; opaque, never an FK (ADR 0003). */
   readonly organizationId: string;
   readonly key: string;
-  /** Both locale labels stored now so i18n in 10.8 is content, not schema churn. */
+  /** Both locale labels stored now so i18n in 10.9 is content, not schema churn. */
   readonly labelEsAr: string;
   readonly labelEnUs: string;
   readonly type: ProfileFieldType;
