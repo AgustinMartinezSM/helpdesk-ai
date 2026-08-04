@@ -255,6 +255,182 @@ describe('Session endpoints (stub gateway)', () => {
     expect(gateway.requests).toHaveLength(0);
   });
 
+  /* Choosing an organization (Sprint 10.6, ADR 0025). */
+
+  function organizationCookie(response: {
+    headers: Record<string, string[] | undefined>;
+  }): string {
+    return (
+      (response.headers['set-cookie'] ?? []).find((value) =>
+        value.startsWith('helpdesk_org='),
+      ) ?? ''
+    );
+  }
+
+  it('choosing an organization forwards the bearer token and remembers the result', async () => {
+    gateway.respond('POST /api/auth/session/organization', 200, {
+      ...SESSION_BODY,
+      organizationId: 'org-2',
+      // The exchange mints no refresh credential; the client keeps its own.
+      refreshToken: undefined,
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/session/organization')
+      .set('authorization', 'Bearer jwt-access')
+      .send({ organizationId: '00000000-0000-4000-8000-0000000000bb' })
+      .expect(200);
+
+    expect(response.body.organizationId).toBe('org-2');
+    expect(gateway.requests[0].url).toBe('/api/auth/session/organization');
+    expect(gateway.requests[0].headers.authorization).toBe('Bearer jwt-access');
+
+    const cookie = organizationCookie(response);
+    expect(cookie).toContain('helpdesk_org=org-2');
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('Path=/session');
+  });
+
+  it('remembers what the server MINTED, not what was asked for', async () => {
+    // The difference between a remembered choice and a browser insisting.
+    gateway.respond('POST /api/auth/session/organization', 200, {
+      ...SESSION_BODY,
+      organizationId: 'org-actually-minted',
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/session/organization')
+      .set('authorization', 'Bearer jwt-access')
+      .send({ organizationId: '00000000-0000-4000-8000-0000000000bb' })
+      .expect(200);
+
+    expect(organizationCookie(response)).toContain(
+      'helpdesk_org=org-actually-minted',
+    );
+  });
+
+  it('forwards a refusal untouched and remembers nothing', async () => {
+    gateway.respond('POST /api/auth/session/organization', 404, {
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'That organization is not available to this account',
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/session/organization')
+      .set('authorization', 'Bearer jwt-access')
+      .send({ organizationId: '00000000-0000-4000-8000-0000000000cc' })
+      .expect(404);
+
+    expect(response.body.message).toMatch(/not available/i);
+    // Writing the cookie before the server agreed would leave the browser
+    // asking for something it was just refused, on every refresh.
+    expect(organizationCookie(response)).toBe('');
+  });
+
+  it('refuses a body that is not a uuid', async () => {
+    await request(app.getHttpServer())
+      .post('/session/organization')
+      .set('authorization', 'Bearer jwt-access')
+      .send({ organizationId: 'acme' })
+      .expect(400);
+  });
+
+  it('refresh carries the remembered organization upstream', async () => {
+    gateway.respond('POST /api/auth/refresh', 200, {
+      ...SESSION_BODY,
+      organizationId: 'org-2',
+    });
+
+    await request(app.getHttpServer())
+      .post('/session/refresh')
+      .set('cookie', 'helpdesk_refresh=rt-1.rt-secret; helpdesk_org=org-2')
+      .expect(200);
+
+    expect(gateway.requests[0].body).toEqual({
+      refreshToken: 'rt-1.rt-secret',
+      organizationId: 'org-2',
+    });
+  });
+
+  it('refresh sends no organization when nothing is remembered', async () => {
+    gateway.respond('POST /api/auth/refresh', 200, SESSION_BODY);
+
+    await request(app.getHttpServer())
+      .post('/session/refresh')
+      .set('cookie', 'helpdesk_refresh=rt-1.rt-secret')
+      .expect(200);
+
+    expect(gateway.requests[0].body).toEqual({
+      refreshToken: 'rt-1.rt-secret',
+    });
+  });
+
+  it('refresh REWRITES a stale choice instead of failing', async () => {
+    // Somebody removed from the organization their browser remembers. The
+    // service falls back and answers a different one; the cookie has to
+    // follow, or the browser keeps asking for a place it cannot go.
+    gateway.respond('POST /api/auth/refresh', 200, {
+      ...SESSION_BODY,
+      organizationId: 'org-1',
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/session/refresh')
+      .set('cookie', 'helpdesk_refresh=rt-1.rt-secret; helpdesk_org=org-gone')
+      .expect(200);
+
+    expect(response.body.organizationId).toBe('org-1');
+    expect(organizationCookie(response)).toContain('helpdesk_org=org-1');
+  });
+
+  it('refresh clears the choice when the session has no tenant at all', async () => {
+    gateway.respond('POST /api/auth/refresh', 200, {
+      ...SESSION_BODY,
+      organizationId: null,
+      permissions: [],
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/session/refresh')
+      .set('cookie', 'helpdesk_refresh=rt-1.rt-secret; helpdesk_org=org-gone')
+      .expect(200);
+
+    expect(organizationCookie(response)).toContain('helpdesk_org=;');
+  });
+
+  it('login clears a remembered choice: a fresh sign-in uses the default rule', async () => {
+    gateway.respond('POST /api/auth/login', 200, SESSION_BODY);
+
+    const response = await request(app.getHttpServer())
+      .post('/session/login')
+      .set('cookie', 'helpdesk_org=org-2')
+      .send({ email: 'a@b.com', password: 'a-valid-password' })
+      .expect(200);
+
+    // Deterministic, and no flicker: honouring it only on the next refresh
+    // would land somebody in one organization and move them seconds later.
+    expect(organizationCookie(response)).toContain('helpdesk_org=;');
+    expect(gateway.requests[0].body).not.toHaveProperty('organizationId');
+  });
+
+  it('logout clears both cookies', async () => {
+    gateway.respond('POST /api/auth/logout', 204, null);
+
+    const response = await request(app.getHttpServer())
+      .post('/session/logout')
+      .set('cookie', 'helpdesk_refresh=rt-1.rt-secret; helpdesk_org=org-2')
+      .expect(204);
+
+    const cookies = response.headers['set-cookie'] ?? [];
+    expect(
+      cookies.some((value) => value.startsWith('helpdesk_refresh=;')),
+    ).toBe(true);
+    expect(cookies.some((value) => value.startsWith('helpdesk_org=;'))).toBe(
+      true,
+    );
+  });
+
   it('me forwards the bearer token and passes the identity through', async () => {
     gateway.respond('GET /api/auth/me', 200, {
       id: 'u1',

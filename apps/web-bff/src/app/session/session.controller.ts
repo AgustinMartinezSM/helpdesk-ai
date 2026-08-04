@@ -19,10 +19,31 @@ import {
   type CorrelationHeaders,
   type UpstreamResponse,
 } from '../gateway.client';
+import { ChooseOrganizationDto } from './dto/choose-organization.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 export const REFRESH_COOKIE = 'helpdesk_refresh';
+
+/**
+ * Which organization this browser last chose (Sprint 10.6, ADR 0025).
+ *
+ * It only ASKS. Every mint validates it against the caller's stored membership
+ * upstream and refuses or falls back, so a tampered value can request
+ * something and be told no — categorically unlike the `x-organization-id`
+ * header ADR 0014 rejected, where a downstream service would have trusted it.
+ *
+ * httpOnly anyway, and scoped to `/session` beside the refresh credential:
+ * page scripts have no reason to read it, and the only requests that need it
+ * are the ones that mint.
+ *
+ * It is deliberately NOT a column on `refresh_tokens`. ADR 0014 settled that
+ * table's shape — a session belongs to a person — and reopening that in the
+ * sprint that finally implements the rest of that record is how a decision
+ * record stops being trustworthy. The cost is that a second device starts from
+ * the default rule, which is stated rather than hidden.
+ */
+export const ORGANIZATION_COOKIE = 'helpdesk_org';
 
 interface BrowserRequest {
   headers: Record<string, string | undefined>;
@@ -110,6 +131,12 @@ export class SessionController {
     this.setRefreshCookie(res, session.refreshToken, {
       sessionScoped: dto.sharedWorkstation === true,
     });
+    // A fresh sign-in starts from the default rule, deterministically.
+    // Honouring a remembered choice here would make a credential exchange
+    // depend on browser state, and honouring it only on the NEXT refresh
+    // would land somebody in one organization and move them seconds later.
+    // Clearing is the version with no flicker (ADR 0025).
+    this.clearOrganizationCookie(res);
     return toBrowserSession(session);
   }
 
@@ -124,16 +151,70 @@ export class SessionController {
       throw new UnauthorizedException('No active session');
     }
 
+    // The remembered choice travels with the rotation. Upstream validates it
+    // and falls back if it cannot be honoured, so this is a request rather
+    // than an instruction.
+    const organizationId = readCookie(req.headers.cookie, ORGANIZATION_COOKIE);
+
     const upstream = await this.gateway.request('POST', '/api/auth/refresh', {
       correlation: correlationOf(req),
-      body: { refreshToken },
+      body: { refreshToken, ...(organizationId ? { organizationId } : {}) },
     });
     if (upstream.status === 401) {
-      // Expired, revoked or reused server-side: the cookie is dead weight.
+      // Expired, revoked or reused server-side: both cookies are dead weight.
       this.clearRefreshCookie(res);
+      this.clearOrganizationCookie(res);
     }
     const session = this.expectSession(upstream);
     this.setRefreshCookie(res, session.refreshToken);
+    // Rewritten to what actually came back, which is how a stale choice
+    // corrects itself: somebody removed from the organization they remembered
+    // gets the default one here and stops asking for the other. Never a
+    // failure — a refresh is how a session survives, and it must not be the
+    // thing that ends one.
+    this.rememberOrganization(res, session.organizationId);
+    return toBrowserSession(session);
+  }
+
+  /**
+   * Switching organizations — the browser-facing half of the token exchange.
+   *
+   * Under `/session` because that is where the cookies live: the refresh
+   * cookie's path scopes it here, and the organization cookie sits beside it.
+   * It returns a session shape with no refresh credential, because upstream
+   * mints no new one — the person's session is untouched, only their context
+   * changed (ADR 0025).
+   */
+  @Post('organization')
+  @HttpCode(200)
+  async chooseOrganization(
+    @Body() dto: ChooseOrganizationDto,
+    @Req() req: BrowserRequest,
+    @Res({ passthrough: true }) res: CookieResponse,
+  ): Promise<unknown> {
+    const upstream = await this.gateway.request(
+      'POST',
+      '/api/auth/session/organization',
+      {
+        correlation: correlationOf(req),
+        authorization: req.headers.authorization,
+        body: { organizationId: dto.organizationId },
+      },
+    );
+    if (upstream.status !== 200) {
+      // Forwarded verbatim. A 404 means "not available to this account" and
+      // is blind to why on purpose; rewriting it here would invent a
+      // distinction the service refused to make.
+      throw new HttpException(
+        upstream.body ?? { statusCode: upstream.status },
+        upstream.status,
+      );
+    }
+
+    const session = upstream.body as UpstreamSession;
+    // Remembered only AFTER the server agreed. Writing the cookie first would
+    // leave a browser asking for an organization it was just refused.
+    this.rememberOrganization(res, session.organizationId);
     return toBrowserSession(session);
   }
 
@@ -153,6 +234,7 @@ export class SessionController {
       });
     }
     this.clearRefreshCookie(res);
+    this.clearOrganizationCookie(res);
   }
 
   @Get('me')
@@ -201,6 +283,34 @@ export class SessionController {
 
   private clearRefreshCookie(res: CookieResponse): void {
     res.clearCookie(REFRESH_COOKIE, { path: '/session' });
+  }
+
+  /**
+   * Records what the server actually minted, or clears the cookie when it
+   * minted nothing tenanted. Never records what was ASKED for — that is the
+   * difference between a remembered choice and a browser insisting.
+   */
+  private rememberOrganization(
+    res: CookieResponse,
+    organizationId: string | null,
+  ): void {
+    if (!organizationId) {
+      this.clearOrganizationCookie(res);
+      return;
+    }
+    res.cookie(ORGANIZATION_COOKIE, organizationId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: this.env.SESSION_COOKIE_SECURE,
+      // Beside the refresh credential, and for the same reason: the only
+      // requests that need it are the ones that mint.
+      path: '/session',
+      maxAge: this.env.SESSION_REFRESH_COOKIE_MAX_AGE_SECONDS * 1000,
+    });
+  }
+
+  private clearOrganizationCookie(res: CookieResponse): void {
+    res.clearCookie(ORGANIZATION_COOKIE, { path: '/session' });
   }
 }
 

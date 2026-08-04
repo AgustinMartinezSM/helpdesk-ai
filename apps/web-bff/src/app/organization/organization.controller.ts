@@ -63,6 +63,21 @@ export class OrganizationController {
    * habit that stopped `teams/mine` being read as a team id.
    */
 
+  /**
+   * The organizations the caller can switch to (Sprint 10.6). Before
+   * 'current' only by declaration habit — both are literal segments.
+   *
+   * It lives here rather than under /session, even though the switcher uses
+   * it, because organizations-service owns memberships and already publishes
+   * this on its public surface. Routing it through auth-service would have
+   * meant a new internal endpoint and a credential hop for data that is
+   * already reachable with the caller's own token.
+   */
+  @Get('mine')
+  mine(@Req() req: BrowserRequest): Promise<unknown> {
+    return this.forward(req, 'GET', '/api/organizations/mine');
+  }
+
   @Get('current')
   current(@Req() req: BrowserRequest): Promise<unknown> {
     return this.forward(req, 'GET', '/api/organizations/current');
