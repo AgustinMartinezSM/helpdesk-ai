@@ -22,7 +22,25 @@ export function ThemeToggle() {
   function toggle() {
     const root = document.documentElement;
     const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    /*
+     * Transitions off for the duration of the swap (Sprint 10.8), which is a
+     * CORRECTNESS guard and not a polish one. A `transition` on `color` bound
+     * to a theme token never lands on the new value: the element keeps the
+     * previous theme's colour indefinitely, so pressing this very button left
+     * the primary navigation — and this button — painted in the other theme's
+     * ink, at 2.36:1. The matching rule is in global.css.
+     *
+     * Two frames, not one: the attribute has to be committed and the new
+     * values painted before transitions come back, or re-enabling them in the
+     * same frame reintroduces exactly what this prevents.
+     */
+    root.dataset.themeSwitching = '';
     root.dataset.theme = next;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        delete root.dataset.themeSwitching;
+      });
+    });
     try {
       localStorage.setItem('theme', next);
     } catch {

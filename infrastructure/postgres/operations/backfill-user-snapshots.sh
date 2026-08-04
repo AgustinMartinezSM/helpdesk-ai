@@ -163,37 +163,49 @@ psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 -c "
 # carried over as a VALUES list. That is why this reads the pairs out of the
 # rows already fetched above rather than querying again: the answer must be
 # the same set the loop just wrote, or the report describes a different run.
-SOURCE_PAIRS=$(echo "$MEMBERSHIPS" | awk -F'|' '$1 != "" {
-  printf "%s(\047%s\047::uuid,\047%s\047::uuid)", sep, $1, $2; sep=","
-}')
+#
+# THE LIST GOES THROUGH A FILE, NOT THROUGH `psql -c`, and that is not style.
+# A single argv entry is capped at MAX_ARG_STRLEN — 128 KiB on Linux, verified
+# in this very container — and each pair costs about 90 bytes, so `-c` starts
+# failing with "Argument list too long" at roughly 1,400 memberships. With
+# `set -e` that aborts the script BEFORE it prints the report it exists to
+# print, so a backfill that fully succeeded would exit non-zero with no orphan
+# listing: exactly the ambiguity the verification block was written to remove.
+# `-f` reads a file and has no such limit.
+ORPHAN_SQL="${TMPDIR:-/tmp}/user-snapshots-orphans.$$.sql"
+trap 'rm -f "$ORPHAN_SQL"' EXIT
+
+{
+  printf 'WITH src (user_id, organization_id) AS (VALUES '
+  echo "$MEMBERSHIPS" | awk -F'|' '$1 != "" {
+    printf "%s(\047%s\047::uuid,\047%s\047::uuid)", sep, $1, $2; sep=","
+  }'
+  printf ')\n'
+  printf 'SELECT snap.organization_id, count(*) AS unexplained_rows\n'
+  printf 'FROM user_snapshots snap\n'
+  printf 'LEFT JOIN src ON src.user_id = snap.user_id\n'
+  printf ' AND src.organization_id = snap.organization_id\n'
+  printf 'WHERE src.user_id IS NULL\n'
+  printf 'GROUP BY snap.organization_id ORDER BY count(*) DESC;\n'
+
+  printf '\\echo The first of those rows, named individually:\n'
+  printf 'WITH src (user_id, organization_id) AS (VALUES '
+  echo "$MEMBERSHIPS" | awk -F'|' '$1 != "" {
+    printf "%s(\047%s\047::uuid,\047%s\047::uuid)", sep, $1, $2; sep=","
+  }'
+  printf ')\n'
+  printf 'SELECT snap.organization_id, snap.user_id, snap.status\n'
+  printf 'FROM user_snapshots snap\n'
+  printf 'LEFT JOIN src ON src.user_id = snap.user_id\n'
+  printf ' AND src.organization_id = snap.organization_id\n'
+  printf 'WHERE src.user_id IS NULL\n'
+  printf 'ORDER BY snap.organization_id, snap.user_id LIMIT 20;\n'
+} > "$ORPHAN_SQL"
 
 echo ""
 echo "Projection rows with no membership behind them:"
 echo "These are left in place. Removing one is a decision for a person."
-psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 -c "
-  WITH src (user_id, organization_id) AS (VALUES ${SOURCE_PAIRS})
-  SELECT snap.organization_id, count(*) AS unexplained_rows
-  FROM user_snapshots snap
-  LEFT JOIN src
-    ON src.user_id = snap.user_id
-   AND src.organization_id = snap.organization_id
-  WHERE src.user_id IS NULL
-  GROUP BY snap.organization_id
-  ORDER BY count(*) DESC;
-"
-
-echo "The first of those rows, named individually:"
-psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 -c "
-  WITH src (user_id, organization_id) AS (VALUES ${SOURCE_PAIRS})
-  SELECT snap.organization_id, snap.user_id, snap.status
-  FROM user_snapshots snap
-  LEFT JOIN src
-    ON src.user_id = snap.user_id
-   AND src.organization_id = snap.organization_id
-  WHERE src.user_id IS NULL
-  ORDER BY snap.organization_id, snap.user_id
-  LIMIT 20;
-"
+psql "$ANALYTICS_DB_URL" -v ON_ERROR_STOP=1 -f "$ORPHAN_SQL"
 
 echo ""
 echo "An EMPTY listing above is the healthy result: every projection row is"

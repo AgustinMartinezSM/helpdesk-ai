@@ -99,11 +99,15 @@ pnpm nx serve @helpdesk-ai/organizations-service   # -> http://localhost:3010
 ```
 
 `JWT_ACCESS_SECRET` has no default on purpose: auth-service refuses to
-boot without one. `organizations-service` is optional today: with it
-stopped, or with no `INTERNAL_SERVICE_TOKEN` set on auth-service, login
-and refresh still succeed — the access token is simply minted without its
-organization claims and a warning is logged. Nothing in the platform
-reads those claims yet. Swagger UI is available per service at `/docs`
+boot without one, and **since Sprint 10.8 `INTERNAL_SERVICE_TOKEN` behaves
+the same way** — a missing service credential is a named boot failure
+rather than a service that starts and quietly mints tokens with no tenant.
+`organizations-service` therefore has to be running for auth-service to
+mint a usable token: with it stopped, login answers **503**, which is the
+documented fail-closed behaviour for "I could not ask" rather than a bug.
+The claims decide the tenant of every write, the permission set behind
+every check, and since Sprint 10.6 which organization somebody is working
+in. Swagger UI is available per service at `/docs`
 outside production — see
 [docs/api/auth-service.md](docs/api/auth-service.md).
 

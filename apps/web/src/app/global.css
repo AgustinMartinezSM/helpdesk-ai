@@ -501,6 +501,34 @@ li > a:not([class]) {
   border: 0;
 }
 
+/*
+ * Suppress every transition while the theme is being swapped (Sprint 10.8).
+ *
+ * NOT a polish rule. A `transition` on `color` whose value comes from a theme
+ * token NEVER LANDS on the new value when the token changes: the element keeps
+ * the PREVIOUS theme's colour indefinitely — measured at three seconds, and it
+ * snaps to the correct colour the instant the transition is removed. Ten rules
+ * across the app shell, the public nav, the public footer, Helpi, the landing
+ * page, the ticket detail and the theme button itself transition `color`, so
+ * pressing the theme control left the primary navigation painted in the other
+ * theme's ink: `#a8a49a` on a near-white page is 2.36:1, against the 4.5:1
+ * this system holds itself to.
+ *
+ * Found by pressing the toggle in a browser and measuring the RENDERED page.
+ * No spec could have seen it — the stylesheets are correct, the tokens are
+ * correct, and the computed value is wrong only after a runtime swap.
+ *
+ * The rule is scoped to the swap rather than deleting the transitions, because
+ * those exist for hover and focus, where they are doing their job. It is
+ * OUTSIDE the reduced-motion block below on purpose: this is not motion
+ * design, it is a correctness guard, and it has to apply to everybody.
+ */
+[data-theme-switching] *,
+[data-theme-switching] *::before,
+[data-theme-switching] *::after {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;

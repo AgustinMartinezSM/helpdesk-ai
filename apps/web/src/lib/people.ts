@@ -326,6 +326,42 @@ export function roleLabel(template: string | undefined): string {
   return ROLE_LABELS[template] ?? template;
 }
 
+/**
+ * The product's word for a LEGACY GLOBAL ROLE — a different vocabulary from
+ * the one above, and Sprint 10.8 found out the hard way that one function
+ * cannot serve both.
+ *
+ * `users.roles` is the pre-tenancy account attribute (`user`, `agent`,
+ * `admin`, from auth-service's `USER_ROLES`). It authorizes NOTHING since
+ * phase 8 removed the `roles` claim; the Account screen keeps showing it as
+ * a fact about the account, which is fine — showing it through the TEMPLATE
+ * map was not.
+ *
+ * The defect that produced this function: 10.2 routed the Account screen's
+ * values through `roleLabel` and recorded the debt as closed. `agent` happens
+ * to exist in both vocabularies, so that one looked right — while `user`, the
+ * value EVERY freshly registered account has, fell through the `?? template`
+ * fallback and printed the raw key. The source-scanning spec could not catch
+ * it, because it checks that a screen CALLS a label function, not that the
+ * function can answer for the vocabulary being passed.
+ *
+ * The three words are borrowed from `ROLE_LABELS` deliberately rather than
+ * invented: they name the same three concepts, and this sprint has no mandate
+ * to add product vocabulary (`brand-strategy.md` owns that).
+ */
+const GLOBAL_ROLE_LABELS: Record<string, string> = {
+  user: 'Employee',
+  agent: 'Technician',
+  admin: 'Administrator',
+};
+
+export function globalRoleLabel(role: string | undefined): string {
+  if (!role) {
+    return 'Member';
+  }
+  return GLOBAL_ROLE_LABELS[role] ?? role;
+}
+
 /* Bulk import (Sprint 9.15). The file travels as text in a JSON field, not as
  * multipart: the gateway client speaks JSON, and a payload this size does not
  * justify a new transport through three processes. */

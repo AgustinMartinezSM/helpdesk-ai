@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '../../../components/auth-context';
-import { roleLabel } from '../../../lib/people';
+import { globalRoleLabel } from '../../../lib/people';
 import { Button, ButtonLink } from '../../../components/ui/button';
 import { Card } from '../../../components/ui/card';
 import { EmptyState } from '../../../components/ui/empty-state';
@@ -52,11 +52,18 @@ export default function AccountPage() {
               row, kept as display data since Phase 8 removed the `roles`
               claim; it is NOT what authorizes anything. The permissions do,
               which is what the line below says out loud.
+
+              It is `globalRoleLabel`, NOT `roleLabel`, and Sprint 10.8 had to
+              find that in a browser. These values are `user`/`agent`/`admin`
+              — a different vocabulary from the role TEMPLATES that map knows.
+              Only `agent` overlaps, so routing them through the wrong map
+              looked fixed while every freshly registered account, which is
+              `user`, still printed a raw key.
             */}
             <div className={styles.roles}>
               {session.user.roles.map((role) => (
                 <span key={role} className={styles.role}>
-                  {roleLabel(role)}
+                  {globalRoleLabel(role)}
                 </span>
               ))}
             </div>

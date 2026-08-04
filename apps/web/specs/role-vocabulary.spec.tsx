@@ -4,7 +4,7 @@ import { ROLE_TEMPLATES } from '@helpdesk-ai/security/role-templates';
 import { AuthProvider } from '../src/components/auth-context';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { roleLabel } from '../src/lib/people';
+import { globalRoleLabel, roleLabel } from '../src/lib/people';
 import PeoplePage from '../src/app/(app)/people/page';
 import TicketsPage from '../src/app/(app)/tickets/page';
 
@@ -310,5 +310,57 @@ describe('a stored role key never reaches the interface', () => {
     ]) {
       expect(roleLabel(template)).not.toBe(template);
     }
+  });
+});
+
+/**
+ * The SECOND vocabulary, which Sprint 10.8 found leaking in a browser.
+ *
+ * `users.roles` is the pre-tenancy global account attribute — `user`,
+ * `agent`, `admin` — and it is NOT the role-template vocabulary above. Only
+ * `agent` appears in both. Sprint 10.2 closed "the Account screen prints raw
+ * role keys" by routing these values through `roleLabel`, which answers for
+ * templates: `agent` looked right, and `user` — the value every freshly
+ * registered account carries — fell through the `?? key` fallback and printed
+ * itself.
+ *
+ * Neither existing check could see it. The source scan asserts a screen CALLS
+ * a label function, not that the function can answer for what it is handed;
+ * and the template coverage test iterates the template vocabulary, so the
+ * value that actually leaks was never in the loop. That is this repository's
+ * recurring shape — a check that passes because it examines the pairs its
+ * author expected.
+ */
+describe('the legacy global role vocabulary also gets labels', () => {
+  // Restated rather than imported, deliberately: auth-service's USER_ROLES is
+  // a service-internal domain constant with no browser-facing entry point,
+  // and libs/security exports templates only. A value added there without a
+  // label here fails the next test rather than this one.
+  const GLOBAL_ROLES = ['user', 'agent', 'admin'];
+
+  it('labels every value auth-service can store, none as its raw key', () => {
+    for (const role of GLOBAL_ROLES) {
+      expect(globalRoleLabel(role)).not.toBe(role);
+      expect(globalRoleLabel(role).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('labels the DEFAULT account, which is the case that leaked', () => {
+    // RegisterUserUseCase writes roles: ['user'], so this is what the Account
+    // screen shows for every account that has not been changed by hand.
+    expect(globalRoleLabel('user')).toBe('Employee');
+  });
+
+  it('does not answer for a template, and roleLabel does not answer for these', () => {
+    // The two maps are separate because the vocabularies are. Pinning the
+    // asymmetry is what stops somebody merging them back into one function
+    // and reintroducing exactly this defect.
+    expect(globalRoleLabel('requester')).toBe('requester');
+    expect(roleLabel('user')).toBe('user');
+  });
+
+  it('falls back to the key rather than hiding an unknown role', () => {
+    expect(globalRoleLabel('something_new')).toBe('something_new');
+    expect(globalRoleLabel(undefined)).toBe('Member');
   });
 });
